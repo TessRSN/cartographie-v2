@@ -2,6 +2,8 @@
 
 Catalogue des ressources en santé numérique au Québec : jeux de données, catalogues, plateformes, logiciels, services et initiatives. Pour chaque ressource : à quoi elle sert, comment y accéder, à qui écrire.
 
+Le site est en ligne à l'adresse https://cartographie.rsn.quebec
+
 Le bottin des membres du RSN est un outil distinct : https://bottin.rsn.quebec
 
 ## Comment c'est fait
