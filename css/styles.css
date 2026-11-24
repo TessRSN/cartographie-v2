@@ -26,23 +26,23 @@
     --bar-bg: #ffffff;
     /* Mauve des ronds de la carte, comme dans le bottin. */
     --carte-rond: #a855f7;
-    /* Les six types de ressources : couleur pleine (nœuds du graphe, légende,
-       barre du bandeau), puis fond et texte des pastilles. graphe.js lit les
-       couleurs pleines ici : c'est le seul endroit où les changer. */
-    --type-jeu: #2b6cb0;
-    --type-catalogue: #1798a8;
-    --type-plateforme: #7048e8;
-    --type-logiciel: #dba521;
-    --type-service: #2f8f5b;
-    --type-initiative: #d6336c;
-    --type-autre: #718096;
-    --type-jeu-fond: #dbeafe;        --type-jeu-texte: #1e3f8a;
-    --type-catalogue-fond: #cdeef1;  --type-catalogue-texte: #0b5560;
-    --type-plateforme-fond: #e5dbff; --type-plateforme-texte: #4527a0;
-    --type-logiciel-fond: #fdecc8;   --type-logiciel-texte: #6b4200;
-    --type-service-fond: #d6f2e1;    --type-service-texte: #1c5e3a;
-    --type-initiative-fond: #fbdbe6; --type-initiative-texte: #8f1c45;
-    --type-autre-fond: #e2e8f0;      --type-autre-texte: #4a5568;
+    /* Les six types de ressources, aux couleurs de la charte graphique du RSN :
+       couleur pleine (pastilles, nœuds du graphe, légende, barre du bandeau) et
+       couleur du texte posé dessus (contraste d'au moins 4,5:1, vérifié par un
+       essai). graphe.js lit les couleurs pleines ici : c'est le seul endroit où les changer. */
+    --type-jeu: #0061AF;        --type-jeu-sur: #ffffff;
+    --type-catalogue: #003469;  --type-catalogue-sur: #ffffff;
+    --type-plateforme: #00A759; --type-plateforme-sur: #00210d;
+    --type-logiciel: #FFCC4E;   --type-logiciel-sur: #3d3009;
+    --type-service: #EE3124;    --type-service-sur: #1a0300;
+    --type-initiative: #5E0000; --type-initiative-sur: #ffffff;
+    --type-autre: #5a6577;      --type-autre-sur: #ffffff;
+    /* Une teinte sobre par mode d'accès (fond clair, texte foncé de la même teinte), tirée de la charte. */
+    --acces-ouvert-fond: #dff3e8;      --acces-ouvert-texte: #00431A;
+    --acces-inscription-fond: #dce9f5; --acces-inscription-texte: #003469;
+    --acces-demande-fond: #fff1c9;     --acces-demande-texte: #624E11;
+    --acces-reserve-fond: #fde1de;     --acces-reserve-texte: #5E0000;
+    --acces-neutre-fond: #e8ecf1;      --acces-neutre-texte: #4a5568;
 }
 /* ─── Mode sombre ─── */
 [data-theme="dark"] {
@@ -65,28 +65,28 @@
     --ink: #e2e8f0;
     --muted-strong: #a0aec0;
     --bar-bg: var(--rsn-card-bg);
-    --type-jeu: #4f8fd6;
-    --type-catalogue: #2bb5c5;
-    --type-plateforme: #9775fa;
-    --type-logiciel: #e6b23a;
-    --type-service: #48b27a;
-    --type-initiative: #f06595;
-    --type-autre: #94a3b8;
-    --type-jeu-fond: #1e3a5f;        --type-jeu-texte: #bfdbfe;
-    --type-catalogue-fond: #0f3d44;  --type-catalogue-texte: #a5e8ef;
-    --type-plateforme-fond: #33276b; --type-plateforme-texte: #d0bfff;
-    --type-logiciel-fond: #4a3a10;   --type-logiciel-texte: #fde68a;
-    --type-service-fond: #173d2a;    --type-service-texte: #bbf7d0;
-    --type-initiative-fond: #4d1a2c; --type-initiative-texte: #fbb6ce;
-    --type-autre-fond: #2d3748;      --type-autre-texte: #cbd5e0;
+    /* Le bleu marine et le bordeaux de la charte sont illisibles sur fond foncé : variante plus claire de la même teinte. */
+    --type-catalogue: #7FA8D9;  --type-catalogue-sur: #0b2440;
+    --type-initiative: #C2606A; --type-initiative-sur: #1f0004;
+    --type-autre: #94a3b8;      --type-autre-sur: #1a202c;
+    --acces-ouvert-fond: #0f3a24;      --acces-ouvert-texte: #9be3bd;
+    --acces-inscription-fond: #12325a; --acces-inscription-texte: #a9cbee;
+    --acces-demande-fond: #453a12;     --acces-demande-texte: #ffdc85;
+    --acces-reserve-fond: #4a1512;     --acces-reserve-texte: #f5aaa3;
+    --acces-neutre-fond: #2d3748;      --acces-neutre-texte: #cbd5e0;
 }
-.type-jeu        { --type: var(--type-jeu);        --type-fond: var(--type-jeu-fond);        --type-texte: var(--type-jeu-texte); }
-.type-catalogue  { --type: var(--type-catalogue);  --type-fond: var(--type-catalogue-fond);  --type-texte: var(--type-catalogue-texte); }
-.type-plateforme { --type: var(--type-plateforme); --type-fond: var(--type-plateforme-fond); --type-texte: var(--type-plateforme-texte); }
-.type-logiciel   { --type: var(--type-logiciel);   --type-fond: var(--type-logiciel-fond);   --type-texte: var(--type-logiciel-texte); }
-.type-service    { --type: var(--type-service);    --type-fond: var(--type-service-fond);    --type-texte: var(--type-service-texte); }
-.type-initiative { --type: var(--type-initiative); --type-fond: var(--type-initiative-fond); --type-texte: var(--type-initiative-texte); }
-.type-autre      { --type: var(--type-autre);      --type-fond: var(--type-autre-fond);      --type-texte: var(--type-autre-texte); }
+.type-jeu        { --type: var(--type-jeu);        --type-sur: var(--type-jeu-sur); }
+.type-catalogue  { --type: var(--type-catalogue);  --type-sur: var(--type-catalogue-sur); }
+.type-plateforme { --type: var(--type-plateforme); --type-sur: var(--type-plateforme-sur); }
+.type-logiciel   { --type: var(--type-logiciel);   --type-sur: var(--type-logiciel-sur); }
+.type-service    { --type: var(--type-service);    --type-sur: var(--type-service-sur); }
+.type-initiative { --type: var(--type-initiative); --type-sur: var(--type-initiative-sur); }
+.type-autre      { --type: var(--type-autre);      --type-sur: var(--type-autre-sur); }
+.acces-ouvert      { --acces-fond: var(--acces-ouvert-fond);      --acces-texte: var(--acces-ouvert-texte); }
+.acces-inscription { --acces-fond: var(--acces-inscription-fond); --acces-texte: var(--acces-inscription-texte); }
+.acces-demande     { --acces-fond: var(--acces-demande-fond);     --acces-texte: var(--acces-demande-texte); }
+.acces-reserve     { --acces-fond: var(--acces-reserve-fond);     --acces-texte: var(--acces-reserve-texte); }
+.acces-neutre      { --acces-fond: var(--acces-neutre-fond);      --acces-texte: var(--acces-neutre-texte); }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -174,7 +174,24 @@ body {
 .ms-panel.open { display: block; }
 .ms-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.6rem; border-radius: 6px; cursor: pointer; font-size: 0.86rem; transition: background 0.1s; }
 .ms-item:hover, .ms-item:focus-within { background: rgba(43,108,176,0.14); }
-.ms-item input[type="checkbox"] { accent-color: var(--rsn-accent); margin: 0; cursor: pointer; flex-shrink: 0; width: 16px; height: 16px; }
+/* Cases dessinées dans la charte : coin arrondi, bord discret, fond d'accent une fois cochées.
+   Elles restent des cases, pour qu'on comprenne qu'on peut en cocher plusieurs. */
+.ms-item input[type="checkbox"], .graphe-case input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none; flex-shrink: 0; width: 18px; height: 18px; margin: 0; cursor: pointer;
+    border: 1.5px solid #a0aec0; border-radius: 5px; background: var(--rsn-card-bg) center / 12px 12px no-repeat;
+    transition: background-color 0.12s, border-color 0.12s;
+}
+.ms-item input[type="checkbox"]:hover, .graphe-case input[type="checkbox"]:hover { border-color: var(--rsn-accent); }
+.ms-item input[type="checkbox"]:checked, .graphe-case input[type="checkbox"]:checked {
+    border-color: var(--rsn-accent); background-color: var(--rsn-accent);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.3l2.4 2.4 4.6-5'/%3E%3C/svg%3E");
+}
+[data-theme="dark"] .ms-item input[type="checkbox"], [data-theme="dark"] .graphe-case input[type="checkbox"] { border-color: #5a6b85; }
+[data-theme="dark"] .ms-item input[type="checkbox"]:checked, [data-theme="dark"] .graphe-case input[type="checkbox"]:checked {
+    border-color: var(--rsn-accent);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%230f1724' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.3l2.4 2.4 4.6-5'/%3E%3C/svg%3E");
+}
+.ms-item input[type="checkbox"]:focus-visible, .graphe-case input[type="checkbox"]:focus-visible { outline: 2px solid var(--rsn-accent); outline-offset: 2px; }
 .ms-item label { cursor: pointer; flex: 1; white-space: normal; line-height: 1.3; word-break: break-word; color: var(--rsn-text); }
 .ms-item .ms-item-count { color: var(--rsn-muted); font-size: 0.72rem; flex-shrink: 0; }
 .results-count { margin-left: auto; white-space: nowrap; line-height: 1.3; font-size: 0.82rem; color: var(--rsn-muted); }
@@ -190,7 +207,31 @@ body {
 #zoneCarte { position: relative; }
 #carte { height: clamp(460px, 62vh, 640px); z-index: 1; background: var(--rsn-light); }
 .carte-message { text-align: center; padding: 2rem; color: var(--rsn-muted); }
-.hero-tools { position: absolute; top: 20px; left: 20px; z-index: 6; display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.hero-tools { position: absolute; top: 20px; left: 20px; right: 20px; z-index: 6; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; pointer-events: none; }
+.hero-tools > * { pointer-events: auto; }
+/* Sélection en cours : une étiquette par filtre, avec sa croix, puis « Tout réinitialiser ». */
+.selection { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.hero-tools .selection { padding: 6px; border-radius: 10px; max-width: 100%; }
+.content > .selection { margin: -0.3rem 0 1rem; }
+.selection .stat-chip { height: 36px; max-width: 100%; font-size: 0.82rem; background: var(--rsn-card-bg); }
+.selection .stat-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selection .stat-chip button { flex: none; }
+.reset-fort { height: 36px; padding: 0 0.9rem; border: 1.5px solid #1a365d; border-radius: 8px; background: #1a365d; color: #fff; font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.reset-fort:hover { background: #24487c; }
+[data-theme="dark"] .reset-fort { background: var(--rsn-accent); border-color: var(--rsn-accent); color: #0f1724; }
+/* Panneau en verre des ressources « En ligne ou hors Québec », posé sur la carte. */
+.hero.avec-panneau .hero-tools { right: 400px; }
+.panneau-hors { position: absolute; top: 20px; right: 20px; z-index: 7; width: min(360px, calc(100% - 40px)); max-height: calc(100% - 130px); display: flex; flex-direction: column; border-radius: 12px; color: var(--rsn-text); overflow: hidden; }
+.panneau-entete { position: relative; padding: 0.8rem 3rem 0 1rem; }
+.panneau-entete h2 { font-size: 0.95rem; line-height: 1.3; color: var(--ink); }
+.panneau-entete h2 span + span { font-weight: 400; color: var(--muted-strong); }
+.panneau-aide { padding: 0.15rem 1rem 0.5rem; font-size: 0.76rem; color: var(--muted-strong); }
+.panneau-hors ul { list-style: none; overflow-y: auto; padding: 0 6px 6px; scrollbar-width: thin; scrollbar-color: rgba(130,140,160,0.7) transparent; }
+.panneau-hors li a { display: flex; align-items: flex-start; gap: 0.55rem; padding: 0.4rem 0.6rem; border-radius: 6px; color: var(--rsn-text); text-decoration: none; }
+.panneau-hors li a:hover, .panneau-hors li a:focus-visible { background: rgba(43,108,176,0.16); }
+.panneau-hors li .map-legend-dot { margin-top: 0.3rem; }
+.panneau-hors li strong { display: block; font-size: 0.86rem; line-height: 1.3; }
+.panneau-hors li small { display: block; font-size: 0.74rem; line-height: 1.35; color: var(--muted-strong); }
 .view-switch { display: flex; gap: 4px; padding: 4px; border-radius: 10px; }
 .view-switch button { display: inline-flex; align-items: center; gap: 0.5rem; height: 44px; padding: 0 0.9rem; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
 .view-switch button.active { background: #1a365d; color: #fff; }
@@ -232,11 +273,10 @@ body {
 .graphe-legende { list-style: none; display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; color: var(--rsn-text); }
 .graphe-legende li { display: flex; align-items: center; gap: 0.4rem; }
 /* Pastilles de la légende : même rendu que les nœuds (disque plein semi-transparent, sans bord). */
-.graphe-legende .map-legend-dot { opacity: 0.6; }
+.graphe-legende .map-legend-dot { opacity: 0.85; }
 .graphe-densite { display: flex; align-items: center; gap: 0.4rem; margin-left: auto; cursor: pointer; }
 .graphe-densite input { width: 110px; margin: 0; cursor: pointer; accent-color: var(--rsn-accent); }
 .graphe-case { display: flex; align-items: center; gap: 0.3rem; cursor: pointer; }
-.graphe-case input { margin: 0; cursor: pointer; accent-color: var(--rsn-accent); }
 #introConnexions { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; border-top: 1.5px solid var(--rsn-border); font-size: 0.78rem; line-height: 1.45; color: var(--rsn-muted); }
 .bouton-aide { flex-shrink: 0; width: 28px; height: 28px; padding: 0; border-radius: 50%; font-weight: 700; font-size: 0.95rem; color: var(--rsn-accent); border-color: var(--rsn-accent); position: relative; }
 /* Zone de clic élargie à 44 px sans grossir le bouton. */
@@ -254,7 +294,8 @@ div.vis-tooltip { font-family: inherit; font-size: 0.8rem; max-width: 280px; whi
 .popup-count { font-size: 1.4rem; font-weight: 700; color: var(--rsn-accent); }
 .popup-count span { font-size: 0.8rem; font-weight: 400; color: var(--rsn-muted); }
 .popup-type-row { font-size: 0.78rem; color: var(--rsn-muted); }
-.popup-type-row span { color: var(--type-texte); white-space: nowrap; }
+.popup-type-row span { white-space: nowrap; }
+.popup-type-row .map-legend-dot { display: inline-block; width: 9px; height: 9px; margin-right: 4px; }
 .popup-names { list-style: none; margin-top: 6px; max-height: 240px; overflow-y: auto; border-top: 1px solid var(--rsn-border); padding-top: 4px; scrollbar-width: thin; scrollbar-color: rgba(130,140,160,0.7) transparent; }
 .popup-names li { padding: 2px 0; font-size: 0.8rem; line-height: 1.35; }
 .popup-names small { color: var(--rsn-muted); font-size: 0.7rem; margin-left: 0.3rem; }
@@ -343,21 +384,33 @@ div.vis-tooltip { font-family: inherit; font-size: 0.8rem; max-width: 280px; whi
 .card-institution { font-size: 0.82rem; line-height: 1.4; color: var(--muted-strong); overflow-wrap: anywhere; }
 /* Logo dans un cadre de taille fixe, fond blanc même en mode sombre. Sans logo :
    pastille ronde avec les initiales, aux couleurs du type. */
-.avatar { position: relative; flex: none; width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: var(--type-fond, var(--rsn-light)); color: var(--type-texte, var(--ink)); display: flex; align-items: center; justify-content: center; font-size: 0.95rem; font-weight: 700; letter-spacing: 0.02em; }
+.avatar { position: relative; flex: none; width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: var(--type, var(--rsn-light)); color: var(--type-sur, var(--ink)); display: flex; align-items: center; justify-content: center; font-size: 0.95rem; font-weight: 700; letter-spacing: 0.02em; }
 .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; padding: 4px; object-fit: contain; background: #fff; }
 .avatar.avec-logo { border-radius: 10px; background: #fff; border: 1px solid var(--rsn-border); }
 .avatar-lg { width: 72px; height: 72px; font-size: 1.35rem; }
 .avatar-lg.avec-logo { border-radius: 12px; }
 .avatar-lg img { padding: 6px; }
-.card-tag { font-size: 0.72rem; font-weight: 600; line-height: 1.5; padding: 0.2rem 0.55rem; border-radius: 5px; white-space: nowrap; flex-shrink: 0; background: var(--type-fond, var(--rsn-border)); color: var(--type-texte, var(--muted-strong)); }
-.card-tag.etat-actif { background: var(--type-service-fond); color: var(--type-service-texte); }
-.card-tag.etat-developpement, .card-tag.etat-non-confirme { background: var(--type-logiciel-fond); color: var(--type-logiciel-texte); }
-.card-tag.etat-archive, .card-tag.etat-autre { background: var(--type-autre-fond); color: var(--type-autre-texte); }
+.card-tag { font-size: 0.72rem; font-weight: 600; line-height: 1.5; padding: 0.2rem 0.55rem; border-radius: 5px; white-space: nowrap; flex-shrink: 0; background: var(--type, var(--rsn-border)); color: var(--type-sur, var(--muted-strong)); }
+.card-tag.etat-actif { background: var(--acces-ouvert-fond); color: var(--acces-ouvert-texte); }
+.card-tag.etat-developpement, .card-tag.etat-non-confirme { background: var(--acces-demande-fond); color: var(--acces-demande-texte); }
+.card-tag.etat-archive, .card-tag.etat-autre { background: var(--acces-neutre-fond); color: var(--acces-neutre-texte); }
 .card-themes { font-size: 0.86rem; line-height: 1.5; }
+/* Cartes de la liste : même hauteur d'en-tête partout. Le nom tient sur deux lignes,
+   le porteur sur une, avec des points de suspension ; le texte complet est dans l'infobulle. */
+.member-card .card-id { min-height: 3.95rem; }
+.member-card .card-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.member-card .card-institution { display: flex; gap: 0.35rem; white-space: nowrap; }
+.card-porteur { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.card-plus { flex: none; font-weight: 600; }
+.member-card .card-themes { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
+.member-card .card-tag { max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
 .card-chips-row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
 .card-chips-row > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .axe-chip { font-size: 0.68rem; line-height: 1.6; padding: 0.1rem 0.45rem; border-radius: 4px; background: var(--rsn-light); color: var(--rsn-secondary); white-space: nowrap; text-decoration: none; }
 [data-theme="dark"] .axe-chip { background: #2a4365; color: #90cdf4; }
+/* L'accès porte une teinte (une par mode) ; les sujets restent neutres. */
+.axe-chip.acces, [data-theme="dark"] .axe-chip.acces { background: var(--acces-fond); color: var(--acces-texte); font-weight: 600; font-size: 0.7rem; padding: 0.15rem 0.5rem; }
+.chip-more { font-size: 0.72rem; line-height: 1.6; padding: 0.1rem 0.4rem; color: var(--muted-strong); cursor: default; }
 a.axe-chip.mot-cle { font-size: 0.76rem; padding: 0.3rem 0.6rem; }
 a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2px; }
 .card-foot { margin-top: auto; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0 0.75rem; padding-top: 0.3rem; border-top: 1px solid var(--rsn-border); }
@@ -490,7 +543,9 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
     .stats-main { flex-basis: 100%; }
     .content { padding: 1.2rem 1rem 2rem; }
     #carte { height: 420px; }
-    .hero-tools { top: 12px; left: 12px; }
+    .hero-tools { top: 12px; left: 12px; right: 12px; }
+    .panneau-hors { position: static; width: auto; max-height: 330px; margin: 0.6rem 1rem 0; }
+    .hero.avec-panneau .hero-tools { right: 12px; }
     .hero-bottom { position: static; padding: 0.6rem 1rem; }
     .teaser { width: 100%; margin-left: 0; }
     .graphe-densite { margin-left: 0; }

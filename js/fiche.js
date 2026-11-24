@@ -34,6 +34,16 @@ function puces(valeurs, classe) {
   return (valeurs || []).filter(Boolean).map((v) => `<span class="${classe || 'axe-chip'}">${o.echapper(v)}</span>`).join('');
 }
 
+// Étiquettes des modes d'accès, une teinte par mode ; avecLibelle écrit « Accès : … » (cartes de fiche).
+function pucesAcces(modes, avecLibelle) {
+  return (modes || []).filter(Boolean).map((m) =>
+    `<span class="axe-chip acces acces-${o.cleAcces(m)}">${o.echapper(avecLibelle ? o.TEXTES.acces(m) : m)}</span>`).join('');
+}
+
+function puceSujet(m) {
+  return `<a class="axe-chip mot-cle" href="/?q=${encodeURIComponent(m)}" data-mot-cle="${o.echapper(m)}">${o.echapper(m)}</a>`;
+}
+
 // Pastille du type : nom court, nom complet en infobulle.
 function pastilleType(type) {
   if (!type) return '';
@@ -57,13 +67,21 @@ function htmlCarteFiche(r) {
   const e = o.echapper;
   const T = o.TEXTES.liste;
   const porteurs = (r.porteurs || []).map((p) => p.nom).filter(Boolean);
-  const porteursHtml = porteurs.slice(0, 2).map(e).join('<br>')
-    + (porteurs.length > 2 ? ` <span title="${e(porteurs.slice(2).join(' · '))}">+${porteurs.length - 2}</span>` : '');
-  const acces = puces(r.modesAcces);
+  // Un seul porteur sur une ligne, les autres comptés (« +2 ») ; le texte complet est dans l'infobulle.
+  const porteursHtml = porteurs.length
+    ? `<span class="card-porteur">${e(porteurs[0])}</span>`
+      + (porteurs.length > 1 ? `<span class="card-plus">+${porteurs.length - 1}<span class="visually-hidden"> (${e(o.TEXTES.autresPorteurs(porteurs.length - 1))})</span></span>` : '')
+    : '';
+  const acces = pucesAcces(r.modesAcces, true);
+  // Trois sujets au plus, cliquables comme dans la fiche ; les autres sont comptés.
+  const tousSujets = (r.motsCles || []).filter(Boolean);
+  const sujets = tousSujets.slice(0, 3).map(puceSujet).join('')
+    + (tousSujets.length > 3 ? `<span class="chip-more" title="${e(tousSujets.slice(3).join(' · '))}">+${tousSujets.length - 3}<span class="visually-hidden"> (${e(o.TEXTES.autresSujets(tousSujets.length - 3))})</span></span>` : '');
   return `<article class="member-card">
-    <div class="card-top">${htmlLogo(r)}<div class="card-id"><h3 class="card-name">${e(r.nom)}</h3>${porteursHtml ? `<div class="card-institution">${porteursHtml}</div>` : ''}</div>${pastilleType(r.typePrincipal)}</div>
+    <div class="card-top">${htmlLogo(r)}<div class="card-id"><h3 class="card-name" title="${e(r.nom)}">${e(r.nom)}</h3>${porteursHtml ? `<div class="card-institution" title="${e(porteurs.join(' · '))}">${porteursHtml}</div>` : ''}</div>${pastilleType(r.typePrincipal)}</div>
     ${r.phrase ? `<p class="card-themes">${e(r.phrase)}</p>` : ''}
     ${acces ? `<div class="card-chips-row">${acces}</div>` : ''}
+    ${sujets ? `<div class="card-chips-row card-sujets">${sujets}</div>` : ''}
     <div class="card-foot">
       <a class="card-action" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}">${e(T.voirFiche)}<span class="visually-hidden"> : ${e(r.nom)}</span></a>
       <button type="button" class="card-action" data-graphe="${e(r.adresse)}">${ICONE_GRAPHE}${e(T.voirConnexions)}<span class="visually-hidden"> : ${e(r.nom)}</span></button>
@@ -91,7 +109,7 @@ function htmlFiche(f) {
   const presentation = `${f.phrase ? `<p class="fiche-phrase">${e(f.phrase)}</p>` : ''}${f.description ? `<p class="fiche-description">${e(f.description)}</p>` : ''}`;
 
   const acces = [
-    ligne(T.modeAcces, puces(f.modesAcces)),
+    ligne(T.modeAcces, pucesAcces(f.modesAcces, false)),
     ligne(T.frais, f.frais ? e(f.frais) : ''),
     ligne(T.environnementSecurise, f.environnementSecurise ? e(T.environnementSecuriseOui) : ''),
     ligne(T.reserveA, f.reserveA ? e(f.reserveA) : ''),
@@ -134,8 +152,7 @@ function htmlFiche(f) {
 
   const liens = (f.liens || []).map((l) =>
     `<li>${e(String(l.nature || '').charAt(0).toUpperCase() + String(l.nature || '').slice(1))} : <a class="lien" href="/ressource/${e(l.adresse)}" data-fiche="${e(l.adresse)}">${e(l.nom)}</a></li>`).join('');
-  const motsCles = (f.motsCles || []).filter(Boolean).map((m) =>
-    `<a class="axe-chip mot-cle" href="/?q=${encodeURIComponent(m)}" data-mot-cle="${e(m)}">${e(m)}</a>`).join('');
+  const motsCles = (f.motsCles || []).filter(Boolean).map(puceSujet).join('');
 
   const verification = f.verifieeLe && o.dateLongue(f.verifieeLe)
     ? `<p class="fiche-verification">${e(T.verifieeLe)} ${e(o.dateLongue(f.verifieeLe))}.</p>`

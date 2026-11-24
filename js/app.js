@@ -15,6 +15,8 @@ const etat = {
   ressources: [],   // toutes les fiches
   filtrees: [],     // fiches retenues par les filtres seuls
   visibles: [],     // fiches retenues par les filtres et la recherche, dans l'ordre d'affichage
+  pourCarte: [],    // les mêmes sans le filtre « En ligne ou hors Québec » : ce que la carte montre
+  centree: null,    // ressource choisie par « Voir ses connexions »
   requete: '',
   carte: { cle: '' },
   pret: false,      // les données sont arrivées
@@ -198,6 +200,7 @@ function definirRecherche(valeur) {
 
 function toutEffacer() {
   $('champRecherche').value = '';
+  libererCentree({ silencieux: true });
   Object.assign(etat.filtres, { type: [], modeAcces: [], porteur: [], etat: [], horsCarte: false });
   for (const cle of Object.keys(FILTRES)) majMenu(cle);
   cacherSuggestions();
@@ -213,13 +216,16 @@ function rafraichir({ garderPage = false } = {}) {
   if (!etat.pret) return;
   etat.requete = champ.value.trim();
   etat.filtrees = filtrer(etat.ressources, etat.filtres);
-  const retenues = new Set(etat.filtrees);
+  // La carte garde ses ronds quand « En ligne ou hors Québec » est actif : elle ignore ce filtre-là.
+  const sansHorsCarte = new Set(filtrer(etat.ressources, Object.assign({}, etat.filtres, { horsCarte: false })));
   const trouvees = chercher(documents, etat.requete, index ? (forme) => index.search(forme) : null);
   const parPertinence = motsDeRequete(etat.requete).length > 0;
-  etat.visibles = ordonner(trouvees.filter((r) => retenues.has(r)), parPertinence);
+  etat.pourCarte = ordonner(trouvees.filter((r) => sansHorsCarte.has(r)), parPertinence);
+  etat.visibles = etat.filtres.horsCarte ? etat.pourCarte.filter((r) => !surLaCarte(r)) : etat.pourCarte;
   if (!garderPage) etat.page = 1;
   afficherListe();
   afficherCompte();
+  afficherSelection();
   afficherPortrait();
   prevenir('filtres');
 }
@@ -277,17 +283,60 @@ function afficherCompte() {
   const n = document.createElement('strong'); n.textContent = etat.visibles.length;
   compte.append(n, ' ' + TEXTES.affichees(etat.visibles.length));
   $('effacerFiltres').classList.toggle('hidden', !(etat.requete || filtresActifs(etat.filtres)));
-  // Pastille du filtre « En ligne ou hors Québec », posé depuis la carte.
-  const pastille = $('pastilleFiltre');
-  pastille.classList.toggle('hidden', !etat.filtres.horsCarte);
-  pastille.textContent = '';
-  if (etat.filtres.horsCarte) {
-    const nom = document.createElement('span'); nom.textContent = TEXTES.filtres.horsCarte;
-    const retirer = document.createElement('button');
-    retirer.type = 'button'; retirer.textContent = '×'; retirer.setAttribute('aria-label', `${TEXTES.filtres.retirer} : ${TEXTES.filtres.horsCarte}`);
-    retirer.addEventListener('click', () => definirFiltre('horsCarte', false));
-    pastille.append(nom, retirer);
+}
+
+// ─── Sélection en cours ───
+// Tout ce qui restreint l'affichage : la recherche (ou un sujet), chaque valeur de
+// filtre (dont un porteur choisi sur la carte), « En ligne ou hors Québec », et la
+// ressource centrée par « Voir ses connexions ». Chaque élément sait se retirer.
+function elementsSelection() {
+  const elements = [];
+  if (etat.requete) elements.push({ libelle: `${TEXTES.selection.recherche} : ${etat.requete}`, retirer: () => definirRecherche('') });
+  for (const cle of Object.keys(FILTRES)) {
+    for (const valeur of etat.filtres[cle]) {
+      const court = cle === 'porteur' ? nomCourt(valeur) : cle === 'type' ? (TEXTES.typesCourts[cleType(valeur)] || valeur) : valeur;
+      elements.push({ libelle: `${TEXTES.filtres[cle]} : ${court}`, titre: valeur, retirer: () => basculerFiltre(cle, valeur) });
+    }
   }
+  if (etat.filtres.horsCarte) elements.push({ libelle: TEXTES.filtres.horsCarte, retirer: () => definirFiltre('horsCarte', false) });
+  const centree = etat.vue === 'connexions' && etat.centree ? parAdresse(etat.centree) : null;
+  if (centree) elements.push({ libelle: `${TEXTES.selection.connexions} : ${centree.nom}`, retirer: () => libererCentree() });
+  return elements;
+}
+
+// Les étiquettes sont affichées à deux endroits toujours visibles : sur la carte
+// ou le graphe, et au-dessus de la liste. Construites par le DOM (textContent).
+function afficherSelection() {
+  const elements = etat.pret ? elementsSelection() : [];
+  document.querySelectorAll('.js-selection').forEach((boite) => {
+    boite.textContent = '';
+    boite.classList.toggle('hidden', elements.length === 0);
+    for (const element of elements) {
+      const etiquette = document.createElement('span'); etiquette.className = 'stat-chip';
+      if (element.titre) etiquette.title = element.titre;
+      const nom = document.createElement('span'); nom.textContent = element.libelle;
+      const croix = document.createElement('button');
+      croix.type = 'button'; croix.textContent = '×';
+      croix.setAttribute('aria-label', `${TEXTES.filtres.retirer} : ${element.libelle}`);
+      croix.addEventListener('click', element.retirer);
+      etiquette.append(nom, croix);
+      boite.appendChild(etiquette);
+    }
+    if (elements.length) {
+      const tout = document.createElement('button');
+      tout.type = 'button'; tout.className = 'reset-fort'; tout.textContent = TEXTES.filtres.effacer;
+      tout.addEventListener('click', toutEffacer);
+      boite.appendChild(tout);
+    }
+  });
+}
+
+// Oublie la ressource centrée dans le graphe et rend sa vue d'ensemble au graphe.
+function libererCentree({ silencieux = false } = {}) {
+  if (!etat.centree) return;
+  etat.centree = null;
+  if (typeof api.libererGraphe === 'function') api.libererGraphe();
+  if (!silencieux) afficherSelection();
 }
 
 // ─── Bandeau « Portrait de la cartographie » ───
@@ -404,6 +453,7 @@ function definirVue(vue) {
   if (nouvelle === etat.vue) return;
   etat.vue = nouvelle;
   majSelecteurVue();
+  afficherSelection();
   if (etat.pret) prevenir('vue');
 }
 function majSelecteurVue() {
@@ -575,7 +625,9 @@ function suivreUrl() {
 function montrerConnexions(adresse) {
   if (!parAdresse(adresse)) return;
   fermerFiche();
+  etat.centree = adresse;
   definirVue('connexions');
+  afficherSelection();
   $('vueHaut').scrollIntoView({ behavior: mouvementReduit() ? 'auto' : 'smooth', block: 'start' });
   if (typeof api.centrerDansGraphe === 'function') api.centrerDansGraphe(adresse);
 }
@@ -702,7 +754,7 @@ function demarrer() {
     });
 }
 
-const api = { etat, surChangement, ouvrirFiche, fermerFiche, definirFiltre, basculerFiltre, definirVue, rafraichir, connexions, modeSombre, mouvementReduit, centrerDansGraphe: null };
+const api = { etat, surChangement, ouvrirFiche, fermerFiche, definirFiltre, basculerFiltre, definirVue, rafraichir, connexions, modeSombre, mouvementReduit, centrerDansGraphe: null, libererGraphe: null };
 window.Cartographie = api;
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer); else demarrer();
 })();

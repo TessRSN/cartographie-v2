@@ -2,8 +2,9 @@
  * Carte des ressources, reprise du bottin : ronds mauves dont la taille suit le
  * nombre de ressources, grappes mauves, fenêtres en verre. Chaque ressource
  * visible est placée chez son porteur (r.lieu) quand surLaCarte(r) dit vrai ;
- * les autres forment le groupe « En ligne ou hors Québec », accessible par un
- * bouton en verre posé sur la carte.
+ * les autres forment le groupe « En ligne ou hors Québec » : un bouton en verre
+ * posé sur la carte ouvre un panneau qui les liste (la carte garde ses ronds, la
+ * liste du bas ne montre plus qu'elles).
  */
 (function () {
 'use strict';
@@ -14,6 +15,7 @@ let carte = null;
 let groupe = null;
 let vueEnsemble = null;   // cadrage repris par le bouton « Recentrer »
 let dessinEnAttente = false;
+let derniereSignature = null;
 
 function couche(cle) {
   // CARTO Voyager avec clé, sinon OpenStreetMap (les tuiles CARTO sans clé portent un filigrane).
@@ -51,7 +53,7 @@ function htmlFenetre(porteur, ressources) {
   const parType = new Map();
   for (const r of ressources) { const cle = cleType(r.typePrincipal); parType.set(cle, (parType.get(cle) || 0) + 1); }
   const types = [...parType.entries()].sort((a, b) => b[1] - a[1])
-    .map(([cle, nombre]) => `<span class="type-${cle}">${nombre} ${e(TEXTES.typesCourts[cle])}</span>`).join(' · ');
+    .map(([cle, nombre]) => `<span class="type-${cle}"><span class="map-legend-dot"></span>${nombre} ${e(TEXTES.typesCourts[cle])}</span>`).join(' · ');
   const liste = [...ressources].sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr'))
     .map((r) => `<li><a class="map-member-link" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}">${e(r.nom)}</a><small>${e(TEXTES.typesCourts[cleType(r.typePrincipal)])}</small></li>`).join('');
   return `<div class="popup-inst-name">${e(porteur)}</div>`
@@ -69,8 +71,26 @@ function majBoutons(etat, surCarte, horsCarte) {
   const bouton = document.getElementById('boutonHorsCarte');
   const actif = etat.filtres.horsCarte;
   bouton.setAttribute('aria-pressed', actif ? 'true' : 'false');
-  document.getElementById('texteHorsCarte').textContent = actif ? TEXTES.carte.horsCarteActif : TEXTES.carte.horsCarte(horsCarte);
-  bouton.classList.toggle('hidden', !actif && horsCarte === 0);
+  bouton.setAttribute('aria-expanded', actif ? 'true' : 'false');
+  document.getElementById('texteHorsCarte').textContent = TEXTES.carte.horsCarte(horsCarte.length);
+  bouton.classList.toggle('hidden', !actif && horsCarte.length === 0);
+  majPanneau(actif, horsCarte);
+}
+
+// Panneau en verre : les ressources en ligne ou hors Québec, chacune ouvrant sa fiche.
+function majPanneau(actif, horsCarte) {
+  const e = echapper;
+  const panneau = document.getElementById('panneauHorsCarte');
+  panneau.classList.toggle('hidden', !actif);
+  document.getElementById('vueHaut').classList.toggle('avec-panneau', actif);
+  if (!actif) return;
+  document.getElementById('comptePanneau').textContent = `(${horsCarte.length})`;
+  document.getElementById('listeHorsCarte').innerHTML = horsCarte.map((r) => {
+    const cle = cleType(r.typePrincipal);
+    const porteur = ((r.porteurs || [])[0] || {}).nom;
+    const detail = [porteur, r.typePrincipal ? TEXTES.typesCourts[cle] || r.typePrincipal : ''].filter(Boolean).map(e).join(' · ');
+    return `<li><a class="type-${cle}" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}"><span class="map-legend-dot"></span><span><strong>${e(r.nom)}</strong>${detail ? `<small>${detail}</small>` : ''}</span></a></li>`;
+  }).join('');
 }
 
 function dessiner(etat, motif) {
@@ -92,6 +112,24 @@ function dessiner(etat, motif) {
   }
   dessinEnAttente = false;
 
+  const lieux = new Map();
+  let surCarte = 0;
+  const horsCarte = [];
+  // etat.pourCarte : les fiches retenues, sans tenir compte du filtre « En ligne ou hors Québec ».
+  for (const r of etat.pourCarte) {
+    if (!surLaCarte(r)) { horsCarte.push(r); continue; }
+    surCarte++;
+    const porteur = r.lieu.porteur || ((r.porteurs || [])[0] || {}).nom || r.nom;
+    const cle = `${porteur}|${r.lieu.latitude},${r.lieu.longitude}`;
+    if (!lieux.has(cle)) lieux.set(cle, { porteur, lieu: r.lieu, ressources: [] });
+    lieux.get(cle).ressources.push(r);
+  }
+  // Mêmes ronds qu'au dessin précédent (on a seulement ouvert ou fermé le panneau
+  // « En ligne ou hors Québec ») : la carte reste telle quelle, zoom compris.
+  const signature = [...lieux.values()].map((l) => `${l.porteur}:${l.ressources.map((r) => r.adresse).join(',')}`).join('|');
+  if (groupe && signature === derniereSignature) { majBoutons(etat, surCarte, horsCarte); return; }
+  derniereSignature = signature;
+
   if (groupe) carte.removeLayer(groupe);
   groupe = L.markerClusterGroup({
     maxClusterRadius: 45,
@@ -103,17 +141,6 @@ function dessiner(etat, motif) {
     },
   });
 
-  const lieux = new Map();
-  let surCarte = 0;
-  let horsCarte = 0;
-  for (const r of etat.visibles) {
-    if (!surLaCarte(r)) { horsCarte++; continue; }
-    surCarte++;
-    const porteur = r.lieu.porteur || ((r.porteurs || [])[0] || {}).nom || r.nom;
-    const cle = `${porteur}|${r.lieu.latitude},${r.lieu.longitude}`;
-    if (!lieux.has(cle)) lieux.set(cle, { porteur, lieu: r.lieu, ressources: [] });
-    lieux.get(cle).ressources.push(r);
-  }
   for (const { porteur, lieu, ressources } of lieux.values()) {
     const n = ressources.length;
     const h = empreinte(porteur);
@@ -140,7 +167,14 @@ function dessiner(etat, motif) {
 }
 
 document.getElementById('boutonHorsCarte').addEventListener('click', () => {
-  C.definirFiltre('horsCarte', !C.etat.filtres.horsCarte);
+  const ouvrir = !C.etat.filtres.horsCarte;
+  C.definirFiltre('horsCarte', ouvrir);
+  if (ouvrir) document.getElementById('fermerHorsCarte').focus();
+});
+// Fermer le panneau retire le filtre : la liste du bas retrouve toutes les ressources.
+document.getElementById('fermerHorsCarte').addEventListener('click', () => {
+  C.definirFiltre('horsCarte', false);
+  document.getElementById('boutonHorsCarte').focus();
 });
 // Bouton « Recentrer » de la carte : retour à la vue d'ensemble des ronds affichés.
 document.querySelector('#zoneCarte .js-recentrer').addEventListener('click', () => {

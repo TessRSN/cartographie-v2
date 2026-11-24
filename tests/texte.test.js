@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { echapper, filtrer, filtresActifs, comptesDeFiltre, TEXTES, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, CLES_TYPE } = require('../js/texte.js');
+const { echapper, filtrer, filtresActifs, comptesDeFiltre, cleAcces, TEXTES, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, CLES_TYPE } = require('../js/texte.js');
 const { htmlFiche, htmlCarteFiche, htmlLogo } = require('../js/fiche.js');
 
 const fiche = (nom, props = {}) => ({
@@ -205,11 +205,45 @@ test('htmlCarteFiche : logo ou initiales, lien vers la fiche, tout est échappé
   assert.ok(html.includes('href="/ressource/nom"'));
   assert.ok(html.includes('data-fiche="nom"'));
   assert.ok(html.includes('data-graphe="nom"'));
-  assert.ok(html.includes('+1'), 'le troisième porteur est compté');
+  assert.ok(html.includes('<span class="card-porteur">&lt;u&gt;P1&lt;/u&gt;</span>'), 'un seul porteur est écrit');
+  assert.ok(html.includes('<span class="card-plus">+2'), 'les autres porteurs sont comptés');
+  assert.ok(html.includes('title="&lt;u&gt;P1&lt;/u&gt; · P2 · P3"'), 'tous les porteurs sont dans l\'infobulle');
+  assert.ok(html.includes('title="&lt;i&gt;Nom&lt;/i&gt;"'), 'le nom complet est dans l\'infobulle');
   assert.ok(html.includes('class="member-card"'), 'la carte ne porte pas de classe de type, donc pas de bande de couleur');
   assert.ok(htmlCarteFiche(fiche('A', { logo: 'https://exemple.org/a.png' })).includes('<img src="https://exemple.org/a.png"'));
 });
 
 test('chaque type a un nom court dans les textes', () => {
   for (const cle of Object.values(CLES_TYPE).concat(['autre'])) assert.equal(typeof TEXTES.typesCourts[cle], 'string', cle);
+});
+
+test('cleAcces : une teinte par mode d\'accès, neutre pour le reste', () => {
+  assert.equal(cleAcces('Ouvert'), 'ouvert');
+  assert.equal(cleAcces('Sur inscription'), 'inscription');
+  assert.equal(cleAcces('Sur demande évaluée'), 'demande');
+  assert.equal(cleAcces('Réservé ou interne'), 'reserve');
+  assert.equal(cleAcces('Non précisé par la ressource'), 'neutre');
+  assert.equal(cleAcces('Sans objet'), 'neutre');
+  assert.equal(cleAcces('"><b>'), 'neutre');
+  assert.equal(TEXTES.acces('Ouvert'), 'Accès : Ouvert');
+  assert.equal(TEXTES.acces('Non précisé par la ressource'), 'Accès : non précisé par la ressource');
+});
+
+test('htmlCarteFiche : l\'accès est précédé de son libellé et porte sa teinte ; trois sujets cliquables, puis « +n »', () => {
+  const html = htmlCarteFiche(fiche('A', {
+    modesAcces: ['Ouvert', 'Non précisé par la ressource'],
+    motsCles: ['génomique', '<b>IA</b>', 'cohorte', 'oncologie', 'imagerie'],
+  }));
+  assert.ok(html.includes('<span class="axe-chip acces acces-ouvert">Accès : Ouvert</span>'));
+  assert.ok(html.includes('<span class="axe-chip acces acces-neutre">Accès : non précisé par la ressource</span>'));
+  assert.equal((html.match(/data-mot-cle=/g) || []).length, 3);
+  assert.ok(html.includes('href="/?q=g%C3%A9nomique" data-mot-cle="génomique"'));
+  assert.ok(html.includes('data-mot-cle="&lt;b&gt;IA&lt;/b&gt;"'));
+  assert.ok(!html.includes('<b>'));
+  assert.ok(html.includes('title="oncologie · imagerie">+2'));
+  const sans = htmlCarteFiche(fiche('B', { motsCles: ['un', 'deux', 'trois'] }));
+  assert.ok(!sans.includes('chip-more'));
+  assert.ok(!sans.includes('Accès'));
+  // Dans la fiche, la ligne s'appelle déjà « Mode d'accès » : la teinte, sans le libellé.
+  assert.ok(htmlFiche(fiche('C', { modesAcces: ['Sur demande évaluée'] })).includes('<span class="axe-chip acces acces-demande">Sur demande évaluée</span>'));
 });

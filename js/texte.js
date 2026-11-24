@@ -23,8 +23,14 @@ const TEXTES = {
   oui: 'Oui',
   filtres: {
     type: 'Type', modeAcces: "Mode d'accès", porteur: 'Porteur', etat: 'État',
-    tous: 'Tous', effacer: 'Réinitialiser', retirer: 'Retirer ce filtre', horsCarte: 'En ligne ou hors Québec',
+    tous: 'Tous', effacer: 'Tout réinitialiser', retirer: 'Retirer', horsCarte: 'En ligne ou hors Québec',
   },
+  // Étiquettes de la sélection en cours, affichées sur la carte ou le graphe et au-dessus de la liste.
+  selection: { titre: 'Sélection en cours', recherche: 'Recherche', connexions: 'Connexions de' },
+  // Étiquette d'accès d'une carte de fiche : « Accès : Ouvert », « Accès : non précisé par la ressource ».
+  acces: (mode) => `Accès : ${/^non précisé/i.test(mode) ? mode.charAt(0).toLowerCase() + mode.slice(1) : mode}`,
+  autresSujets: (n) => (n > 1 ? `${n} autres sujets` : '1 autre sujet'),
+  autresPorteurs: (n) => (n > 1 ? `${n} autres porteurs` : '1 autre porteur'),
   // Nom court de chaque type, pour les pastilles, la légende et le bandeau.
   typesCourts: { jeu: 'Jeu de données', catalogue: 'Catalogue', plateforme: 'Plateforme', logiciel: 'Logiciel', service: 'Service', initiative: 'Initiative', autre: 'Autre' },
   compte: (n) => (n === 0 ? 'Aucune fiche' : n === 1 ? '1 fiche' : `${n} fiches`),
@@ -39,7 +45,9 @@ const TEXTES = {
     titre: 'Carte',
     surLaCarte: (n) => (n === 0 ? 'Aucune ressource sur la carte' : n === 1 ? '1 ressource sur la carte' : `${n} ressources sur la carte`),
     horsCarte: (n) => `En ligne ou hors Québec : ${n}`,
-    horsCarteActif: 'Voir toutes les ressources',
+    horsCarteTitre: 'En ligne ou hors Québec',
+    horsCarteAide: 'Ces ressources ne sont pas placées sur la carte du Québec.',
+    horsCarteFermer: 'Fermer et revenir à la carte',
     ressources: (n) => (n > 1 ? 'ressources' : 'ressource'),
     voirFiches: 'Voir les fiches de ce porteur',
     indisponible: "La carte n'a pas pu être chargée. Vérifiez votre connexion et rechargez la page.",
@@ -53,8 +61,6 @@ const TEXTES = {
     densite: 'Liens : tous ↔ les plus forts',
     masquerIsoles: 'Masquer les ressources sans lien',
     compte: (n, l) => `${n} ${n > 1 ? 'ressources' : 'ressource'}, ${l} ${l > 1 ? 'connexions affichées' : 'connexion affichée'}`,
-    exporter: 'Exporter en image',
-    fichierImage: 'rsn-cartographie-connexions',
     sujetsCommuns: 'Sujets communs',
     vide: 'Aucun lien entre les ressources affichées.',
     indisponible: "Le graphe n'a pas pu être chargé. Vérifiez votre connexion et rechargez la page.",
@@ -260,11 +266,15 @@ const CLES_TYPE = {
 };
 function cleType(type) { return CLES_TYPE[type] || 'autre'; }
 
+// Classe de couleur d'un mode d'accès : une teinte par mode, la même sur les cartes et dans la fiche.
+const CLES_ACCES = { 'Ouvert': 'ouvert', 'Sur inscription': 'inscription', 'Sur demande évaluée': 'demande', 'Réservé ou interne': 'reserve' };
+function cleAcces(mode) { return CLES_ACCES[mode] || 'neutre'; }
+
 // Classe de couleur d'un état.
 const CLES_ETAT = { 'Actif': 'actif', 'En développement': 'developpement', 'Non confirmé': 'non-confirme', 'Archivé': 'archive' };
 function cleEtat(etat) { return CLES_ETAT[etat] || 'autre'; }
 
-const api = { cleEtat, TEXTES, echapper, adresseSure, surLaCarte, filtrer, filtresActifs, enListe, comptesDeFiltre, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, dateLongue, cleType, CLES_TYPE, CADRE_QUEBEC };
+const api = { cleAcces, CLES_ACCES, cleEtat, TEXTES, echapper, adresseSure, surLaCarte, filtrer, filtresActifs, enListe, comptesDeFiltre, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, dateLongue, cleType, CLES_TYPE, CADRE_QUEBEC };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else Object.assign(racine, api);
 })(typeof window !== 'undefined' ? window : globalThis);

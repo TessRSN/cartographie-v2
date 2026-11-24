@@ -3,6 +3,9 @@
  * physique (placement calculé hors écran, puis régime « calme » où le graphe
  * respire lentement), même rendu des nœuds et des traits, curseur de densité,
  * case « masquer les isolés », compteur et fenêtre d'explication.
+ * Comme les photos du bottin, le logo d'une ressource est dessiné dans son rond
+ * (forme circularImage), avec un contour épais de la couleur du type ; sans
+ * logo, ou si l'image échoue, le rond est plein, de la couleur du type.
  * Le calcul des liens reste celui de connexions.js (calculerConnexions).
  * Les filtres masquent les ressources écartées ; la recherche estompe les
  * autres et centre le meilleur résultat.
@@ -21,11 +24,19 @@ const $ = (id) => document.getElementById(id);
 const PHYSIQUE_RAPIDE = { enabled: true, maxVelocity: 50, minVelocity: 0.75, timestep: 0.25, adaptiveTimestep: true };
 const PHYSIQUE_CALME = { enabled: true, maxVelocity: 0.8, minVelocity: 0.05, timestep: 0.15, adaptiveTimestep: false };
 // Le plafond est en unités du graphe ; à l'écran, le zoom le multiplie. Il est
-// recalculé à chaque zoom pour garder environ 4 px/s.
-const CALME_PX_PAR_S = 4;
-// La vue de départ cadre les ressources reliées, puis rapproche un peu.
-// Le bottin rapproche de 1,8 pour 400 points ; ici le graphe est plus petit.
-const ZOOM_DEPART = 1.25;
+// recalculé à chaque zoom pour garder environ 6 px/s (4 dans le bottin).
+const CALME_PX_PAR_S = 6;
+// La vue de départ cadre les ressources reliées, puis rapproche (1,8 dans le bottin).
+const ZOOM_DEPART = 1.7;
+// Forces du placement. Par rapport au bottin : ressorts plus longs (150 → 190) et
+// répulsion plus forte (-40 → -60), pour écarter les ronds, plus gros avec leur logo.
+const FORCES = { gravitationalConstant: -60, centralGravity: 0.01, springLength: 190, springConstant: 0.05, damping: 0.95, avoidOverlap: 0.8 };
+// Respiration : avec 140 ressources, le placement atteint l'équilibre et vis-network
+// arrête alors la simulation (le bottin, plus gros, ne s'arrête jamais tout à fait).
+// Pour que le graphe bouge dès l'arrivée et sans arrêt, la longueur des ressorts et
+// la répulsion oscillent lentement autour de leur valeur : l'équilibre se déplace
+// en continu et les points le suivent à la vitesse plafonnée du régime calme.
+const RESPIRATION = { intervalle: 1600, pas: 0.4, ressort: 0.10, repulsion: 0.15 };
 const GRIS = '#718096';
 
 let reseau = null;
@@ -35,6 +46,9 @@ let minuterieZoom = null;
 let derniereCle;           // signature filtres + recherche du dernier cadrage
 let aCentrer = null;       // adresse à centrer dès que le graphe est posé
 let affichageEnCours = false;
+let minuterieRespiration = null;
+let phase = 0;
+const pixels = new Map();  // images d'un pixel, une par couleur
 
 // ─── Couleurs : lues dans la feuille de styles (--type-*), seule source ───
 function couleurType(cle) {
@@ -61,8 +75,28 @@ function police(sombre) {
 }
 // Traits assez contrastés sur fond clair comme sur fond sombre.
 function couleurTrait(sombre) { return sombre ? 'rgba(203,213,225,0.45)' : 'rgba(71,85,105,0.55)'; }
-// Rayon de 12 à 34 px selon le nombre de liens.
-function tailleNoeud(degre) { return Math.min(Math.max(12 + Math.sqrt(degre) * 3.5, 10), 34); }
+// Rayon de 16 à 36 px selon le nombre de liens (12 à 34 dans le bottin) ; un quart
+// de plus avec un logo, pour qu'il se reconnaisse.
+function tailleNoeud(degre, avecLogo) {
+  const rayon = Math.min(Math.max(16 + Math.sqrt(degre) * 3.5, 14), 36);
+  return avecLogo ? Math.round(rayon * 1.25) : rayon;
+}
+// Image d'une seule couleur : montrée à la place d'un logo qui ne se charge pas,
+// elle remplit le rond de la couleur du type.
+function pixel(hex) {
+  if (!pixels.has(hex)) {
+    const toile = document.createElement('canvas');
+    toile.width = 4; toile.height = 4;
+    const dessin = toile.getContext('2d');
+    dessin.fillStyle = hex; dessin.fillRect(0, 0, 4, 4);
+    pixels.set(hex, toile.toDataURL('image/png'));
+  }
+  return pixels.get(hex);
+}
+// Rond d'une ressource qui a un logo : fond blanc, contour épais de la couleur du type.
+function couleurLogo(hex) {
+  return { background: '#ffffff', border: hex, highlight: { background: '#ffffff', border: hex }, hover: { background: '#ffffff', border: hex } };
+}
 
 // Les titres sont de simples chaînes : vis-network les affiche comme du texte, jamais comme du HTML.
 function faireLien(l, couleur) {
@@ -82,14 +116,34 @@ function seuil() {
 function masquerIsoles() { return $('masquerIsoles').checked; }
 
 // ─── Physique ───
+function vitesseCalme() {
+  const echelle = Math.max(0.05, reseau.getScale() || 0.19);
+  return Math.max(0.06, Math.min(1.2, CALME_PX_PAR_S / (26 * echelle)));
+}
 function appliquerCalme() {
   if (!reseau) return;
   // Mouvement réduit demandé : le graphe est posé, rien ne bouge tout seul.
-  if (C.mouvementReduit()) { reseau.setOptions({ physics: { enabled: false } }); calme = true; return; }
-  const echelle = Math.max(0.05, reseau.getScale() || 0.19);
-  const maxVelocity = Math.max(0.04, Math.min(0.8, CALME_PX_PAR_S / (26 * echelle)));
-  reseau.setOptions({ physics: Object.assign({}, PHYSIQUE_CALME, { maxVelocity }) });
+  if (C.mouvementReduit()) { arreterRespiration(); reseau.setOptions({ physics: { enabled: false } }); calme = true; return; }
   calme = true;
+  respirer();
+  if (!minuterieRespiration) minuterieRespiration = setInterval(respirer, RESPIRATION.intervalle);
+}
+// Un pas de respiration : déplace légèrement l'équilibre et relance la simulation.
+function respirer() {
+  if (!reseau || !calme || document.hidden || C.etat.vue !== 'connexions') return;
+  phase += RESPIRATION.pas;
+  reseau.setOptions({ physics: Object.assign({}, PHYSIQUE_CALME, {
+    maxVelocity: vitesseCalme(),
+    forceAtlas2Based: Object.assign({}, FORCES, {
+      springLength: FORCES.springLength * (1 + RESPIRATION.ressort * Math.sin(phase)),
+      gravitationalConstant: FORCES.gravitationalConstant * (1 + RESPIRATION.repulsion * Math.sin(phase * 0.6 + 1)),
+    }),
+  }) });
+  reseau.startSimulation();
+}
+function arreterRespiration() {
+  clearInterval(minuterieRespiration);
+  minuterieRespiration = null;
 }
 function auZoom() {
   if (!calme) return;
@@ -102,7 +156,8 @@ function replacer(iterations) {
   if (!reseau) return;
   $('calculConnexions').classList.remove('hidden');
   calme = false;
-  reseau.setOptions({ physics: PHYSIQUE_RAPIDE });
+  arreterRespiration();
+  reseau.setOptions({ physics: Object.assign({}, PHYSIQUE_RAPIDE, { forceAtlas2Based: FORCES }) });
   reseau.once('stabilizationIterationsDone', () => {
     if (!reseau) return;
     appliquerCalme();
@@ -199,7 +254,7 @@ function appliquerDensite() {
   g.liensDS.clear();
   g.liensDS.add(g.liens);
   compterDegres();
-  g.noeudsDS.update(g.noeuds.map((n) => ({ id: n.id, size: tailleNoeud(g.degre.get(n.id) || 0) })));
+  g.noeudsDS.update(g.noeuds.map((n) => ({ id: n.id, size: tailleNoeud(g.degre.get(n.id) || 0, n.avecLogo) })));
   replacer(200);
   appliquerFiltres();
 }
@@ -214,7 +269,10 @@ function appliquerTheme() {
   if (!reseau || !g) return;
   const sombre = C.modeSombre();
   const couleur = couleurTrait(sombre);
-  g.noeudsDS.update(g.noeuds.map((n) => ({ id: n.id, font: police(sombre), color: couleurNoeud(couleurType(n.cleType), sombre) })));
+  g.noeudsDS.update(g.noeuds.map((n) => {
+    const hex = couleurType(n.cleType);
+    return { id: n.id, font: police(sombre), color: n.avecLogo ? couleurLogo(hex) : couleurNoeud(hex, sombre) };
+  }));
   g.liensDS.update(g.liens.map((l) => ({ id: l.id, color: { color: couleur, highlight: '#a855f7', hover: '#a855f7' } })));
 }
 
@@ -239,27 +297,32 @@ function construire() {
     const cleDuType = cleType(n.type);
     const r = parAdresse.get(n.adresse) || {};
     const porteur = ((r.porteurs || [])[0] || {}).nom;
-    return {
+    const hex = couleurType(cleDuType);
+    const logo = adresseSure(r.logo);
+    const forme = logo
+      ? { shape: 'circularImage', image: logo, brokenImage: pixel(hex), borderWidth: 4, borderWidthSelected: 6, color: couleurLogo(hex) }
+      : { shape: 'dot', borderWidth: 0, color: couleurNoeud(hex, sombre) };
+    return Object.assign(forme, {
       id: n.adresse,
       label: n.nom.length > 30 ? n.nom.slice(0, 28) + '…' : n.nom,
       title: [n.nom, n.type ? TEXTES.typesCourts[cleDuType] || n.type : '', porteur || ''].filter(Boolean).join(' · '),
-      size: tailleNoeud(g.degre.get(n.adresse) || 0),
+      size: tailleNoeud(g.degre.get(n.adresse) || 0, !!logo),
       font: police(sombre),
-      shape: 'dot', borderWidth: 0,
-      color: couleurNoeud(couleurType(cleDuType), sombre),
       cleType: cleDuType,
-    };
+      avecLogo: !!logo,
+    });
   });
+  arreterRespiration();
   if (reseau) { try { reseau.destroy(); } catch (err) { /* déjà détruit */ } reseau = null; }
   g.noeudsDS = new vis.DataSet(g.noeuds);
   g.liensDS = new vis.DataSet(g.liens);
-  // Options du bottin, telles quelles.
+  // Options du bottin ; seules les forces (FORCES) sont réglées pour ce graphe.
   const options = {
     nodes: { shape: 'dot', borderWidth: 0, borderWidthSelected: 0 },
     edges: { smooth: { type: 'continuous', roundness: 0.2 }, scaling: { min: 0.5, max: 4 } },
     physics: {
       // Amortissement élevé : mouvement lent et calme après la stabilisation.
-      forceAtlas2Based: { gravitationalConstant: -40, centralGravity: 0.01, springLength: 150, springConstant: 0.05, damping: 0.95, avoidOverlap: 0.6 },
+      forceAtlas2Based: FORCES,
       solver: 'forceAtlas2Based',
       // Le placement se calcule hors écran à pleine vitesse, puis la physique passe en régime calme.
       stabilization: { iterations: 400, fit: true, updateInterval: 50 },
@@ -321,6 +384,7 @@ function suivre(etat, motif) {
     zone.classList.add('hidden');
     $('chargementConnexions').classList.add('hidden');
     // Graphe caché : la physique est coupée, elle reprend au retour dans la vue.
+    arreterRespiration();
     if (reseau) { reseau.setOptions({ physics: { enabled: false } }); calme = false; }
     return;
   }
@@ -351,28 +415,24 @@ function ouvrirAide() {
   $('fermerAide').focus();
 }
 
-function exporterImage() {
-  try {
-    const dessin = $('graphe').querySelector('canvas');
-    if (!dessin) return;
-    const lien = document.createElement('a');
-    lien.href = dessin.toDataURL('image/png');
-    lien.download = `${TEXTES.graphe.fichierImage}-${new Date().toISOString().slice(0, 10)}.png`;
-    lien.click();
-  } catch (err) { console.warn(err); }
-}
-
 // « Voir ses connexions » : centre la ressource dès que le placement est terminé.
 C.centrerDansGraphe = function (adresse) {
   aCentrer = adresse;
   if (reseau && g && calme && !$('zoneConnexions').classList.contains('hidden')) appliquerFiltres();
 };
 
+// Croix de l'étiquette « Connexions de : … » ou « Tout réinitialiser » : plus de ressource centrée, retour à la vue de départ.
+C.libererGraphe = function () {
+  aCentrer = null;
+  if (!reseau || !g || !calme || $('zoneConnexions').classList.contains('hidden')) return;
+  reseau.unselectAll();
+  vueDepart(true);
+};
+
 legende();
 $('boutonAide').addEventListener('click', ouvrirAide);
 $('densiteConnexions').addEventListener('change', appliquerDensite);
 $('masquerIsoles').addEventListener('change', appliquerFiltres);
-$('exporterGraphe').addEventListener('click', exporterImage);
 document.querySelector('#zoneConnexions .js-recentrer').addEventListener('click', () => {
   if (!reseau) return;
   reseau.unselectAll();
