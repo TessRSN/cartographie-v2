@@ -36,7 +36,10 @@ const FORCES = { gravitationalConstant: -60, centralGravity: 0.01, springLength:
 // Pour que le graphe bouge dès l'arrivée et sans arrêt, la longueur des ressorts et
 // la répulsion oscillent lentement autour de leur valeur : l'équilibre se déplace
 // en continu et les points le suivent à la vitesse plafonnée du régime calme.
-const RESPIRATION = { intervalle: 1600, pas: 0.4, ressort: 0.10, repulsion: 0.15 };
+// Les forces sont modifiées en place, par petits pas rapprochés, sans rappeler
+// setOptions : le rappeler toutes les secondes arrêtait puis relançait la
+// simulation et rechargeait le rendu, d'où un clignotement.
+const RESPIRATION = { intervalle: 120, pas: 0.03, ressort: 0.10, repulsion: 0.15 };
 const GRIS = '#718096';
 
 let reseau = null;
@@ -123,23 +126,34 @@ function vitesseCalme() {
 function appliquerCalme() {
   if (!reseau) return;
   // Mouvement réduit demandé : le graphe est posé, rien ne bouge tout seul.
-  if (C.mouvementReduit()) { arreterRespiration(); reseau.setOptions({ physics: { enabled: false } }); calme = true; return; }
+  if (C.mouvementReduit()) { arreterRespiration(); reseau.setOptions({ physics: { enabled: false } }); calme = true; calmeApplique = false; return; }
   calme = true;
   respirer();
   if (!minuterieRespiration) minuterieRespiration = setInterval(respirer, RESPIRATION.intervalle);
 }
-// Un pas de respiration : déplace légèrement l'équilibre et relance la simulation.
-function respirer() {
-  if (!reseau || !calme || document.hidden || C.etat.vue !== 'connexions') return;
-  phase += RESPIRATION.pas;
+// Met le graphe en régime calme, une seule fois. minVelocity à 0 : la
+// simulation ne se déclare jamais « stabilisée », donc ne s'arrête pas.
+let calmeApplique = false;
+function installerCalme() {
   reseau.setOptions({ physics: Object.assign({}, PHYSIQUE_CALME, {
-    maxVelocity: vitesseCalme(),
-    forceAtlas2Based: Object.assign({}, FORCES, {
-      springLength: FORCES.springLength * (1 + RESPIRATION.ressort * Math.sin(phase)),
-      gravitationalConstant: FORCES.gravitationalConstant * (1 + RESPIRATION.repulsion * Math.sin(phase * 0.6 + 1)),
-    }),
+    minVelocity: 0, maxVelocity: vitesseCalme(), forceAtlas2Based: Object.assign({}, FORCES),
   }) });
   reseau.startSimulation();
+  calmeApplique = true;
+}
+// Un pas de respiration : déplace très légèrement l'équilibre. Les options de
+// la physique sont retouchées en place (vis-network 9.1.9 les relit à chaque pas).
+function respirer() {
+  if (!reseau || !calme || document.hidden || C.etat.vue !== 'connexions') return;
+  if (!calmeApplique) installerCalme();
+  phase += RESPIRATION.pas;
+  const options = reseau.physics && reseau.physics.options;
+  const forces = options && options.forceAtlas2Based;
+  if (!forces) return;
+  forces.springLength = FORCES.springLength * (1 + RESPIRATION.ressort * Math.sin(phase));
+  forces.gravitationalConstant = FORCES.gravitationalConstant * (1 + RESPIRATION.repulsion * Math.sin(phase * 0.6 + 1));
+  options.maxVelocity = vitesseCalme();
+  if (reseau.physics.stabilized) reseau.startSimulation();
 }
 function arreterRespiration() {
   clearInterval(minuterieRespiration);
@@ -155,7 +169,7 @@ function auZoom() {
 function replacer(iterations) {
   if (!reseau) return;
   $('calculConnexions').classList.remove('hidden');
-  calme = false;
+  calme = false; calmeApplique = false;
   arreterRespiration();
   reseau.setOptions({ physics: Object.assign({}, PHYSIQUE_RAPIDE, { forceAtlas2Based: FORCES }) });
   reseau.once('stabilizationIterationsDone', () => {
@@ -333,7 +347,7 @@ function construire() {
   const conteneur = $('graphe');
   reseau = new vis.Network(conteneur, { nodes: g.noeudsDS, edges: g.liensDS }, options);
   $('calculConnexions').classList.remove('hidden');
-  calme = false;
+  calme = false; calmeApplique = false;
   derniereCle = undefined;
   reseau.once('stabilizationIterationsDone', () => {
     if (!reseau) return;
@@ -385,7 +399,7 @@ function suivre(etat, motif) {
     $('chargementConnexions').classList.add('hidden');
     // Graphe caché : la physique est coupée, elle reprend au retour dans la vue.
     arreterRespiration();
-    if (reseau) { reseau.setOptions({ physics: { enabled: false } }); calme = false; }
+    if (reseau) { reseau.setOptions({ physics: { enabled: false } }); calme = false; calmeApplique = false; }
     return;
   }
   const pret = reseau && g && g.source === etat.ressources && !zone.classList.contains('hidden');
