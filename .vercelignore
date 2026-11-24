@@ -1,0 +1,5 @@
+# Jamais envoyés sur Vercel : notes internes, essais, documents de travail.
+notes-internes
+tests
+scripts
+.env*

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartographie des ressources en santé numérique | RSN</title>
+    <meta name="description" content="Jeux de données, catalogues, plateformes, logiciels, services et initiatives en santé numérique ouverts aux équipes du Québec : à quoi ils servent, comment y accéder, à qui écrire.">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="canonical" href="/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Cartographie des ressources en santé numérique | RSN">
+    <meta property="og:description" content="Jeux de données, catalogues, plateformes, logiciels, services et initiatives en santé numérique ouverts aux équipes du Québec.">
+    <script type="application/ld+json" id="donneesStructurees">{"@context":"https://schema.org","@type":"WebSite","name":"Cartographie des ressources en santé numérique","publisher":{"@type":"Organization","name":"Réseau santé numérique"}}</script>
+    <link rel="icon" type="image/png" href="/icone-rsn.png">
+    <!-- Mode clair ou sombre, posé avant le premier affichage : choix mémorisé, sinon réglage du système. -->
+    <script>(function(){try{var c=localStorage.getItem('rsn-theme');if(c==='dark'||(!c&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="https://unpkg.com/vis-network@9.1.9/styles/vis-network.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+<!-- Bandeau mince, comme dans le bottin : logo à gauche, recherche dans le bandeau. -->
+<header class="header" id="entete">
+    <div class="header-top">
+        <a href="/" id="lienAccueil" class="header-home" data-texte-aria="accueil" aria-label="Retour à l'accueil de la cartographie"><img class="header-logo" src="/logo-rsn-blanc.webp" width="150" height="40" data-texte-alt="logo" alt="Logo du RSN"></a>
+        <div class="header-title">
+            <h1 id="titrePage" data-texte="titre">Cartographie des ressources en santé numérique</h1>
+            <p data-texte="reseau">Réseau santé numérique</p>
+        </div>
+    </div>
+    <div class="header-search" id="boiteRecherche" role="search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" class="search-input" id="champRecherche" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="listeSuggestions" data-texte-indice="recherche" placeholder="Rechercher une ressource, un sujet, un porteur…" data-texte-aria="rechercheNom" aria-label="Rechercher une ressource">
+        <button type="button" class="search-clear hidden" id="effacerRecherche" data-texte-aria="effacerRecherche" aria-label="Effacer la recherche">×</button>
+        <!-- Suggestions pendant la saisie : sujets, porteurs, ressources. -->
+        <div class="search-suggest glass hidden" id="listeSuggestions" role="listbox"></div>
+    </div>
+    <div class="header-controls">
+        <a class="header-btn" href="https://rsn.quebec/" target="_blank" rel="noopener" data-texte-titre="siteReseau" title="Ouvrir le site du Réseau santé numérique">rsn.quebec
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg>
+        </a>
+        <!-- L'icône montre le mode vers lequel on bascule : lune en mode clair, soleil en mode sombre. -->
+        <button type="button" class="header-btn" id="boutonTheme" aria-label="Passer au mode sombre">
+            <svg id="iconeSoleil" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            <svg id="iconeLune" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+    </div>
+</header>
+
+<!-- Page d'une ressource : remplie par le serveur pour /ressource/<adresse>, lisible sans JavaScript. -->
+<main id="ficheStatique" class="fiche-statique" hidden><!--FICHE--></main>
+
+<div id="accueil">
+
+    <!-- Barre de filtres pleine largeur ; les menus déroulants sont en verre. -->
+    <div class="controls" id="barreFiltres">
+        <div class="filters-row" id="rangeeFiltres">
+            <div class="filter-group"><label id="nomFiltreType" data-texte="filtres.type">Type</label><div id="filtreType" class="ms-wrap"></div></div>
+            <div class="filter-group"><label id="nomFiltreModeAcces" data-texte="filtres.modeAcces">Mode d'accès</label><div id="filtreModeAcces" class="ms-wrap"></div></div>
+            <div class="filter-group"><label id="nomFiltrePorteur" data-texte="filtres.porteur">Porteur</label><div id="filtrePorteur" class="ms-wrap"></div></div>
+            <div class="filter-group"><label id="nomFiltreEtat" data-texte="filtres.etat">État</label><div id="filtreEtat" class="ms-wrap"></div></div>
+        </div>
+        <div class="results-count" id="compte" aria-live="polite"></div>
+        <button type="button" class="reset-btn hidden" id="effacerFiltres" data-texte="filtres.effacer">Tout réinitialiser</button>
+    </div>
+
+    <!-- Vue du haut : la carte ou le graphe des connexions, au choix. -->
+    <div class="hero" id="vueHaut">
+        <div class="hero-tools">
+            <div class="view-switch glass" role="group" data-texte-aria="vues.choisir" aria-label="Choisir la vue">
+                <button type="button" data-vue="carte" class="active" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/></svg><span data-texte="vues.carte">Carte</span></button>
+                <button type="button" data-vue="connexions" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 7.8l4 8.4M17 7.8l-4 8.4M8 6h8"/></svg><span data-texte="vues.connexions">Connexions</span></button>
+            </div>
+            <!-- Sélection en cours, toujours visible sur la carte ou le graphe : une étiquette par filtre, avec sa croix, et « Tout réinitialiser ». -->
+            <div class="selection glass hidden js-selection" role="group" data-texte-aria="selection.titre" aria-label="Sélection en cours"></div>
+        </div>
+        <div id="zoneCarte">
+            <div id="carte"></div>
+            <!-- Ressources « En ligne ou hors Québec » : listées dans un panneau en verre posé sur la carte. -->
+            <aside class="panneau-hors glass hidden" id="panneauHorsCarte" aria-labelledby="titreHorsCarte">
+                <div class="panneau-entete">
+                    <h2 id="titreHorsCarte"><span data-texte="carte.horsCarteTitre">En ligne ou hors Québec</span> <span id="comptePanneau"></span></h2>
+                    <button type="button" class="member-modal-close" id="fermerHorsCarte" data-texte-aria="carte.horsCarteFermer" aria-label="Fermer et revenir à la carte" data-texte-titre="carte.horsCarteFermer" title="Fermer et revenir à la carte">×</button>
+                </div>
+                <p class="panneau-aide" data-texte="carte.horsCarteAide">Ces ressources ne sont pas placées sur la carte du Québec.</p>
+                <ul id="listeHorsCarte"></ul>
+            </aside>
+            <div class="hero-bottom">
+                <!-- Retour à la vue d'ensemble, en bas à gauche à côté du zoom. -->
+                <button type="button" class="view-reset glass js-recentrer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span data-texte="vues.recentrer">Recentrer</span></button>
+                <div class="map-pill glass hidden" id="pastilleCarte"><span class="map-legend-dot"></span><span class="map-stats" id="compteCarte"></span></div>
+                <!-- Les ressources sans lieu au Québec : ce bouton les montre dans la liste. -->
+                <button type="button" class="view-reset glass hidden" id="boutonHorsCarte" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span id="texteHorsCarte"></span></button>
+                <button type="button" class="teaser glass" data-vue="connexions">
+                    <svg viewBox="0 0 104 76" width="104" height="76" aria-hidden="true">
+                        <g class="sway">
+                            <path d="M20 22L46 12M20 22L52 40M46 12L52 40M52 40L26 54M52 40L78 26M52 40L60 66M78 26L86 56M86 56L60 66M20 22L26 54" fill="none" stroke="#8fa3bd" stroke-width="1.4"/>
+                            <circle cx="20" cy="22" r="5" class="type-jeu"/><circle cx="46" cy="12" r="5" class="type-logiciel"/><circle cx="52" cy="40" r="7" class="type-plateforme"/><circle cx="26" cy="54" r="5" class="type-service"/><circle cx="78" cy="26" r="5" class="type-catalogue"/><circle cx="86" cy="56" r="5" class="type-initiative"/><circle cx="60" cy="66" r="5" class="type-logiciel"/>
+                        </g>
+                    </svg>
+                    <span><strong data-texte="accroche.titre">Quelles ressources portent sur les mêmes sujets ?</strong><span class="go"><span data-texte="accroche.lien">Voir les connexions</span> →</span></span>
+                </button>
+            </div>
+        </div>
+        <!-- Vue Connexions : le graphe, puis la légende et les réglages, puis l'explication. -->
+        <div id="zoneConnexions" class="hidden">
+            <!-- vis-network vide le contenu de #graphe à la création : les messages superposés sont ses frères, pas ses enfants. -->
+            <div class="graphe-cadre">
+                <div id="graphe"></div>
+                <button type="button" class="view-reset glass graph-reset js-recentrer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span data-texte="vues.recentrer">Recentrer</span></button>
+                <div id="calculConnexions" class="graphe-message hidden" role="status" data-texte="graphe.calcul">Calcul des connexions…</div>
+            </div>
+            <div class="graphe-reglages">
+                <ul class="graphe-legende" id="legendeGraphe"></ul>
+                <label class="graphe-densite"><span data-texte="graphe.densite">Liens : tous ↔ les plus forts</span><input type="range" id="densiteConnexions" min="1.6" max="8" step="0.4" value="1.6"></label>
+                <label class="graphe-case"><input type="checkbox" id="masquerIsoles"><span data-texte="graphe.masquerIsoles">Masquer les ressources sans lien</span></label>
+                <span id="compteConnexions" aria-live="polite"></span>
+            </div>
+            <div id="introConnexions">
+                <span data-texte="graphe.intro">Chaque point est une ressource. Un trait relie deux ressources qui partagent des sujets distinctifs ; plus il est épais, plus la proximité est forte. Cliquez sur un point pour ouvrir la fiche, survolez un trait pour voir les sujets communs.</span>
+                <button type="button" id="boutonAide" class="reset-btn bouton-aide" data-texte-titre="graphe.aideBouton" title="Comment sont calculées les connexions ?" data-texte-aria="graphe.aideBouton" aria-label="Comment sont calculées les connexions ?">?</button>
+            </div>
+        </div>
+        <div id="chargementConnexions" class="hidden" role="status"><p data-texte="graphe.calcul">Calcul des connexions…</p></div>
+    </div>
+
+    <!-- Bandeau dépliable « Portrait de la cartographie » : chiffres cliquables qui filtrent la carte et les fiches. -->
+    <section class="stats-band" id="portrait" data-texte-aria="portrait.titre" aria-label="Portrait de la cartographie" hidden>
+        <button type="button" class="stats-head" id="basculePortrait" aria-expanded="true" aria-controls="corpsPortrait">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6.4 6.4"/></svg>
+            <span class="t" data-texte="portrait.titre">Portrait de la cartographie</span>
+            <span class="s" id="resumePortrait"></span>
+            <span class="tog"><span id="libelleBascule">Replier</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></span>
+        </button>
+        <div class="stats-body" id="corpsPortrait">
+            <div class="stats-row types">
+                <div class="stats-label"><h3 data-texte="portrait.types">Types de ressources</h3><span data-texte="portrait.typesAide">Type principal de chaque fiche</span></div>
+                <div class="stats-main"><div class="types-bar" id="barreTypes"></div><div class="types-legend" id="legendeTypes"></div></div>
+            </div>
+            <div class="stats-row">
+                <div class="stats-label"><h3 data-texte="portrait.sujets">Principaux sujets</h3><span data-texte="portrait.sujetsAide">Nombre de fiches</span></div>
+                <div class="stats-main stat-tokens" id="sujetsPrincipaux"></div>
+            </div>
+            <div class="stats-row">
+                <div class="stats-label"><h3 data-texte="portrait.porteursTitre">Principaux porteurs</h3><span data-texte="portrait.porteursAide">Nombre de fiches</span></div>
+                <div class="stats-main stat-tokens" id="porteursPrincipaux"></div>
+            </div>
+        </div>
+    </section>
+
+    <div class="content" id="fiches">
+        <div class="list-head">
+            <h2 data-texte="liste.titre">Ressources</h2>
+            <span class="list-counts" id="compteListe"></span>
+            <label class="list-sort"><span data-texte="liste.trier">Trier</span>
+                <select id="triListe">
+                    <option value="propose" data-texte="liste.triPropose">Ordre proposé</option>
+                    <option value="nom" data-texte="liste.triNom">Nom (A à Z)</option>
+                    <option value="type" data-texte="liste.triType">Type</option>
+                </select>
+            </label>
+        </div>
+        <!-- Sélection en cours, répétée au-dessus de la liste. -->
+        <div class="selection hidden js-selection" role="group" data-texte-aria="selection.titre" aria-label="Sélection en cours"></div>
+        <!-- Chargement, puis panne éventuelle de l'export : jamais remplacé par « Aucune ressource ». -->
+        <div id="etatChargement" class="empty-state" role="status"><p class="chargement" id="texteChargement" data-texte="chargement">Chargement des ressources…</p></div>
+        <div id="cartes" class="cards-grid"></div>
+        <div id="aucunResultat" class="empty-state hidden" role="status">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            <h3 data-texte="aucunResultat">Aucune ressource ne correspond à cette recherche.</h3>
+            <p data-texte="aucunResultatAide">Essayez de modifier la recherche ou les filtres.</p>
+        </div>
+        <nav id="pagination" class="pagination" data-texte-aria="liste.pages" aria-label="Pages de la liste"></nav>
+    </div>
+</div>
+
+<!-- Pied de page, comme dans le bottin : le réseau, puis ses liens. -->
+<footer class="site-footer" id="pied">
+    <div class="sf-brand"><strong data-texte="reseau">Réseau santé numérique</strong><span data-texte="pied.financement">Financé par le Fonds de recherche du Québec, secteur Santé</span></div>
+    <nav class="sf-links" data-texte-aria="pied.liens" aria-label="Liens du réseau">
+        <a href="https://rsn.quebec/" target="_blank" rel="noopener">rsn.quebec</a>
+        <a href="https://bottin.rsn.quebec/" target="_blank" rel="noopener" data-texte="pied.bottin">Bottin des membres</a>
+        <a href="https://rsn.quebec/politique-de-confidentialite/" target="_blank" rel="noopener" data-texte="pied.confidentialite">Politique de confidentialité</a>
+        <a href="mailto:rsn.gestion@rimuhc.ca">rsn.gestion@rimuhc.ca</a>
+    </nav>
+</footer>
+
+<!-- Fenêtre de fiche en verre. <dialog> ouvert par showModal() : le focus reste dans la fenêtre. -->
+<dialog class="member-modal fenetre-fiche" id="fenetreFiche" aria-labelledby="titreFiche">
+    <button type="button" class="member-modal-close" id="fermerFiche" data-texte-aria="fiche.fermer" aria-label="Fermer">×</button>
+    <div id="contenuFiche"></div>
+</dialog>
+
+<!-- Fenêtre « Comment sont calculées les connexions ? », remplie par graphe.js. -->
+<dialog class="member-modal" id="fenetreAide" aria-labelledby="titreAide">
+    <button type="button" class="member-modal-close" id="fermerAide" data-texte-aria="fiche.fermer" aria-label="Fermer">×</button>
+    <div id="contenuAide"></div>
+</dialog>
+
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js" defer></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js" defer></script>
+<script src="/js/mots-cles.js" defer></script>
+<script src="/js/texte.js" defer></script>
+<script src="/js/recherche.js" defer></script>
+<script src="/js/fiche.js" defer></script>
+<script src="/js/connexions.js" defer></script>
+<script src="/js/app.js" defer></script>
+<script src="/js/carte.js" defer></script>
+<script src="/js/graphe.js" defer></script>
+</body>
+</html>
