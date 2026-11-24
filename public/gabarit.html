@@ -22,21 +22,21 @@
 </head>
 <body>
 
-<!-- Bandeau mince, comme dans le bottin : logo à gauche, recherche dans le bandeau. -->
+<!-- Bandeau : logo à gauche, puis le titre avec la recherche juste dessous. -->
 <header class="header" id="entete">
-    <div class="header-top">
-        <a href="/" id="lienAccueil" class="header-home" data-texte-aria="accueil" aria-label="Retour à l'accueil de la cartographie"><img class="header-logo" src="/logo-rsn-blanc.webp" width="150" height="40" data-texte-alt="logo" alt="Logo du RSN"></a>
+    <a href="/" id="lienAccueil" class="header-home" data-texte-aria="accueil" aria-label="Retour à l'accueil de la cartographie"><img class="header-logo" src="/logo-rsn-blanc.webp" width="150" height="40" data-texte-alt="logo" alt="Logo du RSN"></a>
+    <div class="header-main">
         <div class="header-title">
             <h1 id="titrePage" data-texte="titre">Cartographie des ressources en santé numérique</h1>
             <p data-texte="reseau">Réseau santé numérique</p>
         </div>
-    </div>
-    <div class="header-search" id="boiteRecherche" role="search">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" class="search-input" id="champRecherche" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="listeSuggestions" data-texte-indice="recherche" placeholder="Rechercher une ressource, un sujet, un porteur…" data-texte-aria="rechercheNom" aria-label="Rechercher une ressource">
-        <button type="button" class="search-clear hidden" id="effacerRecherche" data-texte-aria="effacerRecherche" aria-label="Effacer la recherche">×</button>
-        <!-- Suggestions pendant la saisie : sujets, porteurs, ressources. -->
-        <div class="search-suggest glass hidden" id="listeSuggestions" role="listbox"></div>
+        <div class="header-search" id="boiteRecherche" role="search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" class="search-input" id="champRecherche" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="listeSuggestions" data-texte-indice="recherche" placeholder="Rechercher une ressource, un sujet, un porteur…" data-texte-aria="rechercheNom" aria-label="Rechercher une ressource">
+            <button type="button" class="search-clear hidden" id="effacerRecherche" data-texte-aria="effacerRecherche" aria-label="Effacer la recherche">×</button>
+            <!-- Suggestions pendant la saisie : sujets, porteurs, ressources. -->
+            <div class="search-suggest glass hidden" id="listeSuggestions" role="listbox"></div>
+        </div>
     </div>
     <div class="header-controls">
         <a class="header-btn" href="https://rsn.quebec/" target="_blank" rel="noopener" data-texte-titre="siteReseau" title="Ouvrir le site du Réseau santé numérique">rsn.quebec

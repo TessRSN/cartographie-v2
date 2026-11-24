@@ -115,27 +115,33 @@ body {
 .header {
     background: linear-gradient(135deg, var(--rsn-primary) 0%, var(--rsn-secondary) 100%);
     color: white;
-    display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem 1.6rem;
-    padding: 0.8rem 2rem;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem 1.4rem;
+    padding: 0.75rem 2rem;
     position: relative; z-index: 30;
 }
 [data-theme="dark"] .header { background: linear-gradient(135deg, #0f1724 0%, #1a365d 100%); }
-.header-top { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 .header-home { display: block; flex: none; border-radius: 6px; }
-.header-logo { display: block; height: 40px; width: auto; transition: opacity 0.15s; }
+.header-logo { display: block; height: 36px; width: auto; transition: opacity 0.15s; }
 .header-home:hover .header-logo { opacity: 0.85; }
+/* Titre et recherche empilés, séparés du logo par un filet. */
+.header-main { flex: 1 1 320px; max-width: 640px; min-width: 0; display: flex; flex-direction: column; gap: 0.4rem; padding-left: 1.4rem; border-left: 1px solid rgba(255,255,255,0.18); }
 .header-title { min-width: 0; }
-.header-title h1 { font-size: 1.05rem; font-weight: 700; line-height: 1.2; text-wrap: balance; }
-.header-title p { font-size: 0.78rem; opacity: 0.9; }
-.header-search { flex: 1 1 260px; max-width: 560px; position: relative; }
-.header-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #fff; pointer-events: none; }
+.header-title h1 { font-size: 1rem; font-weight: 600; line-height: 1.2; }
+/* Le nom du réseau est déjà porté par le logo : gardé pour les lecteurs d'écran. */
+.header-title p { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.header-search { position: relative; }
+.header-search > svg { width: 16px; height: 16px; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); pointer-events: none; transition: color 0.2s; }
+.header-search:focus-within > svg { color: #fff; }
 .search-input { width: 100%; outline: none; font: inherit; transition: border-color 0.2s, background 0.3s, color 0.3s; }
-.header .search-input { height: 44px; padding: 0 2.7rem 0 2.4rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.14); color: #fff; font-size: 0.92rem; }
-.header .search-input::placeholder { color: #d7e3f3; opacity: 1; }
-.header .search-input:focus { border-color: #fff; background: rgba(255,255,255,0.2); }
-[data-theme="dark"] .header .search-input { background: rgba(255,255,255,0.1); color: #fff; }
+.header .search-input { height: 38px; padding: 0 2.5rem 0 2.3rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.08); color: #fff; font-size: 0.88rem; }
+.header .search-input::placeholder { color: rgba(255,255,255,0.7); opacity: 1; }
+.header .search-input:hover { border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.1); }
+.header .search-input:focus { border-color: rgba(255,255,255,0.55); background: rgba(255,255,255,0.14); }
+[data-theme="dark"] .header .search-input { background: rgba(255,255,255,0.06); color: #fff; }
+[data-theme="dark"] .header .search-input:hover { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] .header .search-input:focus { background: rgba(255,255,255,0.12); }
 .header :focus-visible { outline-color: #fff; }
-.search-clear { position: absolute; right: 4px; top: 4px; width: 36px; height: 36px; border: 0; border-radius: 6px; background: none; color: #fff; font-size: 1.3rem; line-height: 1; cursor: pointer; }
+.search-clear { position: absolute; right: 4px; top: 4px; width: 30px; height: 30px; border: 0; border-radius: 6px; background: none; color: #fff; font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .search-clear:hover { background: rgba(255,255,255,0.18); }
 .header-controls { display: flex; gap: 0.5rem; align-items: center; margin-left: auto; }
 .header-btn {
@@ -156,16 +162,16 @@ body {
 .ss-item:hover, .ss-item.active { background: rgba(43,108,176,0.16); }
 
 /* ─── Barre de filtres ─── */
-.controls { padding: 0.3rem 2rem; background: var(--bar-bg); border-bottom: 1px solid var(--rsn-border); position: relative; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; min-height: 48px; }
-.filters-row { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem; position: relative; }
+.controls { padding: 0.3rem 2rem; background: var(--bar-bg); border-bottom: 1px solid var(--rsn-border); position: relative; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 1rem; min-height: 42px; }
+.filters-row { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.5rem; position: relative; }
 .filter-group { flex: 0 1 auto; min-width: 0; position: relative; }
 /* Le nom du filtre est écrit dans le bouton (« Porteur : Tous ») ; l'étiquette
    reste dans la page pour les lecteurs d'écran mais n'est pas affichée. */
 .filter-group > label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* Menus déroulants à choix multiples */
-.ms-btn { width: 100%; min-width: 0; height: 36px; padding: 0 0.65rem; border: 1.5px solid var(--rsn-border); border-radius: 8px; font: inherit; font-size: 0.82rem; background: var(--rsn-card-bg); color: var(--rsn-text); cursor: pointer; transition: all 0.2s; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: flex-start; align-items: center; gap: 0.45rem; }
+.ms-btn { width: 100%; min-width: 0; height: 30px; padding: 0 0.55rem; border: 1px solid var(--rsn-border); border-radius: 6px; font: inherit; font-size: 0.78rem; background: var(--rsn-card-bg); color: var(--rsn-text); cursor: pointer; transition: all 0.2s; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: flex-start; align-items: center; gap: 0.35rem; }
 .ms-btn:hover, .ms-btn.open { border-color: var(--rsn-accent); }
-.ms-btn::before { content: attr(data-name); color: var(--muted-strong); font-size: 0.78rem; white-space: nowrap; }
+.ms-btn::before { content: attr(data-name); color: var(--muted-strong); font-size: 0.74rem; white-space: nowrap; }
 .ms-btn .ms-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .ms-btn .ms-arrow { font-size: 0.6rem; opacity: 0.5; flex-shrink: 0; margin-left: 0.2rem; }
 .ms-btn .ms-count { background: var(--rsn-accent); color: white; font-size: 0.65rem; padding: 0.05rem 0.35rem; border-radius: 50px; font-weight: 700; flex-shrink: 0; }
@@ -529,8 +535,11 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
 
 @media (max-width: 900px) {
     .header { padding: 0.8rem 1rem; gap: 0.6rem 1rem; }
-    .header-top { flex: 1 1 0; }
-    .header-search { order: 3; flex-basis: 100%; max-width: none; }
+    .header-main { order: 3; flex-basis: 100%; max-width: none; padding-left: 0; border-left: 0; }
+    /* Au doigt : on garde des cibles de 44 et 36 pixels. */
+    .header .search-input { height: 44px; }
+    .search-clear { width: 36px; height: 36px; }
+    .ms-btn { height: 36px; font-size: 0.82rem; }
     .controls { padding: 0.3rem 1rem; }
     .filter-group { flex: 1 1 auto; position: static; }
     /* Le menu ouvert prend la largeur de la rangée de filtres : il ne dépasse jamais de l'écran. */
