@@ -158,6 +158,12 @@ function adresseSure(valeur) {
   return /^https?:\/\//i.test(v) ? v : null;
 }
 
+// Adresse d'un logo : une copie servie par le site (/logos/…) ou une adresse http(s).
+function adresseLogo(valeur) {
+  const v = String(valeur || '').trim();
+  return /^\/logos\/[a-f0-9]{16}\.[a-z]{3,4}$/.test(v) ? v : adresseSure(v);
+}
+
 // Cadre approximatif du Québec : une ressource placée en dehors rejoint le
 // groupe « En ligne ou hors Québec ».
 const CADRE_QUEBEC = { latMin: 44, latMax: 63, lonMin: -80, lonMax: -57 };
@@ -274,7 +280,7 @@ function cleAcces(mode) { return CLES_ACCES[mode] || 'neutre'; }
 const CLES_ETAT = { 'Actif': 'actif', 'En développement': 'developpement', 'Non confirmé': 'non-confirme', 'Archivé': 'archive' };
 function cleEtat(etat) { return CLES_ETAT[etat] || 'autre'; }
 
-const api = { cleAcces, CLES_ACCES, cleEtat, TEXTES, echapper, adresseSure, surLaCarte, filtrer, filtresActifs, enListe, comptesDeFiltre, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, dateLongue, cleType, CLES_TYPE, CADRE_QUEBEC };
+const api = { adresseLogo, cleAcces, CLES_ACCES, cleEtat, TEXTES, echapper, adresseSure, surLaCarte, filtrer, filtresActifs, enListe, comptesDeFiltre, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, dateLongue, cleType, CLES_TYPE, CADRE_QUEBEC };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else Object.assign(racine, api);
 })(typeof window !== 'undefined' ? window : globalThis);
