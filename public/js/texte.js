@@ -311,7 +311,7 @@ function iconeType(cle) {
   const traces = TRACES_ICONES[cle] || TRACES_ICONES.autre;
   return `<svg class="icone-type" viewBox="0 0 24 24" aria-hidden="true">${traces.map((d) => `<path d="${d}"/>`).join('')}</svg>`;
 }
-// L'icône dans un carré de la couleur du type (la classe type-… est portée par un parent).
+// L'icône dans un rond de la couleur du type (la classe type-… est portée par un parent).
 function puceType(cle) { return `<span class="puce-type">${iconeType(cle)}</span>`; }
 
 // Classe de couleur d'un mode d'accès : une teinte par mode, la même sur les cartes et dans la fiche.

@@ -89,7 +89,51 @@ function calculerConnexions(ressources, params) {
   return { noeuds, liens };
 }
 
-const api = { PARAMS_CONNEXIONS, calculerConnexions };
+// Graphe par sujets : les sujets partagés par assez de fiches deviennent eux-mêmes des
+// points, et chaque ressource est reliée à ses sujets. On voit ainsi ce qui rapproche
+// deux ressources sans survoler un trait. Une ressource sans sujet fréquent n'y figure pas.
+const PARAMS_SUJETS = { FICHES_MIN: 4 };   // un sujet est retenu à partir de quatre fiches
+
+function calculerSujets(ressources, params) {
+  const P = Object.assign({}, PARAMS_SUJETS, params || {});
+  const liste = ressources || [];
+  // Par sujet (clé canonique) : les ressources qui le portent et les libellés rencontrés.
+  const parSujet = new Map();
+  for (const r of liste) {
+    const vus = new Set();
+    for (const motCle of (r.motsCles || [])) {
+      const cle = outils.cleMotCle(motCle);
+      if (!cle || vus.has(cle)) continue;
+      vus.add(cle);
+      if (!parSujet.has(cle)) parSujet.set(cle, { adresses: [], libelles: new Map() });
+      const s = parSujet.get(cle);
+      s.adresses.push(r.adresse);
+      const libelle = String(motCle).toLowerCase();
+      s.libelles.set(libelle, (s.libelles.get(libelle) || 0) + 1);
+    }
+  }
+  // Le libellé affiché est l'écriture la plus fréquente ; à égalité, la première par ordre alphabétique.
+  const sujets = [...parSujet.entries()]
+    .filter(([, s]) => s.adresses.length >= P.FICHES_MIN)
+    .map(([cle, s]) => ({
+      id: `sujet:${cle}`,
+      nom: [...s.libelles.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], 'fr'))[0][0],
+      nombre: s.adresses.length,
+      adresses: s.adresses,
+    }))
+    .sort((x, y) => y.nombre - x.nombre || x.nom.localeCompare(y.nom, 'fr'));
+  const liens = [];
+  const reliees = new Set();
+  for (const s of sujets) for (const adresse of s.adresses) { liens.push({ a: adresse, b: s.id, poids: 1, motsCommuns: [s.nom] }); reliees.add(adresse); }
+  return {
+    noeuds: liste.filter((r) => reliees.has(r.adresse)).map((r) => ({ adresse: r.adresse, nom: r.nom, type: r.typePrincipal || null })),
+    sujets: sujets.map(({ id, nom, nombre }) => ({ id, nom, nombre })),
+    liens,
+    sansSujet: liste.filter((r) => !reliees.has(r.adresse)).map((r) => r.adresse),
+  };
+}
+
+const api = { PARAMS_CONNEXIONS, PARAMS_SUJETS, calculerConnexions, calculerSujets };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else Object.assign(racine, api);
 })(typeof window !== 'undefined' ? window : globalThis);
