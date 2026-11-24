@@ -229,6 +229,8 @@ body {
 .panneau-types .nom { flex: 1; min-width: 0; }
 .panneau-types small { display: block; font-size: 0.72rem; font-weight: 400; color: var(--muted-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panneau-types strong { font-weight: 600; color: var(--muted-strong); }
+/* Sur un écran large, le panneau remplace le menu « Type » et la légende sous le graphe. */
+@media (min-width: 901px) { .filtre-type, #zoneConnexions .graphe-legende { display: none; } }
 /* Sélection en cours : une étiquette par filtre, avec sa croix, puis « Tout réinitialiser ». */
 .selection { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .hero-tools .selection { padding: 6px; border-radius: 10px; max-width: 100%; }
@@ -267,22 +269,7 @@ body {
 .map-pill { display: flex; align-items: center; gap: 0.5rem; min-height: 40px; padding: 0.35rem 0.9rem; border-radius: 8px; font-size: 0.82rem; color: var(--rsn-text); }
 .map-legend-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--type, var(--carte-rond)); }
 .map-stats { font-weight: 600; color: var(--rsn-text); }
-.teaser { margin-left: auto; display: flex; align-items: center; gap: 0.9rem; width: min(340px, 100%); padding: 0.6rem 1rem 0.6rem 0.75rem; border-radius: 12px; text-align: left; font: inherit; cursor: pointer; color: var(--ink); }
-.teaser svg { flex: none; overflow: visible; }
-.teaser strong { display: block; font-size: 0.9rem; line-height: 1.3; }
-.teaser .go { display: inline-block; margin-top: 0.2rem; font-size: 0.84rem; font-weight: 600; color: var(--rsn-secondary); }
-[data-theme="dark"] .teaser .go { color: var(--rsn-accent); }
-@keyframes rsn-sway { 0%, 100% { transform: rotate(-6deg) translateY(1px); } 50% { transform: rotate(6deg) translateY(-2px); } }
-@keyframes rsn-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.4); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-.teaser .sway { transform-origin: 52px 38px; animation: rsn-sway 9s ease-in-out infinite; }
-.teaser circle { fill: var(--type, #1a365d); transform-box: fill-box; transform-origin: center; animation: rsn-pulse 2.8s ease-in-out infinite; }
-.teaser circle:nth-of-type(2) { animation-delay: 0.4s; }
-.teaser circle:nth-of-type(3) { animation-delay: 0.8s; }
-.teaser circle:nth-of-type(4) { animation-delay: 1.2s; }
-.teaser circle:nth-of-type(5) { animation-delay: 1.6s; }
-.teaser circle:nth-of-type(6) { animation-delay: 2s; }
-.teaser circle:nth-of-type(7) { animation-delay: 2.4s; }
 
 /* Graphe des connexions : le graphe, puis la légende et les réglages, puis l'explication. */
 #zoneConnexions { display: flex; flex-direction: column; height: clamp(520px, 72vh, 740px); background: var(--rsn-card-bg); overflow: hidden; }
@@ -572,7 +559,6 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
     .panneau-hors { position: static; width: auto; max-height: 330px; margin: 0.6rem 1rem 0; }
     .hero.avec-panneau .hero-tools { right: 12px; }
     .hero-bottom { position: static; padding: 0.6rem 1rem; }
-    .teaser { width: 100%; margin-left: 0; }
     .graphe-densite { margin-left: 0; }
     .member-modal { padding: 1.25rem 1rem; }
     .card-detail { flex-direction: column; gap: 0.1rem; }
@@ -593,5 +579,5 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
 }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; }
-    .teaser .sway, .teaser circle, .empty-state .chargement, .member-modal[open], .member-modal[open]::backdrop { animation: none; }
+    .empty-state .chargement, .member-modal[open], .member-modal[open]::backdrop { animation: none; }
 }
