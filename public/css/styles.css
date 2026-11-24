@@ -177,6 +177,8 @@ body {
 .ms-btn .ms-count { background: var(--rsn-accent); color: white; font-size: 0.65rem; padding: 0.05rem 0.35rem; border-radius: 50px; font-weight: 700; flex-shrink: 0; }
 [data-theme="dark"] .ms-btn .ms-count { color: #0f1724; }
 .ms-panel { display: none; position: absolute; top: 100%; left: 0; z-index: 100; min-width: 300px; max-width: min(420px, 92vw); margin-top: 8px; border-radius: 10px; padding: 6px; max-height: 340px; overflow-y: auto; background: var(--glass-bg); -webkit-backdrop-filter: blur(22px) saturate(170%); backdrop-filter: blur(22px) saturate(170%); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
+/* Barre de défilement fine et discrète dans les menus en verre, comme ailleurs sur la page. */
+.ms-panel, .search-suggest { scrollbar-width: thin; scrollbar-color: rgba(130,140,160,0.7) transparent; }
 .ms-panel.open { display: block; }
 .ms-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.6rem; border-radius: 6px; cursor: pointer; font-size: 0.86rem; transition: background 0.1s; }
 .ms-item:hover, .ms-item:focus-within { background: rgba(43,108,176,0.14); }
