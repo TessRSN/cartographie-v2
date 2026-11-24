@@ -256,7 +256,7 @@ function appliquerFiltres() {
 }
 function cle(etat) {
   const f = etat.filtres;
-  return [etat.requete, f.type.join(','), f.modeAcces.join(','), f.porteur.join(','), f.etat.join(','), f.horsCarte ? 'h' : ''].join('|');
+  return [etat.requete, f.type.join(','), f.modeAcces.join(','), f.porteur.join(','), f.etat.join(','), f.portee.join(','), f.langue.join(','), f.horsCarte ? 'h' : ''].join('|');
 }
 
 // Curseur « Liens » : nouveau seuil, donc nouveaux liens et nouveau placement, calculé hors écran.

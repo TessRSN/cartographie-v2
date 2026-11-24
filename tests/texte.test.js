@@ -257,3 +257,39 @@ test('adresseLogo accepte une copie locale ou une adresse http(s), rien d\'autre
   assert.equal(adresseLogo('//exemple.org/a.png'), null);
   assert.equal(adresseLogo(null), null);
 });
+
+// ─── Filtres Portée et Langue ───
+
+test('filtrer par portée et langue, en intersection avec les autres filtres', () => {
+  const liste = [
+    fiche('A', { portee: 'Le Québec', langues: ['Français', 'Anglais'], etat: 'Actif' }),
+    fiche('B', { portee: 'International', langues: ['Anglais'], etat: 'Actif' }),
+    fiche('C', { portee: 'Le Québec', langues: ['Français'], etat: 'Archivé' }),
+    fiche('D', { portee: null, langues: [] }),
+  ];
+  assert.deepEqual(filtrer(liste, { portee: 'Le Québec' }).map((f) => f.nom), ['A', 'C']);
+  assert.deepEqual(filtrer(liste, { portee: ['Le Québec', 'International'] }).map((f) => f.nom), ['A', 'B', 'C']);
+  assert.deepEqual(filtrer(liste, { langue: ['Français'] }).map((f) => f.nom), ['A', 'C']);
+  assert.deepEqual(filtrer(liste, { langue: ['Français', 'Anglais'] }).map((f) => f.nom), ['A', 'B', 'C']);
+  assert.deepEqual(filtrer(liste, { portee: ['Le Québec'], langue: ['Français'], etat: ['Actif'] }).map((f) => f.nom), ['A']);
+  assert.deepEqual(filtrer(liste, { portee: [], langue: [] }).map((f) => f.nom), ['A', 'B', 'C', 'D']);
+});
+
+test('portée et langue comptent parmi les filtres actifs et ont leurs comptes', () => {
+  assert.equal(filtresActifs({ portee: ['Le Québec'] }), true);
+  assert.equal(filtresActifs({ langue: ['Anglais'] }), true);
+  assert.equal(filtresActifs({ portee: [], langue: [] }), false);
+  const liste = [
+    fiche('A', { portee: 'Le Québec', langues: ['Français', 'Anglais'] }),
+    fiche('B', { portee: 'Le Québec', langues: ['Anglais', 'Anglais'] }),
+    fiche('C', { portee: null, langues: [] }),
+  ];
+  const c = comptesDeFiltre(liste);
+  assert.deepEqual(c.portee, [{ valeur: 'Le Québec', nombre: 2 }]);
+  assert.deepEqual(c.langue, [{ valeur: 'Anglais', nombre: 2 }, { valeur: 'Français', nombre: 1 }]);
+  assert.deepEqual(valeursDeFiltre(liste).langue, ['Anglais', 'Français']);
+  assert.equal(TEXTES.filtres.portee, 'Portée');
+  assert.equal(TEXTES.filtres.langue, 'Langue');
+  // Pas de filtre « Frais » : trop de fiches ne le précisent pas.
+  assert.equal(c.frais, undefined);
+});

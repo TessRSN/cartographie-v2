@@ -22,7 +22,7 @@ const TEXTES = {
   theme: { sombre: 'Passer au mode sombre', clair: 'Passer au mode clair' },
   oui: 'Oui',
   filtres: {
-    type: 'Type', modeAcces: "Mode d'accès", porteur: 'Porteur', etat: 'État',
+    type: 'Type', modeAcces: "Mode d'accès", porteur: 'Porteur', etat: 'État', portee: 'Portée', langue: 'Langue',
     tous: 'Tous', effacer: 'Tout réinitialiser', retirer: 'Retirer', horsCarte: 'En ligne ou hors Québec',
   },
   // Étiquettes de la sélection en cours, affichées sur la carte ou le graphe et au-dessus de la liste.
@@ -144,6 +144,8 @@ const TEXTES = {
     liens: 'Liens du réseau',
     bottin: 'Bottin des membres',
     confidentialite: 'Politique de confidentialité',
+    code: 'Code source',
+    codeTitre: 'Voir le code source de la cartographie sur GitHub',
   },
 };
 
@@ -183,39 +185,48 @@ function enListe(v) { return Array.isArray(v) ? v.filter(Boolean) : (v ? [v] : [
 function filtrer(ressources, filtres) {
   const f = filtres || {};
   const types = enListe(f.type), modes = enListe(f.modeAcces), porteurs = enListe(f.porteur), etats = enListe(f.etat);
+  const portees = enListe(f.portee), langues = enListe(f.langue);
   return (ressources || []).filter((r) => {
     if (types.length && !types.includes(r.typePrincipal) && !types.includes(r.secondType)) return false;
     if (modes.length && !(r.modesAcces || []).some((m) => modes.includes(m))) return false;
     if (porteurs.length && !(r.porteurs || []).some((p) => porteurs.includes(p.nom))) return false;
     if (etats.length && !etats.includes(r.etat)) return false;
+    if (portees.length && !portees.includes(r.portee)) return false;
+    if (langues.length && !(r.langues || []).some((l) => langues.includes(l))) return false;
     if (f.horsCarte && surLaCarte(r)) return false;
     return true;
   });
 }
 
+// Les filtres à choix multiples, dans l'ordre de la barre.
+const CLES_FILTRE = ['type', 'modeAcces', 'porteur', 'etat', 'portee', 'langue'];
+
 function filtresActifs(filtres) {
   const f = filtres || {};
-  return !!(enListe(f.type).length || enListe(f.modeAcces).length || enListe(f.porteur).length || enListe(f.etat).length || f.horsCarte);
+  return !!(CLES_FILTRE.some((cle) => enListe(f[cle]).length) || f.horsCarte);
 }
 
 // Valeurs de chaque filtre avec le nombre de fiches, de la plus fréquente à la moins fréquente.
 function comptesDeFiltre(ressources) {
-  const comptes = { type: new Map(), modeAcces: new Map(), porteur: new Map(), etat: new Map() };
+  const comptes = {};
+  for (const cle of CLES_FILTRE) comptes[cle] = new Map();
   const ajouter = (m, v) => { if (v) m.set(v, (m.get(v) || 0) + 1); };
   for (const r of ressources || []) {
     for (const t of new Set([r.typePrincipal, r.secondType])) ajouter(comptes.type, t);
     for (const m of new Set(r.modesAcces || [])) ajouter(comptes.modeAcces, m);
     for (const p of new Set((r.porteurs || []).map((x) => x.nom))) ajouter(comptes.porteur, p);
     ajouter(comptes.etat, r.etat);
+    ajouter(comptes.portee, r.portee);
+    for (const l of new Set(r.langues || [])) ajouter(comptes.langue, l);
   }
   const trier = (m) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr')).map(([valeur, nombre]) => ({ valeur, nombre }));
-  return { type: trier(comptes.type), modeAcces: trier(comptes.modeAcces), porteur: trier(comptes.porteur), etat: trier(comptes.etat) };
+  return Object.fromEntries(CLES_FILTRE.map((cle) => [cle, trier(comptes[cle])]));
 }
 
 function valeursDeFiltre(ressources) {
   const c = comptesDeFiltre(ressources);
   const trier = (liste) => liste.map((x) => x.valeur).sort((a, b) => a.localeCompare(b, 'fr'));
-  return { type: trier(c.type), modeAcces: trier(c.modeAcces), porteur: trier(c.porteur), etat: trier(c.etat) };
+  return Object.fromEntries(CLES_FILTRE.map((cle) => [cle, trier(c[cle])]));
 }
 
 // Initiales d'un nom, pour la pastille affichée quand la ressource n'a pas de logo.
@@ -281,7 +292,7 @@ function cleAcces(mode) { return CLES_ACCES[mode] || 'neutre'; }
 const CLES_ETAT = { 'Actif': 'actif', 'En développement': 'developpement', 'Non confirmé': 'non-confirme', 'Archivé': 'archive' };
 function cleEtat(etat) { return CLES_ETAT[etat] || 'autre'; }
 
-const api = { adresseLogo, cleAcces, CLES_ACCES, cleEtat, TEXTES, echapper, adresseSure, surLaCarte, filtrer, filtresActifs, enListe, comptesDeFiltre, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, dateLongue, cleType, CLES_TYPE, CADRE_QUEBEC };
+const api = { CLES_FILTRE, adresseLogo, cleAcces, CLES_ACCES, cleEtat, TEXTES, echapper, adresseSure, surLaCarte, filtrer, filtresActifs, enListe, comptesDeFiltre, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, dateLongue, cleType, CLES_TYPE, CADRE_QUEBEC };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else Object.assign(racine, api);
 })(typeof window !== 'undefined' ? window : globalThis);

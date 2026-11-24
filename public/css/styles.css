@@ -533,6 +533,8 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
 .sf-links a { display: inline-flex; align-items: center; min-height: 36px; font-weight: 600; color: var(--rsn-secondary); text-decoration: none; overflow-wrap: anywhere; }
 [data-theme="dark"] .sf-links a { color: var(--rsn-accent); }
 .sf-links a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sf-links .sf-code { gap: 0.4rem; }
+.sf-links .sf-code svg { flex: none; }
 
 @media (max-width: 900px) {
     .header { padding: 0.8rem 1rem; gap: 0.6rem 1rem; }
