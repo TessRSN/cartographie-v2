@@ -68,3 +68,7 @@ Puis enregistrer et pousser les fichiers modifiés (`public/logos/` et `lib/logo
 ## Ouvrir le site aux moteurs de recherche
 
 Mettre `INDEXATION=oui` dans le projet Vercel, redéployer, puis déclarer `/sitemap.xml` dans la Search Console.
+
+## Licence
+
+Ce projet est partagé librement pour que d'autres réseaux de recherche puissent s'en inspirer.
