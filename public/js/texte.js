@@ -33,6 +33,8 @@ const TEXTES = {
   autresPorteurs: (n) => (n > 1 ? `${n} autres porteurs` : '1 autre porteur'),
   // Nom court de chaque type, pour les pastilles, la légende et le bandeau.
   typesCourts: { jeu: 'Jeu de données', catalogue: 'Catalogue', plateforme: 'Plateforme', logiciel: 'Logiciel', service: 'Service', initiative: 'Initiative', autre: 'Autre' },
+  // Ce qu'on trouve sous chaque type, en quelques mots (panneau des types).
+  typesAides: { jeu: 'Cohortes, biobanques', catalogue: 'Portails, entrepôts', plateforme: 'Calcul, analyse, stockage', logiciel: 'Outils, applications', service: 'Équipes, guichets', initiative: 'Regroupements, consortiums' },
   compte: (n) => (n === 0 ? 'Aucune fiche' : n === 1 ? '1 fiche' : `${n} fiches`),
   affichees: (n) => (n > 1 ? 'ressources affichées' : 'ressource affichée'),
   aucunResultat: 'Aucune ressource ne correspond à cette recherche.',

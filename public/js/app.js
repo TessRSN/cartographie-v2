@@ -21,11 +21,15 @@ const etat = {
   carte: { cle: '' },
   pret: false,      // les données sont arrivées
   echec: false,     // l'export a échoué
-  vue: 'carte',     // 'carte' ou 'connexions'
+  vue: vueParDefaut(), // 'carte' ou 'connexions'
   filtres: { type: [], modeAcces: [], porteur: [], etat: [], horsCarte: false },
   page: 1,
   tri: 'propose',
 };
+// Sur un écran large, la page s'ouvre sur les connexions ; sur un téléphone, sur la carte, plus légère.
+function vueParDefaut() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 901px)').matches ? 'connexions' : 'carte';
+}
 const abonnes = [];
 let index = null;          // index de recherche Fuse
 let documents = [];        // ce que la recherche lit de chaque fiche
@@ -358,6 +362,13 @@ function afficherPortrait() {
       ? `<button type="button" class="type-${t.cle}" data-jeton="type" data-valeur="${echapper(t.type)}" title="${echapper(t.type)}" aria-pressed="${etat.filtres.type.includes(t.type) ? 'true' : 'false'}">${contenu}</button>`
       : `<span class="type-${t.cle}">${contenu}</span>`;
   }).join('');
+  // Panneau en verre : les mêmes types, en liste, avec leur couleur et leur nombre.
+  const choisis = etat.filtres.type.length > 0;
+  $('listeTypes').innerHTML = chiffres.types.filter((t) => t.type).map((t) => {
+    const actif = etat.filtres.type.includes(t.type);
+    return `<button type="button" class="type-${t.cle}${choisis && !actif ? ' estompe' : ''}" data-jeton="type" data-valeur="${echapper(t.type)}" title="${echapper(t.type)}" aria-pressed="${actif ? 'true' : 'false'}"><span class="map-legend-dot"></span><span class="nom">${echapper(TEXTES.typesCourts[t.cle])}${TEXTES.typesAides[t.cle] ? `<small>${echapper(TEXTES.typesAides[t.cle])}</small>` : ''}</span><strong>${t.nombre}</strong></button>`;
+  }).join('');
+  $('panneauTypes').classList.remove('hidden');
   const requetePliee = plier(etat.requete);
   $('sujetsPrincipaux').innerHTML = chiffres.sujets.map((s) => jeton('sujet', s.sujet, s.nombre, s.sujet, plier(s.sujet) === requetePliee)).join('');
   $('porteursPrincipaux').innerHTML = chiffres.porteursPrincipaux.map((p) => jeton('porteur', p.nom, p.nombre, nomCourt(p.nom), etat.filtres.porteur.includes(p.nom), p.nom)).join('');
@@ -722,7 +733,7 @@ function demarrer() {
     ev.preventDefault();
     fermerFiche();
     etat.tri = 'propose'; $('triListe').value = 'propose';
-    definirVue('carte');
+    definirVue(vueParDefaut());
     toutEffacer();
     window.scrollTo({ top: 0, behavior: mouvementReduit() ? 'auto' : 'smooth' });
   });

@@ -314,7 +314,7 @@ function construire() {
     const hex = couleurType(cleDuType);
     const logo = adresseLogo(r.logo);
     const forme = logo
-      ? { shape: 'circularImage', image: logo, brokenImage: pixel(hex), borderWidth: 4, borderWidthSelected: 6, color: couleurLogo(hex) }
+      ? { shape: 'circularImage', image: logo, brokenImage: pixel(hex), borderWidth: 2, borderWidthSelected: 4, color: couleurLogo(hex) }
       : { shape: 'dot', borderWidth: 0, color: couleurNoeud(hex, sombre) };
     return Object.assign(forme, {
       id: n.adresse,
