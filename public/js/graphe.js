@@ -58,6 +58,44 @@ function couleurType(cle) {
   const valeur = getComputedStyle(document.documentElement).getPropertyValue(`--type-${cle}`).trim();
   return /^#[0-9a-f]{6}$/i.test(valeur) ? valeur : GRIS;
 }
+// ─── Icône du type, en pastille au coin de chaque point ───
+// Le logo d'une ressource cache la couleur de son type : la pastille la redonne, avec une forme en plus.
+const tracesIcones = new Map();   // tracés prêts à dessiner, par type
+let couleursIcones = new Map();   // couleurs lues dans la feuille de styles, par type ; vidées à chaque construction du graphe
+function tracesDe(cle) {
+  if (!tracesIcones.has(cle)) tracesIcones.set(cle, (TRACES_ICONES[cle] || TRACES_ICONES.autre).map((d) => new Path2D(d)));
+  return tracesIcones.get(cle);
+}
+function couleursDe(cle) {
+  if (!couleursIcones.has(cle)) {
+    const styles = getComputedStyle(document.documentElement);
+    const sur = styles.getPropertyValue(`--type-${cle}-sur`).trim();
+    couleursIcones.set(cle, { fond: couleurType(cle), sur: sur || '#ffffff', bord: styles.getPropertyValue('--rsn-card-bg').trim() || '#ffffff' });
+  }
+  return couleursIcones.get(cle);
+}
+function dessinerIcones(ctx) {
+  if (!reseau || !g || !g.noeudsDS) return;
+  const positions = reseau.getPositions();
+  g.noeudsDS.forEach((n) => {
+    const p = positions[n.id];
+    if (n.hidden || !p || !n.cleType) return;
+    const rayon = Number(n.size) || 12;
+    const r = Math.max(5, rayon * 0.42);
+    const cx = p.x + rayon * 0.72, cy = p.y + rayon * 0.72;
+    const c = couleursDe(n.cleType);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.fillStyle = c.fond; ctx.fill();
+    ctx.lineWidth = Math.max(1, r * 0.22); ctx.strokeStyle = c.bord; ctx.stroke();
+    const echelle = (r * 1.25) / 24;
+    ctx.translate(cx - 12 * echelle, cy - 12 * echelle); ctx.scale(echelle, echelle);
+    ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = c.sur;
+    for (const trace of tracesDe(n.cleType)) ctx.stroke(trace);
+    ctx.restore();
+  });
+}
+
 // '#2b6cb0' + alpha → 'rgba(43,108,176,alpha)'
 function rgba(hex, alpha) {
   const n = parseInt(hex.slice(1), 16);
@@ -307,6 +345,7 @@ function construire() {
   const couleur = couleurTrait(sombre);
   g = { source: etat.ressources, liens: liensBruts.map((l) => faireLien(l, couleur)) };
   compterDegres();
+  couleursIcones = new Map();
   g.noeuds = bruts.map((n) => {
     const cleDuType = cleType(n.type);
     const r = parAdresse.get(n.adresse) || {};
@@ -359,6 +398,7 @@ function construire() {
     appliquerFiltres();
   });
   reseau.on('zoom', auZoom);
+  reseau.on('afterDrawing', dessinerIcones);
   reseau.on('click', (p) => { if (p.nodes && p.nodes.length) C.ouvrirFiche(p.nodes[0]); });
   reseau.on('hoverNode', () => { conteneur.style.cursor = 'pointer'; });
   reseau.on('blurNode', () => { conteneur.style.cursor = ''; });
@@ -409,7 +449,7 @@ function suivre(etat, motif) {
 // ─── Légende, aide, réglages ───
 function legende() {
   $('legendeGraphe').innerHTML = Object.values(CLES_TYPE).map((cleDuType) =>
-    `<li class="type-${cleDuType}"><span class="map-legend-dot"></span>${echapper(TEXTES.typesCourts[cleDuType])}</li>`).join('');
+    `<li class="type-${cleDuType}">${puceType(cleDuType)}${echapper(TEXTES.typesCourts[cleDuType])}</li>`).join('');
 }
 
 // Fenêtre d'explication : construite par le DOM (textContent), sans HTML injecté.

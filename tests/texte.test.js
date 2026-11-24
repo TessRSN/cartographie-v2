@@ -293,3 +293,18 @@ test('portée et langue comptent parmi les filtres actifs et ont leurs comptes',
   // Pas de filtre « Frais » : trop de fiches ne le précisent pas.
   assert.equal(c.frais, undefined);
 });
+
+// ─── Icônes des types ───
+
+test('chaque type a son icône, tracée dans une grille de 24', () => {
+  const { iconeType, puceType, TRACES_ICONES } = require('../public/js/texte.js');
+  for (const cle of [...Object.values(CLES_TYPE), 'autre']) {
+    assert.ok(Array.isArray(TRACES_ICONES[cle]) && TRACES_ICONES[cle].length > 0, cle);
+    for (const d of TRACES_ICONES[cle]) assert.match(d, /^M[\d.\- ]/, `${cle} : ${d}`);
+  }
+  const svg = iconeType('logiciel');
+  assert.match(svg, /^<svg class="icone-type" viewBox="0 0 24 24" aria-hidden="true">(<path d="[^"<>]+"\/>)+<\/svg>$/);
+  assert.equal(iconeType('inconnu'), iconeType('autre'));
+  assert.notEqual(iconeType('jeu'), iconeType('catalogue'));
+  assert.equal(puceType('jeu'), `<span class="puce-type">${iconeType('jeu')}</span>`);
+});
