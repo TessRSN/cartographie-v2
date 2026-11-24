@@ -1,0 +1,15 @@
+# Secrets et configuration locale
+.env
+.env.local
+.env.*.local
+.vercel/
+
+# Node
+node_modules/
+
+# macOS
+.DS_Store
+
+
+# Notes de travail internes (ne vont pas sur GitHub)
+notes-internes/
