@@ -118,13 +118,14 @@
                 <aside class="panneau-liens glass hidden" id="panneauLiens" aria-live="polite"></aside>
             </div>
             <div class="graphe-reglages">
+                <div class="mode-graphe" role="group" data-texte-aria="graphe.relier" aria-label="Relier"><span data-texte="graphe.relier">Relier</span><button type="button" data-mode-graphe="ressources" class="active" aria-pressed="true" data-texte="graphe.modeRessources">Entre ressources</button><button type="button" data-mode-graphe="sujets" aria-pressed="false" data-texte="graphe.modeSujets">Par sujets</button></div>
                 <ul class="graphe-legende" id="legendeGraphe"></ul>
                 <label class="graphe-densite"><span data-texte="graphe.densite">Liens : tous ↔ les plus forts</span><input type="range" id="densiteConnexions" min="1.6" max="8" step="0.4" value="1.6"></label>
                 <label class="graphe-case"><input type="checkbox" id="masquerIsoles"><span data-texte="graphe.masquerIsoles">Masquer les ressources sans lien</span></label>
                 <span id="compteConnexions" aria-live="polite"></span>
             </div>
             <div id="introConnexions">
-                <span data-texte="graphe.intro">Chaque point est une ressource. Un trait relie deux ressources qui partagent des sujets distinctifs ; plus il est épais, plus la proximité est forte. Cliquez sur un point pour voir ce qui le relie aux autres.</span>
+                <span id="texteIntroConnexions" data-texte="graphe.intro">Chaque point est une ressource. Un trait relie deux ressources qui partagent des sujets distinctifs ; plus il est épais, plus la proximité est forte. Cliquez sur un point pour voir ce qui le relie aux autres.</span>
                 <button type="button" id="boutonAide" class="reset-btn bouton-aide" data-texte-titre="graphe.aideBouton" title="Comment sont calculées les connexions ?" data-texte-aria="graphe.aideBouton" aria-label="Comment sont calculées les connexions ?">?</button>
             </div>
         </div>

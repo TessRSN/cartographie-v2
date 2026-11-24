@@ -92,7 +92,7 @@ function calculerConnexions(ressources, params) {
 // Graphe par sujets : les sujets partagés par assez de fiches deviennent eux-mêmes des
 // points, et chaque ressource est reliée à ses sujets. On voit ainsi ce qui rapproche
 // deux ressources sans survoler un trait. Une ressource sans sujet fréquent n'y figure pas.
-const PARAMS_SUJETS = { FICHES_MIN: 4 };   // un sujet est retenu à partir de quatre fiches
+const PARAMS_SUJETS = { FICHES_MIN: 5 };   // un sujet est retenu à partir de cinq fiches
 
 function calculerSujets(ressources, params) {
   const P = Object.assign({}, PARAMS_SUJETS, params || {});

@@ -299,6 +299,16 @@ body {
 .panneau-liens li .axe-chip { font-size: 0.72rem; }
 .graphe-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 11; background: var(--rsn-card-bg); color: var(--rsn-muted); padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.85rem; box-shadow: var(--shadow-sm); pointer-events: none; }
 .graphe-reglages { display: flex; align-items: center; gap: 0.4rem 1rem; padding: 0.6rem 1rem; border-top: 1.5px solid var(--rsn-border); font-size: 0.78rem; flex-wrap: wrap; color: var(--rsn-muted); }
+/* Choix du mode du graphe : traits entre ressources, ou ressources rattachées à leurs sujets. */
+.mode-graphe { display: flex; align-items: center; gap: 4px; color: var(--rsn-text); }
+.mode-graphe > span { margin-right: 4px; color: var(--rsn-muted); }
+.mode-graphe button { height: 30px; padding: 0 0.7rem; border: 1px solid var(--rsn-border); border-radius: 6px; background: var(--rsn-card-bg); color: var(--ink); font: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.mode-graphe button.active { background: #1a365d; border-color: #1a365d; color: #fff; }
+[data-theme="dark"] .mode-graphe button.active { background: var(--rsn-accent); border-color: var(--rsn-accent); color: #0f1724; }
+/* En mode sujets, le curseur des liens et la case des ressources sans lien n'ont pas d'objet. */
+.mode-sujets .graphe-densite, .mode-sujets .graphe-case { display: none; }
+.mode-sujets #compteConnexions { margin-left: auto; }
+.panneau-liens li button.sujet { font-weight: 600; }
 .graphe-legende { list-style: none; display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; color: var(--rsn-text); }
 .graphe-legende li { display: flex; align-items: center; gap: 0.4rem; }
 /* Pastilles de la légende : même rendu que les nœuds (disque plein semi-transparent, sans bord). */
