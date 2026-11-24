@@ -19,6 +19,7 @@ const TEXTES = {
   accueil: "Retour à l'accueil de la cartographie",
   logo: 'Logo du RSN',
   siteReseau: 'Ouvrir le site du Réseau santé numérique',
+  siteBottin: 'Ouvrir le bottin des membres du réseau',
   theme: { sombre: 'Passer au mode sombre', clair: 'Passer au mode clair' },
   oui: 'Oui',
   filtres: {
