@@ -162,6 +162,7 @@ a.pastille.mot-cle:hover { background: var(--rsn-secondary); color: #fff; }
     .vues { grid-template-columns: 1fr; }
     .vue-corps { height: 340px; }
     .entete-titre h1 { font-size: 1.15rem; }
+    .entete-logo img { height: 36px; }
     .compte { margin-left: 0; width: 100%; }
     .filtres label { flex: 1 1 45%; }
     .filtres select { max-width: none; width: 100%; }
