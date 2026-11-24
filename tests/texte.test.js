@@ -247,3 +247,13 @@ test('htmlCarteFiche : l\'accès est précédé de son libellé et porte sa tein
   // Dans la fiche, la ligne s'appelle déjà « Mode d'accès » : la teinte, sans le libellé.
   assert.ok(htmlFiche(fiche('C', { modesAcces: ['Sur demande évaluée'] })).includes('<span class="axe-chip acces acces-demande">Sur demande évaluée</span>'));
 });
+
+test('adresseLogo accepte une copie locale ou une adresse http(s), rien d\'autre', () => {
+  const { adresseLogo } = require('../public/js/texte.js');
+  assert.equal(adresseLogo('/logos/0123456789abcdef.png'), '/logos/0123456789abcdef.png');
+  assert.equal(adresseLogo('https://exemple.org/a.png'), 'https://exemple.org/a.png');
+  assert.equal(adresseLogo('/logos/../../etc/passwd'), null);
+  assert.equal(adresseLogo('javascript:alert(1)'), null);
+  assert.equal(adresseLogo('//exemple.org/a.png'), null);
+  assert.equal(adresseLogo(null), null);
+});

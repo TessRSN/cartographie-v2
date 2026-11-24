@@ -55,6 +55,16 @@ node --env-file=.env.local scripts/serveur-local.js
 
 Le site est alors à l'adresse http://localhost:3210.
 
+## Mettre à jour les logos
+
+L'adresse du logo de chaque ressource est dans la colonne « Logo » de Notion. Le site n'affiche pas l'image depuis son site d'origine : il en sert une copie, rangée dans `public/logos/`. Après avoir ajouté ou changé un logo dans Notion :
+
+```bash
+node --env-file=.env.local scripts/copier-logos.js
+```
+
+Puis enregistrer et pousser les fichiers modifiés (`public/logos/` et `lib/logos.json`). Un logo pas encore copié est affiché depuis son adresse d'origine ; sans logo, la fiche porte une pastille avec ses initiales.
+
 ## Ouvrir le site aux moteurs de recherche
 
 Mettre `INDEXATION=oui` dans le projet Vercel, redéployer, puis déclarer `/sitemap.xml` dans la Search Console.

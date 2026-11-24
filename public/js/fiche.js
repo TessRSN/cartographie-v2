@@ -55,7 +55,7 @@ function pastilleType(type) {
 // Logo de la ressource dans un cadre de taille fixe. Sans logo, ou si l'image
 // ne se charge pas : une pastille ronde avec les initiales, de la couleur du type.
 function htmlLogo(f, classe) {
-  const logo = o.adresseSure(f.logo);
+  const logo = o.adresseLogo(f.logo);
   const image = logo
     ? `<img src="${o.echapper(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.remove('avec-logo');this.remove()">`
     : '';

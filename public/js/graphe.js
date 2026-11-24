@@ -312,7 +312,7 @@ function construire() {
     const r = parAdresse.get(n.adresse) || {};
     const porteur = ((r.porteurs || [])[0] || {}).nom;
     const hex = couleurType(cleDuType);
-    const logo = adresseSure(r.logo);
+    const logo = adresseLogo(r.logo);
     const forme = logo
       ? { shape: 'circularImage', image: logo, brokenImage: pixel(hex), borderWidth: 4, borderWidthSelected: 6, color: couleurLogo(hex) }
       : { shape: 'dot', borderWidth: 0, color: couleurNoeud(hex, sombre) };

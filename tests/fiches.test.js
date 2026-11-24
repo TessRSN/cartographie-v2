@@ -131,3 +131,13 @@ test('le logo sort seulement si c\'est une adresse http(s)', () => {
   const parNom = Object.fromEntries(ressources.map((r) => [r.nom, r.logo]));
   assert.deepEqual(parNom, { Avec: 'https://exemple.org/logo.png', Douteux: null, Sans: null });
 });
+
+test('le logo copié sur le site remplace l\'adresse d\'origine', () => {
+  const copies = { 'https://exemple.org/logo.png': '/logos/0123456789abcdef.png' };
+  const { ressources } = assembler([
+    brute('a', 'Copié', { 'Logo': f.url('https://exemple.org/logo.png') }),
+    brute('b', 'Distant', { 'Logo': f.url('https://ailleurs.org/logo.png') }),
+  ], [], { logosCopies: copies });
+  const parNom = Object.fromEntries(ressources.map((r) => [r.nom, r.logo]));
+  assert.deepEqual(parNom, { 'Copié': '/logos/0123456789abcdef.png', Distant: 'https://ailleurs.org/logo.png' });
+});
