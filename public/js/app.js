@@ -9,7 +9,7 @@
 
 const $ = (id) => document.getElementById(id);
 const PAR_PAGE = 30;
-const FILTRES = { type: 'filtreType', modeAcces: 'filtreModeAcces', porteur: 'filtrePorteur', etat: 'filtreEtat' };
+const FILTRES = { type: 'filtreType', modeAcces: 'filtreModeAcces', porteur: 'filtrePorteur', etat: 'filtreEtat', portee: 'filtrePortee', langue: 'filtreLangue' };
 
 const etat = {
   ressources: [],   // toutes les fiches
@@ -22,7 +22,7 @@ const etat = {
   pret: false,      // les données sont arrivées
   echec: false,     // l'export a échoué
   vue: vueParDefaut(), // 'carte' ou 'connexions'
-  filtres: { type: [], modeAcces: [], porteur: [], etat: [], horsCarte: false },
+  filtres: { type: [], modeAcces: [], porteur: [], etat: [], portee: [], langue: [], horsCarte: false },
   page: 1,
   tri: 'propose',
 };
@@ -205,7 +205,7 @@ function definirRecherche(valeur) {
 function toutEffacer() {
   $('champRecherche').value = '';
   libererCentree({ silencieux: true });
-  Object.assign(etat.filtres, { type: [], modeAcces: [], porteur: [], etat: [], horsCarte: false });
+  Object.assign(etat.filtres, { type: [], modeAcces: [], porteur: [], etat: [], portee: [], langue: [], horsCarte: false });
   for (const cle of Object.keys(FILTRES)) majMenu(cle);
   cacherSuggestions();
   rafraichir();
