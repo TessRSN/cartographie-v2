@@ -27,7 +27,7 @@ const PHYSIQUE_CALME = { enabled: true, maxVelocity: 0.8, minVelocity: 0.05, tim
 // recalculé à chaque zoom pour garder environ 6 px/s (4 dans le bottin).
 const CALME_PX_PAR_S = 6;
 // La vue de départ cadre les ressources reliées, puis rapproche (1,8 dans le bottin).
-const ZOOM_DEPART = 1.7;
+const ZOOM_DEPART = 2.0;
 // Forces du placement. Par rapport au bottin : ressorts plus longs (150 → 190) et
 // répulsion plus forte (-40 → -60), pour écarter les ronds, plus gros avec leur logo.
 const FORCES = { gravitationalConstant: -60, centralGravity: 0.01, springLength: 190, springConstant: 0.05, damping: 0.95, avoidOverlap: 0.8 };
@@ -82,8 +82,8 @@ function dessinerIcones(ctx) {
     const p = positions[n.id];
     if (n.hidden || !p || !n.cleType) return;
     const rayon = Number(n.size) || 12;
-    const r = Math.max(5, rayon * 0.42);
-    const cx = p.x + rayon * 0.72, cy = p.y + rayon * 0.72;
+    const r = Math.max(7, rayon * 0.56);
+    const cx = p.x + rayon * 0.74, cy = p.y + rayon * 0.74;
     const c = couleursDe(n.cleType);
     ctx.save();
     // Un point estompé (recherche, ressource choisie) garde une pastille estompée.
