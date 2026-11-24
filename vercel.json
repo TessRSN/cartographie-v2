@@ -1,4 +1,13 @@
 {
+  "functions": {
+    "api/ressource.js": { "includeFiles": "gabarit.html" }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/api/ressource?vue=accueil" },
+    { "source": "/ressource/:adresse", "destination": "/api/ressource?vue=page&adresse=:adresse" },
+    { "source": "/sitemap.xml", "destination": "/api/ressource?vue=plan" },
+    { "source": "/robots.txt", "destination": "/api/ressource?vue=robots" }
+  ],
   "headers": [
     {
       "source": "/(.*).html",

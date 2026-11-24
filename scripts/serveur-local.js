@@ -15,6 +15,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 function reecrire(chemin) {
   let m;
   if ((m = /^\/ressource\/([^/]+)\/?$/.exec(chemin))) return { fonction: 'ressource', query: { vue: 'page', adresse: m[1] } };
+  if (chemin === '/') return { fonction: 'ressource', query: { vue: 'accueil' } };
   if (chemin === '/sitemap.xml') return { fonction: 'ressource', query: { vue: 'plan' } };
   if (chemin === '/robots.txt') return { fonction: 'ressource', query: { vue: 'robots' } };
   if ((m = /^\/api\/([a-z-]+)$/.exec(chemin))) return { fonction: m[1], query: {} };
@@ -38,7 +39,7 @@ http.createServer(async (req, res) => {
       req.query = { ...Object.fromEntries(url.searchParams), ...cible.query };
       return await require(fichier)(req, enrichir(res));
     }
-    const relatif = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
+    const relatif = decodeURIComponent(url.pathname.slice(1));
     const fichier = path.join(RACINE, relatif);
     const interdit = !fichier.startsWith(RACINE + path.sep) || /^(\.|node_modules|notes-internes|tests|lib|api|scripts|docs)/.test(relatif);
     if (interdit || !fs.existsSync(fichier) || !fs.statSync(fichier).isFile()) { res.statusCode = 404; return res.end('Introuvable'); }
