@@ -357,7 +357,7 @@ function afficherPortrait() {
   const total = chiffres.types.reduce((s, t) => s + t.nombre, 0) || 1;
   $('barreTypes').innerHTML = chiffres.types.map((t) => `<div class="seg type-${t.cle}" style="flex:${t.nombre} 1 0"></div>`).join('');
   $('legendeTypes').innerHTML = chiffres.types.map((t) => {
-    const contenu = `<span class="map-legend-dot"></span><span class="nom">${echapper(TEXTES.typesCourts[t.cle])}</span> <strong>${t.nombre}</strong> · ${echapper(T.pourcent(100 * t.nombre / total))}`;
+    const contenu = `${puceType(t.cle)}<span class="nom">${echapper(TEXTES.typesCourts[t.cle])}</span> <strong>${t.nombre}</strong> · ${echapper(T.pourcent(100 * t.nombre / total))}`;
     return t.type
       ? `<button type="button" class="type-${t.cle}" data-jeton="type" data-valeur="${echapper(t.type)}" title="${echapper(t.type)}" aria-pressed="${etat.filtres.type.includes(t.type) ? 'true' : 'false'}">${contenu}</button>`
       : `<span class="type-${t.cle}">${contenu}</span>`;
@@ -366,7 +366,7 @@ function afficherPortrait() {
   const choisis = etat.filtres.type.length > 0;
   $('listeTypes').innerHTML = chiffres.types.filter((t) => t.type).map((t) => {
     const actif = etat.filtres.type.includes(t.type);
-    return `<button type="button" class="type-${t.cle}${choisis && !actif ? ' estompe' : ''}" data-jeton="type" data-valeur="${echapper(t.type)}" title="${echapper(t.type)}" aria-pressed="${actif ? 'true' : 'false'}"><span class="map-legend-dot"></span><span class="nom">${echapper(TEXTES.typesCourts[t.cle])}${TEXTES.typesAides[t.cle] ? `<small>${echapper(TEXTES.typesAides[t.cle])}</small>` : ''}</span><strong>${t.nombre}</strong></button>`;
+    return `<button type="button" class="type-${t.cle}${choisis && !actif ? ' estompe' : ''}" data-jeton="type" data-valeur="${echapper(t.type)}" title="${echapper(t.type)}" aria-pressed="${actif ? 'true' : 'false'}">${puceType(t.cle)}<span class="nom">${echapper(TEXTES.typesCourts[t.cle])}${TEXTES.typesAides[t.cle] ? `<small>${echapper(TEXTES.typesAides[t.cle])}</small>` : ''}</span><strong>${t.nombre}</strong></button>`;
   }).join('');
   $('panneauTypes').classList.remove('hidden');
   const requetePliee = plier(etat.requete);

@@ -53,9 +53,9 @@ function htmlFenetre(porteur, ressources) {
   const parType = new Map();
   for (const r of ressources) { const cle = cleType(r.typePrincipal); parType.set(cle, (parType.get(cle) || 0) + 1); }
   const types = [...parType.entries()].sort((a, b) => b[1] - a[1])
-    .map(([cle, nombre]) => `<span class="type-${cle}"><span class="map-legend-dot"></span>${nombre} ${e(TEXTES.typesCourts[cle])}</span>`).join(' · ');
+    .map(([cle, nombre]) => `<span class="type-${cle} popup-type">${puceType(cle)}${nombre} ${e(TEXTES.typesCourts[cle])}</span>`).join(' · ');
   const liste = [...ressources].sort((a, b) => String(a.nom).localeCompare(String(b.nom), 'fr'))
-    .map((r) => `<li><a class="map-member-link" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}">${e(r.nom)}</a><small>${e(TEXTES.typesCourts[cleType(r.typePrincipal)])}</small></li>`).join('');
+    .map((r) => { const cle = cleType(r.typePrincipal); return `<li class="type-${cle}">${puceType(cle)}<span><a class="map-member-link" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}">${e(r.nom)}</a><small>${e(TEXTES.typesCourts[cle])}</small></span></li>`; }).join('');
   return `<div class="popup-inst-name">${e(porteur)}</div>`
     + `<div class="popup-count">${n} <span>${e(TEXTES.carte.ressources(n))}</span></div>`
     + `<div class="popup-type-row">${types}</div>`
@@ -89,7 +89,7 @@ function majPanneau(actif, horsCarte) {
     const cle = cleType(r.typePrincipal);
     const porteur = ((r.porteurs || [])[0] || {}).nom;
     const detail = [porteur, r.typePrincipal ? TEXTES.typesCourts[cle] || r.typePrincipal : ''].filter(Boolean).map(e).join(' · ');
-    return `<li><a class="type-${cle}" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}"><span class="map-legend-dot"></span><span><strong>${e(r.nom)}</strong>${detail ? `<small>${detail}</small>` : ''}</span></a></li>`;
+    return `<li><a class="type-${cle}" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}">${puceType(cle)}<span><strong>${e(r.nom)}</strong>${detail ? `<small>${detail}</small>` : ''}</span></a></li>`;
   }).join('');
 }
 

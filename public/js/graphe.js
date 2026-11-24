@@ -49,6 +49,7 @@ let minuterieZoom = null;
 let derniereCle;           // signature filtres + recherche du dernier cadrage
 let aCentrer = null;       // adresse à centrer dès que le graphe est posé
 let affichageEnCours = false;
+let mode = 'ressources';   // 'ressources' : traits entre ressources ; 'sujets' : chaque ressource reliée à ses sujets
 let minuterieRespiration = null;
 let phase = 0;
 const pixels = new Map();  // images d'un pixel, une par couleur
@@ -58,6 +59,46 @@ function couleurType(cle) {
   const valeur = getComputedStyle(document.documentElement).getPropertyValue(`--type-${cle}`).trim();
   return /^#[0-9a-f]{6}$/i.test(valeur) ? valeur : GRIS;
 }
+// ─── Icône du type, en pastille au coin de chaque point ───
+// Le logo d'une ressource cache la couleur de son type : la pastille la redonne, avec une forme en plus.
+const tracesIcones = new Map();   // tracés prêts à dessiner, par type
+let couleursIcones = new Map();   // couleurs lues dans la feuille de styles, par type ; vidées à chaque construction du graphe
+function tracesDe(cle) {
+  if (!tracesIcones.has(cle)) tracesIcones.set(cle, (TRACES_ICONES[cle] || TRACES_ICONES.autre).map((d) => new Path2D(d)));
+  return tracesIcones.get(cle);
+}
+function couleursDe(cle) {
+  if (!couleursIcones.has(cle)) {
+    const styles = getComputedStyle(document.documentElement);
+    const sur = styles.getPropertyValue(`--type-${cle}-sur`).trim();
+    couleursIcones.set(cle, { fond: couleurType(cle), sur: sur || '#ffffff', bord: styles.getPropertyValue('--rsn-card-bg').trim() || '#ffffff' });
+  }
+  return couleursIcones.get(cle);
+}
+function dessinerIcones(ctx) {
+  if (!reseau || !g || !g.noeudsDS) return;
+  const positions = reseau.getPositions();
+  g.noeudsDS.forEach((n) => {
+    const p = positions[n.id];
+    if (n.hidden || !p || !n.cleType) return;
+    const rayon = Number(n.size) || 12;
+    const r = Math.max(5, rayon * 0.42);
+    const cx = p.x + rayon * 0.72, cy = p.y + rayon * 0.72;
+    const c = couleursDe(n.cleType);
+    ctx.save();
+    // Un point estompé (recherche, ressource choisie) garde une pastille estompée.
+    ctx.globalAlpha = typeof n.opacity === 'number' ? n.opacity : 1;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.fillStyle = c.fond; ctx.fill();
+    ctx.lineWidth = Math.max(1, r * 0.22); ctx.strokeStyle = c.bord; ctx.stroke();
+    const echelle = (r * 1.25) / 24;
+    ctx.translate(cx - 12 * echelle, cy - 12 * echelle); ctx.scale(echelle, echelle);
+    ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = c.sur;
+    for (const trace of tracesDe(n.cleType)) ctx.stroke(trace);
+    ctx.restore();
+  });
+}
+
 // '#2b6cb0' + alpha → 'rgba(43,108,176,alpha)'
 function rgba(hex, alpha) {
   const n = parseInt(hex.slice(1), 16);
@@ -96,6 +137,19 @@ function pixel(hex) {
   }
   return pixels.get(hex);
 }
+// Point d'un sujet : une étiquette, d'autant plus grande que le sujet réunit de ressources.
+function formeSujet(s, sombre) {
+  const fond = sombre ? '#243152' : '#ffffff', bord = sombre ? '#8fb4e8' : '#1a365d';
+  return {
+    id: s.id, shape: 'box', label: s.nom, title: `${s.nom} · ${TEXTES.graphe.ressourcesDuSujet(s.nombre)}`,
+    margin: 16, borderWidth: 2.5, borderWidthSelected: 5, shapeProperties: { borderRadius: 26 },
+    widthConstraint: { maximum: 460 }, mass: 4,
+    color: { background: fond, border: bord, highlight: { background: fond, border: '#a855f7' }, hover: { background: fond, border: '#a855f7' } },
+    // Le graphe est vu de loin : les étiquettes sont écrites gros pour rester lisibles.
+    font: { size: Math.round(34 + Math.min(s.nombre, 26) * 1.5), color: sombre ? '#f1f5f9' : '#1a202c' },
+    estSujet: true, nombre: s.nombre,
+  };
+}
 // Rond d'une ressource qui a un logo : fond blanc, contour épais de la couleur du type.
 function couleurLogo(hex) {
   return { background: '#ffffff', border: hex, highlight: { background: '#ffffff', border: hex }, hover: { background: '#ffffff', border: hex } };
@@ -104,8 +158,8 @@ function couleurLogo(hex) {
 // Les titres sont de simples chaînes : vis-network les affiche comme du texte, jamais comme du HTML.
 function faireLien(l, couleur) {
   return {
-    id: `${l.a}|${l.b}`, from: l.a, to: l.b, value: l.poids,
-    title: `${TEXTES.graphe.sujetsCommuns} : ${l.motsCommuns.join(' · ')}`,
+    id: `${l.a}|${l.b}`, from: l.a, to: l.b, value: l.poids, mots: l.motsCommuns,
+    title: mode === 'sujets' ? undefined : `${TEXTES.graphe.sujetsCommuns} : ${l.motsCommuns.join(' · ')}`,
     color: { color: couleur, highlight: '#a855f7', hover: '#a855f7' },
     // Le bottin divise par 6 des scores de 4 à 50 ; ici les scores vont de 1,6 à 16 environ.
     width: Math.min(0.5 + l.poids / 2.5, 4),
@@ -216,6 +270,78 @@ function centrer(adresse, duree) {
   if (C.mouvementReduit()) appliquerCalme();
 }
 
+// ─── Liens d'une ressource : panneau ouvert au clic sur un point ───
+let choisie = null;   // adresse de la ressource (ou identifiant du sujet) dont on montre les liens
+
+// Les liens affichés de cette ressource, du plus fort au plus faible, vers des ressources visibles.
+function liensDe(adresse) {
+  return g.liens
+    .filter((l) => l.from === adresse || l.to === adresse)
+    .map((l) => ({ lien: l, autre: g.noeudsDS.get(l.from === adresse ? l.to : l.from) }))
+    .filter((v) => v.autre && !v.autre.hidden)
+    .sort((x, y) => y.lien.value - x.lien.value);
+}
+
+function choisir(adresse) {
+  if (!reseau || !g || !g.noeudsDS.get(adresse)) return;
+  choisie = adresse;
+  const voisines = liensDe(adresse);
+  // Les autres points s'effacent : on ne voit plus que la ressource et celles qui lui sont reliées.
+  const gardes = new Set([adresse, ...voisines.map((v) => v.autre.id)]);
+  g.noeudsDS.update(g.noeuds.map((n) => ({ id: n.id, opacity: gardes.has(n.id) ? 1 : 0.18 })));
+  reseau.selectNodes([adresse]);
+  afficherPanneauLiens(adresse, voisines);
+}
+
+function relacher() {
+  if (!choisie) return;
+  choisie = null;
+  $('panneauLiens').classList.add('hidden');
+  if (reseau) reseau.unselectAll();
+  appliquerFiltres();
+}
+
+// Construit par le DOM (textContent) : aucun texte de Notion n'est injecté comme HTML.
+function afficherPanneauLiens(adresse, voisines) {
+  const panneau = $('panneauLiens');
+  const noeud = g.noeudsDS.get(adresse);
+  const ressource = C.etat.ressources.find((r) => r.adresse === adresse) || {};
+  panneau.textContent = '';
+  const entete = document.createElement('div'); entete.className = `panneau-entete${noeud.estSujet ? '' : ` type-${noeud.cleType}`}`;
+  const titre = document.createElement('h2');
+  if (!noeud.estSujet) titre.innerHTML = puceType(noeud.cleType);
+  const nom = document.createElement('span'); nom.textContent = ressource.nom || noeud.label;
+  titre.appendChild(nom);
+  const fermer = document.createElement('button');
+  fermer.type = 'button'; fermer.className = 'member-modal-close'; fermer.textContent = '×';
+  fermer.title = TEXTES.graphe.fermerLiens; fermer.setAttribute('aria-label', TEXTES.graphe.fermerLiens);
+  fermer.addEventListener('click', relacher);
+  entete.append(titre, fermer);
+  const fiche = document.createElement('a');
+  fiche.className = 'card-action'; fiche.href = `/ressource/${adresse}`; fiche.dataset.fiche = adresse; fiche.textContent = TEXTES.liste.voirFiche;
+  const aide = document.createElement('p'); aide.className = 'panneau-aide';
+  if (noeud.estSujet) { fiche.hidden = true; aide.textContent = TEXTES.graphe.ressourcesDuSujet(voisines.length); }
+  else if (g.mode === 'sujets') aide.textContent = TEXTES.graphe.porteSur(voisines.length);
+  else aide.textContent = voisines.length ? TEXTES.graphe.relieeA(voisines.length) : TEXTES.graphe.sansLien;
+  const liste = document.createElement('ul');
+  for (const { lien, autre } of voisines) {
+    const li = document.createElement('li'); if (!autre.estSujet) li.className = `type-${autre.cleType}`;
+    const bouton = document.createElement('button'); bouton.type = 'button';
+    if (!autre.estSujet) bouton.innerHTML = puceType(autre.cleType); else bouton.className = 'sujet';
+    const libelle = document.createElement('strong');
+    libelle.textContent = (C.etat.ressources.find((r) => r.adresse === autre.id) || {}).nom || autre.label;
+    bouton.appendChild(libelle);
+    bouton.addEventListener('click', () => { choisir(autre.id); centrer(autre.id, 500); });
+    const sujets = document.createElement('div'); sujets.className = 'card-chips-row';
+    if (g.mode !== 'sujets') for (const mot of lien.mots || []) { const p = document.createElement('span'); p.className = 'axe-chip'; p.textContent = mot; sujets.appendChild(p); }
+    li.append(bouton, sujets);
+    liste.appendChild(li);
+  }
+  panneau.append(entete, fiche, aide, liste);
+  panneau.classList.remove('hidden');
+  panneau.scrollTop = 0;
+}
+
 // ─── Filtres et recherche appliqués au graphe en place ───
 function appliquerFiltres() {
   if (!reseau || !g) return;
@@ -224,21 +350,35 @@ function appliquerFiltres() {
   const retenues = new Set(etat.filtrees.map((r) => r.adresse));
   const trouvees = new Set(etat.visibles.map((r) => r.adresse));
   const sansLien = masquerIsoles();
-  const majs = g.noeuds.map((n) => ({
+  const majs = g.noeuds.filter((n) => !n.estSujet).map((n) => ({
     id: n.id,
-    hidden: (filtres && !retenues.has(n.id)) || (sansLien && !g.degre.get(n.id)),
+    hidden: (filtres && !retenues.has(n.id)) || (g.mode !== 'sujets' && sansLien && !g.degre.get(n.id)),
     // La recherche estompe les ressources qui n'y répondent pas, sans les retirer.
     opacity: etat.requete ? (trouvees.has(n.id) ? 1 : 0.35) : 1,
   }));
-  g.noeudsDS.update(majs);
   const montres = new Set(majs.filter((m) => !m.hidden).map((m) => m.id));
-  const liensMontres = g.liens.filter((l) => montres.has(l.from) && montres.has(l.to)).length;
-  $('compteConnexions').textContent = TEXTES.graphe.compte(montres.size, liensMontres);
+  const nets = new Set(majs.filter((m) => !m.hidden && m.opacity === 1).map((m) => m.id));
+  // Un sujet n'est montré que si au moins une de ses ressources l'est ; il s'estompe avec elles.
+  let sujetsMontres = 0;
+  for (const n of g.noeuds) {
+    if (!n.estSujet) continue;
+    const siennes = g.liens.filter((l) => l.to === n.id).map((l) => l.from);
+    const cache = !siennes.some((a) => montres.has(a));
+    if (!cache) sujetsMontres++;
+    majs.push({ id: n.id, hidden: cache, opacity: siennes.some((a) => nets.has(a)) ? 1 : 0.35 });
+  }
+  g.noeudsDS.update(majs);
+  const liensMontres = g.liens.filter((l) => montres.has(l.from) && (montres.has(l.to) || g.mode === 'sujets')).length;
+  $('compteConnexions').textContent = g.mode === 'sujets'
+    ? TEXTES.graphe.compteSujets(montres.size, sujetsMontres, g.sansSujet)
+    : TEXTES.graphe.compte(montres.size, liensMontres);
+  // Une ressource choisie reste mise en avant tant qu'elle est affichée ; sinon son panneau se referme.
+  if (choisie) { if (montres.has(choisie)) choisir(choisie); else { choisie = null; $('panneauLiens').classList.add('hidden'); } }
 
   // Aucun cadrage animé tant que le graphe est caché ou en cours de placement.
   const visible = !$('zoneConnexions').classList.contains('hidden');
   if (!visible || !calme) return;
-  if (aCentrer) { const adresse = aCentrer; aCentrer = null; if (montres.has(adresse)) centrer(adresse, 600); derniereCle = cle(etat); return; }
+  if (aCentrer) { const adresse = aCentrer; aCentrer = null; if (montres.has(adresse)) { centrer(adresse, 600); choisir(adresse); } derniereCle = cle(etat); return; }
   const signature = cle(etat);
   const change = derniereCle !== undefined && derniereCle !== signature;
   derniereCle = signature;
@@ -261,7 +401,7 @@ function cle(etat) {
 
 // Curseur « Liens » : nouveau seuil, donc nouveaux liens et nouveau placement, calculé hors écran.
 function appliquerDensite() {
-  if (!reseau || !g) return;
+  if (!reseau || !g || g.mode === 'sujets') return;
   const { liens } = calculerConnexions(C.etat.ressources, { SCORE_MIN: seuil() });
   const couleur = couleurTrait(C.modeSombre());
   g.liens = liens.map((l) => faireLien(l, couleur));
@@ -284,9 +424,11 @@ function appliquerTheme() {
   const sombre = C.modeSombre();
   const couleur = couleurTrait(sombre);
   g.noeudsDS.update(g.noeuds.map((n) => {
+    if (n.estSujet) { const f = formeSujet({ id: n.id, nom: n.label, nombre: n.nombre }, sombre); return { id: n.id, font: f.font, color: f.color }; }
     const hex = couleurType(n.cleType);
     return { id: n.id, font: police(sombre), color: n.avecLogo ? couleurLogo(hex) : couleurNoeud(hex, sombre) };
   }));
+  couleursIcones = new Map();
   g.liensDS.update(g.liens.map((l) => ({ id: l.id, color: { color: couleur, highlight: '#a855f7', hover: '#a855f7' } })));
 }
 
@@ -295,18 +437,21 @@ function construire() {
   affichageEnCours = false;
   const etat = C.etat;
   if (etat.vue !== 'connexions') return;
-  if (reseau && g && g.source === etat.ressources) {
+  if (reseau && g && g.source === etat.ressources && g.mode === mode) {
     appliquerCalme();
     vueDepart(false);
     appliquerFiltres();
     return;
   }
   const sombre = C.modeSombre();
-  const { noeuds: bruts, liens: liensBruts } = calculerConnexions(etat.ressources, { SCORE_MIN: seuil() });
+  const parSujets = mode === 'sujets' ? calculerSujets(etat.ressources) : null;
+  const { noeuds: bruts, liens: liensBruts } = parSujets || calculerConnexions(etat.ressources, { SCORE_MIN: seuil() });
   const parAdresse = new Map(etat.ressources.map((r) => [r.adresse, r]));
   const couleur = couleurTrait(sombre);
-  g = { source: etat.ressources, liens: liensBruts.map((l) => faireLien(l, couleur)) };
+  g = { source: etat.ressources, mode, liens: liensBruts.map((l) => faireLien(l, couleur)), sansSujet: parSujets ? parSujets.sansSujet.length : 0 };
   compterDegres();
+  couleursIcones = new Map();
+  choisie = null; $('panneauLiens').classList.add('hidden');
   g.noeuds = bruts.map((n) => {
     const cleDuType = cleType(n.type);
     const r = parAdresse.get(n.adresse) || {};
@@ -320,12 +465,14 @@ function construire() {
       id: n.adresse,
       label: n.nom.length > 30 ? n.nom.slice(0, 28) + '…' : n.nom,
       title: [n.nom, n.type ? TEXTES.typesCourts[cleDuType] || n.type : '', porteur || ''].filter(Boolean).join(' · '),
-      size: tailleNoeud(g.degre.get(n.adresse) || 0, !!logo),
+      // En mode sujets, les ressources sont plus petites : ce sont les sujets qu'on lit d'abord.
+      size: parSujets ? (logo ? 20 : 15) : tailleNoeud(g.degre.get(n.adresse) || 0, !!logo),
       font: police(sombre),
       cleType: cleDuType,
       avecLogo: !!logo,
     });
   });
+  if (parSujets) g.noeuds = g.noeuds.concat(parSujets.sujets.map((s) => formeSujet(s, sombre)));
   arreterRespiration();
   if (reseau) { try { reseau.destroy(); } catch (err) { /* déjà détruit */ } reseau = null; }
   g.noeudsDS = new vis.DataSet(g.noeuds);
@@ -359,7 +506,9 @@ function construire() {
     appliquerFiltres();
   });
   reseau.on('zoom', auZoom);
-  reseau.on('click', (p) => { if (p.nodes && p.nodes.length) C.ouvrirFiche(p.nodes[0]); });
+  reseau.on('afterDrawing', dessinerIcones);
+  // Un clic sur un point montre ce qui le relie aux autres ; un clic dans le vide referme le panneau.
+  reseau.on('click', (p) => { if (p.nodes && p.nodes.length) choisir(p.nodes[0]); else if (!p.edges || !p.edges.length) relacher(); });
   reseau.on('hoverNode', () => { conteneur.style.cursor = 'pointer'; });
   reseau.on('blurNode', () => { conteneur.style.cursor = ''; });
   // La zone de dessin suit la taille réelle de son cadre une fois celui-ci affiché.
@@ -409,7 +558,7 @@ function suivre(etat, motif) {
 // ─── Légende, aide, réglages ───
 function legende() {
   $('legendeGraphe').innerHTML = Object.values(CLES_TYPE).map((cleDuType) =>
-    `<li class="type-${cleDuType}"><span class="map-legend-dot"></span>${echapper(TEXTES.typesCourts[cleDuType])}</li>`).join('');
+    `<li class="type-${cleDuType}">${puceType(cleDuType)}${echapper(TEXTES.typesCourts[cleDuType])}</li>`).join('');
 }
 
 // Fenêtre d'explication : construite par le DOM (textContent), sans HTML injecté.
@@ -438,10 +587,28 @@ C.centrerDansGraphe = function (adresse) {
 // Croix de l'étiquette « Connexions de : … » ou « Tout réinitialiser » : plus de ressource centrée, retour à la vue de départ.
 C.libererGraphe = function () {
   aCentrer = null;
+  if (choisie) { choisie = null; $('panneauLiens').classList.add('hidden'); if (reseau && g) appliquerFiltres(); }
   if (!reseau || !g || !calme || $('zoneConnexions').classList.contains('hidden')) return;
   reseau.unselectAll();
   vueDepart(true);
 };
+
+// Choix du mode : traits entre ressources, ou ressources rattachées à leurs sujets.
+function majMode() {
+  document.querySelectorAll('[data-mode-graphe]').forEach((b) => {
+    const actif = b.dataset.modeGraphe === mode;
+    b.classList.toggle('active', actif); b.setAttribute('aria-pressed', actif ? 'true' : 'false');
+  });
+  $('zoneConnexions').classList.toggle('mode-sujets', mode === 'sujets');
+  $('texteIntroConnexions').textContent = mode === 'sujets' ? TEXTES.graphe.introSujets : TEXTES.graphe.intro;
+}
+document.querySelectorAll('[data-mode-graphe]').forEach((b) => b.addEventListener('click', () => {
+  if (b.dataset.modeGraphe === mode) return;
+  mode = b.dataset.modeGraphe === 'sujets' ? 'sujets' : 'ressources';
+  majMode();
+  if (C.etat.vue === 'connexions' && C.etat.pret) afficher();
+}));
+majMode();
 
 legende();
 $('boutonAide').addEventListener('click', ouvrirAide);
@@ -449,6 +616,7 @@ $('densiteConnexions').addEventListener('change', appliquerDensite);
 $('masquerIsoles').addEventListener('change', appliquerFiltres);
 document.querySelector('#zoneConnexions .js-recentrer').addEventListener('click', () => {
   if (!reseau) return;
+  relacher();
   reseau.unselectAll();
   reseau.once('animationFinished', appliquerCalme);
   vueDepart(true);

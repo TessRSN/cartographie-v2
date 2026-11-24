@@ -57,13 +57,25 @@ const TEXTES = {
   },
   graphe: {
     titre: 'Connexions',
-    intro: 'Chaque point est une ressource. Un trait relie deux ressources qui partagent des sujets distinctifs ; plus il est épais, plus la proximité est forte. Cliquez sur un point pour ouvrir la fiche, survolez un trait pour voir les sujets communs.',
+    intro: 'Chaque point est une ressource. Un trait relie deux ressources qui partagent des sujets distinctifs ; plus il est épais, plus la proximité est forte. Cliquez sur un point pour voir ce qui le relie aux autres.',
     aideBouton: 'Comment sont calculées les connexions ?',
     calcul: 'Calcul des connexions…',
     densite: 'Liens : tous ↔ les plus forts',
     masquerIsoles: 'Masquer les ressources sans lien',
     compte: (n, l) => `${n} ${n > 1 ? 'ressources' : 'ressource'}, ${l} ${l > 1 ? 'connexions affichées' : 'connexion affichée'}`,
     sujetsCommuns: 'Sujets communs',
+    // Panneau des liens d'une ressource, ouvert au clic sur un point.
+    relieeA: (n) => (n > 1 ? `Reliée à ${n} ressources par leurs sujets communs` : 'Reliée à une ressource par leurs sujets communs'),
+    sansLien: "Cette ressource n'a de sujet distinctif en commun avec aucune autre.",
+    fermerLiens: 'Fermer et revenir à la vue d’ensemble',
+    // Deux façons de relier : des traits entre ressources, ou chaque ressource rattachée à ses sujets.
+    relier: 'Relier',
+    modeRessources: 'Entre ressources',
+    modeSujets: 'Par sujets',
+    introSujets: "Chaque étiquette est un sujet partagé par au moins cinq ressources ; chaque point est une ressource, rattachée à ses sujets. Cliquez sur un sujet ou sur un point pour voir ce qui s'y rattache.",
+    compteSujets: (n, s, k) => `${n} ${n > 1 ? 'ressources' : 'ressource'}, ${s} ${s > 1 ? 'sujets' : 'sujet'}${k ? ` ; ${k} sans sujet fréquent` : ''}`,
+    ressourcesDuSujet: (n) => (n > 1 ? `${n} ressources portent sur ce sujet` : 'Une ressource porte sur ce sujet'),
+    porteSur: (n) => (n > 1 ? `Porte sur ${n} sujets fréquents` : 'Porte sur un sujet fréquent'),
     vide: 'Aucun lien entre les ressources affichées.',
     indisponible: "Le graphe n'a pas pu être chargé. Vérifiez votre connexion et rechargez la page.",
     aide: 'Deux ressources sont reliées quand elles partagent des sujets distinctifs.',
@@ -285,6 +297,31 @@ const CLES_TYPE = {
 };
 function cleType(type) { return CLES_TYPE[type] || 'autre'; }
 
+// Icônes des types : tracés au trait dans une grille de 24, les mêmes pour la page (SVG) et pour le graphe (dessin).
+const rond = (cx, cy, r) => `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
+const cadre = (x, y, l, h, r) => `M${x + r} ${y}h${l - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}v${h - 2 * r}a${r} ${r} 0 0 1 ${-r} ${r}h${-(l - 2 * r)}a${r} ${r} 0 0 1 ${-r} ${-r}v${-(h - 2 * r)}a${r} ${r} 0 0 1 ${r} ${-r}z`;
+const TRACES_ICONES = {
+  // Un cylindre : une collection de données.
+  jeu: ['M5 6a7 3 0 1 0 14 0a7 3 0 1 0-14 0', 'M5 6v6c0 1.66 3.13 3 7 3s7-1.34 7-3V6', 'M5 12v6c0 1.66 3.13 3 7 3s7-1.34 7-3v-6'],
+  // Quatre cases : plusieurs jeux recensés au même endroit.
+  catalogue: [cadre(4, 4, 6.5, 6.5, 1.5), cadre(13.5, 4, 6.5, 6.5, 1.5), cadre(4, 13.5, 6.5, 6.5, 1.5), cadre(13.5, 13.5, 6.5, 6.5, 1.5)],
+  // Deux serveurs : un environnement où l'on calcule et stocke.
+  plateforme: [cadre(4, 4, 16, 6.5, 1.5), cadre(4, 13.5, 16, 6.5, 1.5), 'M8 7.25h.01M8 16.75h.01M12 7.25h4M12 16.75h4'],
+  // Des chevrons de code : quelque chose qu'on installe ou qu'on utilise.
+  logiciel: ['M8 7l-5 5 5 5', 'M16 7l5 5-5 5', 'M13.5 5l-3 14'],
+  // Une bouée : une équipe à qui l'on fait une demande.
+  service: [rond(12, 12, 9), rond(12, 12, 3.5), 'M5.6 5.6l3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9'],
+  // Trois points reliés : un groupe qu'on peut rejoindre.
+  initiative: [rond(12, 5.5, 2.5), rond(5.5, 17.5, 2.5), rond(18.5, 17.5, 2.5), 'M10.8 7.7L6.7 15.3M13.2 7.7l4.1 7.6M8 17.5h8'],
+  autre: [rond(12, 12, 4)],
+};
+function iconeType(cle) {
+  const traces = TRACES_ICONES[cle] || TRACES_ICONES.autre;
+  return `<svg class="icone-type" viewBox="0 0 24 24" aria-hidden="true">${traces.map((d) => `<path d="${d}"/>`).join('')}</svg>`;
+}
+// L'icône dans un rond de la couleur du type (la classe type-… est portée par un parent).
+function puceType(cle) { return `<span class="puce-type">${iconeType(cle)}</span>`; }
+
 // Classe de couleur d'un mode d'accès : une teinte par mode, la même sur les cartes et dans la fiche.
 const CLES_ACCES = { 'Ouvert': 'ouvert', 'Sur inscription': 'inscription', 'Sur demande évaluée': 'demande', 'Réservé ou interne': 'reserve' };
 function cleAcces(mode) { return CLES_ACCES[mode] || 'neutre'; }
@@ -293,7 +330,7 @@ function cleAcces(mode) { return CLES_ACCES[mode] || 'neutre'; }
 const CLES_ETAT = { 'Actif': 'actif', 'En développement': 'developpement', 'Non confirmé': 'non-confirme', 'Archivé': 'archive' };
 function cleEtat(etat) { return CLES_ETAT[etat] || 'autre'; }
 
-const api = { CLES_FILTRE, adresseLogo, cleAcces, CLES_ACCES, cleEtat, TEXTES, echapper, adresseSure, surLaCarte, filtrer, filtresActifs, enListe, comptesDeFiltre, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, dateLongue, cleType, CLES_TYPE, CADRE_QUEBEC };
+const api = { CLES_FILTRE, adresseLogo, cleAcces, CLES_ACCES, cleEtat, TEXTES, echapper, adresseSure, surLaCarte, filtrer, filtresActifs, enListe, comptesDeFiltre, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, dateLongue, cleType, CLES_TYPE, CADRE_QUEBEC, TRACES_ICONES, iconeType, puceType };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else Object.assign(racine, api);
 })(typeof window !== 'undefined' ? window : globalThis);

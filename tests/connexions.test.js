@@ -58,3 +58,33 @@ test('chaque nœud porte adresse, nom et type', () => {
   const { noeuds } = calculerConnexions([r('a', ['x'], 'Plateforme ou infrastructure')]);
   assert.deepEqual(noeuds[0], { adresse: 'a', nom: 'A', type: 'Plateforme ou infrastructure' });
 });
+
+// ─── Graphe par sujets ───
+
+test('calculerSujets : les sujets fréquents deviennent des points, reliés à leurs ressources', () => {
+  const { calculerSujets } = require('../public/js/connexions.js');
+  const liste = [
+    r('a', ['Génomique', 'cohorte']), r('b', ['génomique', 'cohorte']), r('c', ['Génomique']),
+    r('d', ['oncologie', 'cohorte']), r('e', ['sujet rare']), r('f', []),
+  ];
+  const s = calculerSujets(liste, { FICHES_MIN: 3 });
+  // Deux sujets atteignent trois fiches ; le plus fréquent d'abord, à égalité par ordre alphabétique.
+  assert.deepEqual(s.sujets.map((x) => [x.nom, x.nombre]), [['cohorte', 3], ['génomique', 3]]);
+  assert.ok(s.sujets.every((x) => x.id.startsWith('sujet:')));
+  // Chaque lien va d'une ressource à un sujet retenu.
+  const idCohorte = s.sujets[0].id, idGenomique = s.sujets[1].id;
+  assert.deepEqual(s.liens.filter((l) => l.b === idGenomique).map((l) => l.a).sort(), ['a', 'b', 'c']);
+  assert.deepEqual(s.liens.filter((l) => l.b === idCohorte).map((l) => l.a).sort(), ['a', 'b', 'd']);
+  // Les ressources sans sujet fréquent sont comptées à part.
+  assert.deepEqual(s.sansSujet.sort(), ['e', 'f']);
+  assert.deepEqual(s.noeuds.map((n) => n.adresse).sort(), ['a', 'b', 'c', 'd']);
+});
+
+test('calculerSujets : le français et l\'anglais se rejoignent, liste vide sans erreur', () => {
+  const { calculerSujets } = require('../public/js/connexions.js');
+  const s = calculerSujets([r('a', ['Oncologie']), r('b', ['oncology']), r('c', ['oncologie'])], { FICHES_MIN: 3 });
+  assert.equal(s.sujets.length, 1);
+  assert.equal(s.sujets[0].nom, 'oncologie');
+  assert.equal(s.sujets[0].nombre, 3);
+  assert.deepEqual(calculerSujets([], {}), { noeuds: [], sujets: [], liens: [], sansSujet: [] });
+});

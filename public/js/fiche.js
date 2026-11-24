@@ -49,7 +49,7 @@ function pastilleType(type) {
   if (!type) return '';
   const cle = o.cleType(type);
   const court = cle === 'autre' ? type : o.TEXTES.typesCourts[cle];
-  return `<span class="card-tag type-${cle}" title="${o.echapper(type)}">${o.echapper(court)}</span>`;
+  return `<span class="card-tag type-${cle}" title="${o.echapper(type)}">${o.iconeType(cle)}${o.echapper(court)}</span>`;
 }
 
 // Logo de la ressource dans un cadre de taille fixe. Sans logo, ou si l'image
