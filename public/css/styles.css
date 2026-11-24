@@ -213,7 +213,7 @@ body {
 /* ─── Vue du haut : carte ou connexions ─── */
 .hero { position: relative; background: var(--rsn-light); }
 #zoneCarte { position: relative; }
-#carte { height: clamp(460px, 58vh, 600px); z-index: 1; background: var(--rsn-light); }
+#carte { height: clamp(460px, 62vh, 640px); z-index: 1; background: var(--rsn-light); }
 .carte-message { text-align: center; padding: 2rem; color: var(--rsn-muted); }
 .hero-tools { position: absolute; top: 20px; left: 20px; right: 20px; z-index: 6; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; pointer-events: none; }
 .hero-tools > * { pointer-events: auto; }
@@ -229,10 +229,6 @@ body {
 .panneau-types .nom { flex: 1; min-width: 0; }
 .panneau-types small { display: block; font-size: 0.72rem; font-weight: 400; color: var(--muted-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panneau-types strong { font-weight: 600; color: var(--muted-strong); }
-/* Sur un écran large, le panneau remplace le menu « Type » et la ligne des types du bandeau. */
-@media (min-width: 901px) {
-    .filtre-type, .stats-row.types, #zoneConnexions .graphe-legende { display: none; }
-}
 /* Sélection en cours : une étiquette par filtre, avec sa croix, puis « Tout réinitialiser ». */
 .selection { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .hero-tools .selection { padding: 6px; border-radius: 10px; max-width: 100%; }
@@ -289,7 +285,7 @@ body {
 .teaser circle:nth-of-type(7) { animation-delay: 2.4s; }
 
 /* Graphe des connexions : le graphe, puis la légende et les réglages, puis l'explication. */
-#zoneConnexions { display: flex; flex-direction: column; height: clamp(520px, 66vh, 680px); background: var(--rsn-card-bg); overflow: hidden; }
+#zoneConnexions { display: flex; flex-direction: column; height: clamp(520px, 72vh, 740px); background: var(--rsn-card-bg); overflow: hidden; }
 .graphe-cadre { position: relative; flex: 1; min-height: 0; display: flex; }
 #graphe { position: relative; flex: 1; width: 100%; min-height: 0; }
 .graphe-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 11; background: var(--rsn-card-bg); color: var(--rsn-muted); padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.85rem; box-shadow: var(--shadow-sm); pointer-events: none; }
@@ -306,7 +302,7 @@ body {
 /* Zone de clic élargie à 44 px sans grossir le bouton. */
 .bouton-aide::after { content: ''; position: absolute; inset: -8px; }
 /* Pendant le calcul du graphe, la zone garde la hauteur de la vue pour que la page ne saute pas. */
-#chargementConnexions { min-height: clamp(520px, 66vh, 680px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 3rem 1rem; color: var(--rsn-muted); font-weight: 600; }
+#chargementConnexions { min-height: clamp(520px, 72vh, 740px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 3rem 1rem; color: var(--rsn-muted); font-weight: 600; }
 div.vis-tooltip { font-family: inherit; font-size: 0.8rem; max-width: 280px; white-space: normal; border-radius: 6px; }
 
 /* ─── Carte : ronds, grappes et fenêtres en verre ─── */
@@ -571,7 +567,7 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
     .content { padding: 1.2rem 1rem 2rem; }
     #carte { height: 420px; }
     .hero-tools { top: 12px; left: 12px; right: 12px; }
-    /* Sur un téléphone, le panneau couvrirait la carte : le menu « Type » fait le travail. */
+    /* Sur un téléphone, le panneau couvrirait la carte : le menu « Type » et le bandeau font le travail. */
     .panneau-types, .hero-tools .rupture { display: none; }
     .panneau-hors { position: static; width: auto; max-height: 330px; margin: 0.6rem 1rem 0; }
     .hero.avec-panneau .hero-tools { right: 12px; }
