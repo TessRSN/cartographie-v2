@@ -5,9 +5,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { CLES_TYPE, CLES_ACCES } = require('../js/texte.js');
+const { CLES_TYPE, CLES_ACCES } = require('../public/js/texte.js');
 
-const css = fs.readFileSync(path.join(__dirname, '..', 'css', 'styles.css'), 'utf8');
+const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'styles.css'), 'utf8');
 
 function variables(selecteur) {
   const debut = css.indexOf(selecteur + ' {');

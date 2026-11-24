@@ -10,14 +10,14 @@ Une page HTML sans cadriciel ni étape de compilation, et deux fonctions héberg
 
 | Fichier | Rôle |
 |---|---|
-| `gabarit.html` | la page (accueil et page d'une ressource) |
-| `css/styles.css` | les styles, repris du bottin (mêmes noms de classes) |
-| `js/app.js` | recherche, filtres à choix multiples, bandeau de chiffres, fiches, mode clair ou sombre |
-| `js/recherche.js` | la recherche, les suggestions et les chiffres du bandeau (fonctions pures, avec essais) |
-| `js/carte.js`, `js/graphe.js` | la carte et le graphe |
-| `js/fiche.js` | le rendu d'une fiche, commun au navigateur et au serveur |
-| `js/texte.js` | les textes de l'interface, l'échappement, les filtres |
-| `js/mots-cles.js`, `js/connexions.js` | le rapprochement des ressources par mots-clés (repris du bottin) |
+| `public/gabarit.html` | la page (accueil et page d'une ressource) |
+| `public/css/styles.css` | les styles, repris du bottin (mêmes noms de classes) |
+| `public/js/app.js` | recherche, filtres à choix multiples, bandeau de chiffres, fiches, mode clair ou sombre |
+| `public/js/recherche.js` | la recherche, les suggestions et les chiffres du bandeau (fonctions pures, avec essais) |
+| `public/js/carte.js`, `public/js/graphe.js` | la carte et le graphe |
+| `public/js/fiche.js` | le rendu d'une fiche, commun au navigateur et au serveur |
+| `public/js/texte.js` | les textes de l'interface, l'échappement, les filtres |
+| `public/js/mots-cles.js`, `public/js/connexions.js` | le rapprochement des ressources par mots-clés (repris du bottin) |
 | `lib/notion.js` | la lecture des bases Notion ; seul fichier qui connaît les noms de colonnes |
 | `lib/fiches.js` | le passage des lignes Notion aux fiches publiques |
 | `lib/page-publique.js` | les pages pour les moteurs de recherche |

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { canoniser, cleMotCle } = require('../js/mots-cles.js');
-const { calculerConnexions } = require('../js/connexions.js');
+const { canoniser, cleMotCle } = require('../public/js/mots-cles.js');
+const { calculerConnexions } = require('../public/js/connexions.js');
 
 const r = (adresse, motsCles, type = 'Logiciel ou application') => ({ adresse, nom: adresse.toUpperCase(), typePrincipal: type, motsCles });
 // Vingt fiches de remplissage, chacune avec son propre sujet, pour que les

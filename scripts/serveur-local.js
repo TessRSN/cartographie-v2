@@ -40,8 +40,10 @@ http.createServer(async (req, res) => {
       return await require(fichier)(req, enrichir(res));
     }
     const relatif = decodeURIComponent(url.pathname.slice(1));
-    const fichier = path.join(RACINE, relatif);
-    const interdit = !fichier.startsWith(RACINE + path.sep) || /^(\.|node_modules|notes-internes|tests|lib|api|scripts|docs)/.test(relatif);
+    // Comme sous Vercel, seuls les fichiers du dossier public sont servis.
+    const PUBLIC = path.join(RACINE, 'public');
+    const fichier = path.join(PUBLIC, relatif);
+    const interdit = !fichier.startsWith(PUBLIC + path.sep);
     if (interdit || !fs.existsSync(fichier) || !fs.statSync(fichier).isFile()) { res.statusCode = 404; return res.end('Introuvable'); }
     res.setHeader('Content-Type', TYPES[path.extname(fichier)] || 'application/octet-stream');
     res.setHeader('Cache-Control', 'no-cache');

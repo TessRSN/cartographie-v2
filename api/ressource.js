@@ -10,13 +10,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { donneesPubliques } = require('./export');
 const { rendrePage, rendreAccueil, rendreIntrouvable, rendrePlanDuSite, rendreRobots } = require('../lib/page-publique');
-const { TEXTES } = require('../js/texte.js');
+const { TEXTES } = require('../public/js/texte.js');
 
 // gabarit.html est joint à la fonction par « includeFiles » dans vercel.json.
 let gabaritGarde = null;
 function lireGabarit() {
   if (gabaritGarde) return gabaritGarde;
-  for (const fichier of [path.join(__dirname, '..', 'gabarit.html'), path.join(process.cwd(), 'gabarit.html')]) {
+  for (const fichier of [path.join(__dirname, '..', 'public', 'gabarit.html'), path.join(process.cwd(), 'public', 'gabarit.html')]) {
     try {
       const html = fs.readFileSync(fichier, 'utf8');
       if (html.includes('id="ficheStatique"')) { gabaritGarde = html; return html; }

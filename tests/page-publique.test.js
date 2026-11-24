@@ -5,7 +5,7 @@ const path = require('node:path');
 const { rendrePage, rendreAccueil, rendreIntrouvable, rendrePlanDuSite, rendreRobots, donneesStructurees } = require('../lib/page-publique');
 const { creerGestionnaire } = require('../api/ressource');
 
-const gabarit = fs.readFileSync(path.join(__dirname, '..', 'gabarit.html'), 'utf8');
+const gabarit = fs.readFileSync(path.join(__dirname, '..', 'public', 'gabarit.html'), 'utf8');
 const origine = 'https://carto.exemple.org';
 const fiche = (props = {}) => ({
   nom: 'CARTaGENE', adresse: 'cartagene', autresNoms: 'CaG', typePrincipal: 'Jeu de données, cohorte ou biobanque', secondType: null,
@@ -136,12 +136,12 @@ test('le gabarit garde chaque repère du serveur exactement une fois', () => {
 });
 
 test('le gabarit : chemins absolus, textes tous présents dans TEXTES, pas de tiret cadratin', () => {
-  const { TEXTES } = require('../js/texte.js');
+  const { TEXTES } = require('../public/js/texte.js');
   const locaux = [...gabarit.matchAll(/(?:src|href)="([^"]+\.(?:js|css|png|webp))"/g)].map((m) => m[1]).filter((u) => !/^https:\/\//.test(u));
   assert.ok(locaux.length >= 9);
   for (const chemin of locaux) {
     assert.ok(chemin.startsWith('/'), chemin);
-    assert.ok(fs.existsSync(path.join(__dirname, '..', chemin)), `${chemin} doit exister`);
+    assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', chemin)), `${chemin} doit exister`);
   }
   const cles = [...gabarit.matchAll(/data-texte(?:-aria|-titre|-indice|-alt)?="([^"]+)"/g)].map((m) => m[1]);
   assert.ok(cles.length > 20);

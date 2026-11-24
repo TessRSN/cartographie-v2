@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { echapper, filtrer, filtresActifs, comptesDeFiltre, cleAcces, TEXTES, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, CLES_TYPE } = require('../js/texte.js');
-const { htmlFiche, htmlCarteFiche, htmlLogo } = require('../js/fiche.js');
+const { echapper, filtrer, filtresActifs, comptesDeFiltre, cleAcces, TEXTES, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, CLES_TYPE } = require('../public/js/texte.js');
+const { htmlFiche, htmlCarteFiche, htmlLogo } = require('../public/js/fiche.js');
 
 const fiche = (nom, props = {}) => ({
   nom, adresse: nom.toLowerCase(), autresNoms: '', typePrincipal: 'Logiciel ou application', secondType: null,

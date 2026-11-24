@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { documentDeRecherche, motsDeRequete, trouveMotCourt, chercher, denombrer, statistiquesBandeau, suggestions } = require('../js/recherche.js');
+const { documentDeRecherche, motsDeRequete, trouveMotCourt, chercher, denombrer, statistiquesBandeau, suggestions } = require('../public/js/recherche.js');
 
 const fiche = (nom, props = {}) => ({
   nom, adresse: nom.toLowerCase().replace(/[^a-z0-9]+/g, '-'), autresNoms: '', typePrincipal: 'Logiciel ou application', secondType: null,
