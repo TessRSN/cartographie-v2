@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { echapper, filtrer, TEXTES, valeursDeFiltre } = require('../js/texte.js');
-const { htmlFiche } = require('../js/fiche.js');
+const { echapper, filtrer, filtresActifs, comptesDeFiltre, TEXTES, valeursDeFiltre, initiales, nomCourt, decouperAutresLiens, CLES_TYPE } = require('../js/texte.js');
+const { htmlFiche, htmlCarteFiche, htmlLogo } = require('../js/fiche.js');
 
 const fiche = (nom, props = {}) => ({
   nom, adresse: nom.toLowerCase(), autresNoms: '', typePrincipal: 'Logiciel ou application', secondType: null,
@@ -98,4 +98,118 @@ test('htmlFiche montre contact, responsable et liens entre fiches', () => {
   assert.ok(html.includes('href="/ressource/socle"'));
   assert.ok(html.includes('data-fiche="socle"'));
   assert.ok(html.includes('rel="noopener'));
+});
+
+test('filtrer accepte plusieurs valeurs par filtre : une suffit dans un filtre, les filtres se combinent', () => {
+  const liste = [
+    fiche('A', { typePrincipal: 'Plateforme ou infrastructure', modesAcces: ['Ouvert'], porteurs: [{ nom: 'Mila' }], etat: 'Actif' }),
+    fiche('B', { typePrincipal: 'Logiciel ou application', modesAcces: ['Sur inscription'], porteurs: [{ nom: 'ISQ' }], etat: 'Archivé' }),
+    fiche('C', { typePrincipal: 'Service ou accompagnement', secondType: 'Logiciel ou application', modesAcces: ['Ouvert'], porteurs: [{ nom: 'ISQ' }], etat: 'Actif' }),
+  ];
+  assert.deepEqual(filtrer(liste, { type: ['Plateforme ou infrastructure', 'Logiciel ou application'] }).map((f) => f.nom), ['A', 'B', 'C']);
+  assert.deepEqual(filtrer(liste, { type: ['Logiciel ou application'], modeAcces: ['Ouvert'] }).map((f) => f.nom), ['C']);
+  assert.deepEqual(filtrer(liste, { porteur: ['Mila', 'ISQ'], etat: ['Actif'] }).map((f) => f.nom), ['A', 'C']);
+  assert.deepEqual(filtrer(liste, { type: [], modeAcces: [], porteur: [], etat: [] }).map((f) => f.nom), ['A', 'B', 'C']);
+  assert.equal(filtresActifs({ type: [], modeAcces: [], porteur: [], etat: [], horsCarte: false }), false);
+  assert.equal(filtresActifs({ type: [], porteur: ['Mila'] }), true);
+  assert.equal(filtresActifs({ horsCarte: true }), true);
+});
+
+test('comptesDeFiltre compte les fiches par valeur, de la plus fréquente à la moins fréquente', () => {
+  const liste = [
+    fiche('A', { secondType: 'Plateforme ou infrastructure', porteurs: [{ nom: 'Mila' }, { nom: 'IVADO' }], modesAcces: ['Ouvert'], etat: 'Actif' }),
+    fiche('B', { porteurs: [{ nom: 'Mila' }], modesAcces: ['Ouvert', 'Ouvert'], etat: 'Actif' }),
+  ];
+  const c = comptesDeFiltre(liste);
+  assert.deepEqual(c.type, [{ valeur: 'Logiciel ou application', nombre: 2 }, { valeur: 'Plateforme ou infrastructure', nombre: 1 }]);
+  assert.deepEqual(c.porteur, [{ valeur: 'Mila', nombre: 2 }, { valeur: 'IVADO', nombre: 1 }]);
+  assert.deepEqual(c.modeAcces, [{ valeur: 'Ouvert', nombre: 2 }]);
+  assert.deepEqual(c.etat, [{ valeur: 'Actif', nombre: 2 }]);
+});
+
+test('initiales : deux lettres, sans les petits mots, jamais vide', () => {
+  assert.equal(initiales('Banque de cerveaux Douglas-Bell Canada'), 'BC');
+  assert.equal(initiales('CARTaGENE'), 'CA');
+  assert.equal(initiales('AxonDeepSeg'), 'AD');
+  assert.equal(initiales('Mila'), 'MI');
+  assert.equal(initiales("Alliance de recherche numérique du Canada"), 'AR');
+  assert.equal(initiales('Étude sur la santé'), 'ÉS');
+  assert.equal(initiales(''), '?');
+  assert.equal(initiales(null), '?');
+  assert.equal(initiales('<b>x</b>').includes('<'), false);
+});
+
+test('nomCourt ne garde la parenthèse finale que si c\'est un sigle', () => {
+  assert.equal(nomCourt('Centre de recherche du CHUM (CRCHUM)'), 'CRCHUM');
+  assert.equal(nomCourt('McGill Centre for Integrative Neuroscience (MCIN)'), 'MCIN');
+  assert.equal(nomCourt('NeuroPoly (Polytechnique Montréal)'), 'NeuroPoly (Polytechnique Montréal)');
+  assert.equal(nomCourt('Mila'), 'Mila');
+  assert.equal(nomCourt(null), '');
+});
+
+test('decouperAutresLiens sépare les libellés des adresses et refuse ce qui n\'est pas http(s)', () => {
+  assert.deepEqual(decouperAutresLiens("processus d'accès : https://exemple.org/acces ; catalogue : https://exemple.org/cat"), [
+    { libelle: "processus d'accès", adresse: 'https://exemple.org/acces' },
+    { libelle: 'catalogue', adresse: 'https://exemple.org/cat' },
+  ]);
+  assert.deepEqual(decouperAutresLiens('https://exemple.org/seul'), [{ libelle: 'https://exemple.org/seul', adresse: 'https://exemple.org/seul' }]);
+  assert.deepEqual(decouperAutresLiens('piège : javascript:alert(1)'), [{ libelle: 'piège : javascript:alert(1)', adresse: null }]);
+  assert.deepEqual(decouperAutresLiens('simple note'), [{ libelle: 'simple note', adresse: null }]);
+  assert.deepEqual(decouperAutresLiens(''), []);
+  assert.deepEqual(decouperAutresLiens(null), []);
+});
+
+test('htmlFiche affiche les autres liens : texte échappé, lien seulement pour une adresse http(s)', () => {
+  const html = htmlFiche(fiche('X', { autresLiens: 'portail : https://exemple.org/p ; <b>piège</b> : javascript:alert(1)' }));
+  assert.ok(html.includes(TEXTES.fiche.autresLiens));
+  assert.ok(html.includes('href="https://exemple.org/p"'));
+  assert.ok(html.includes('>portail</a>'));
+  assert.ok(!html.includes('href="javascript:'));
+  assert.ok(!html.includes('<b>'));
+  assert.ok(html.includes('&lt;b&gt;piège&lt;/b&gt;'));
+  assert.ok(!htmlFiche(fiche('X')).includes(TEXTES.fiche.autresLiens));
+});
+
+test('htmlFiche écrit « Oui » depuis les textes de l\'interface', () => {
+  const html = htmlFiche(fiche('X', { jumelage: true }));
+  assert.ok(html.includes(echapper(TEXTES.fiche.jumelage)));
+  assert.ok(html.includes(`<dd>${TEXTES.oui}</dd>`));
+});
+
+test('le logo : une image seulement pour une adresse http(s), sinon les initiales', () => {
+  const sans = htmlLogo(fiche('CARTaGENE', { typePrincipal: 'Jeu de données, cohorte ou biobanque' }));
+  assert.ok(!sans.includes('<img'));
+  assert.ok(sans.includes('>CA</span>'));
+  assert.ok(sans.includes('type-jeu'));
+  assert.ok(!sans.includes('avec-logo'));
+  const avec = htmlLogo(fiche('Mila', { logo: 'https://exemple.org/logo.png?a=1&b="2"' }));
+  assert.ok(avec.includes('src="https://exemple.org/logo.png?a=1&amp;b=&quot;2&quot;"'));
+  assert.ok(avec.includes('loading="lazy"'));
+  assert.ok(avec.includes('referrerpolicy="no-referrer"'));
+  assert.ok(avec.includes('alt=""'));
+  assert.ok(avec.includes('avec-logo'));
+  assert.ok(avec.includes('MI<img'), 'les initiales restent sous l\'image, pour le cas où elle ne se charge pas');
+  for (const hostile of ['javascript:alert(1)', 'data:image/svg+xml,<svg onload=alert(1)>', '//exemple.org/x.png', '']) {
+    const html = htmlLogo(fiche('Mila', { logo: hostile }));
+    assert.ok(!html.includes('<img'), hostile);
+  }
+  assert.ok(htmlFiche(fiche('Mila', { logo: 'https://exemple.org/logo.png' })).includes('src="https://exemple.org/logo.png"'));
+});
+
+test('htmlCarteFiche : logo ou initiales, lien vers la fiche, tout est échappé, pas de bande de couleur', () => {
+  const html = htmlCarteFiche(fiche('<i>Nom</i>', {
+    adresse: 'nom', phrase: '<script>alert(1)</script>', porteurs: [{ nom: '<u>P1</u>' }, { nom: 'P2' }, { nom: 'P3' }],
+    modesAcces: ['<s>Ouvert</s>'], logo: 'javascript:alert(1)',
+  }));
+  for (const interdit of ['<i>', '<script', '<u>', '<s>', '<img', 'javascript:']) assert.ok(!html.includes(interdit), interdit);
+  assert.ok(html.includes('href="/ressource/nom"'));
+  assert.ok(html.includes('data-fiche="nom"'));
+  assert.ok(html.includes('data-graphe="nom"'));
+  assert.ok(html.includes('+1'), 'le troisième porteur est compté');
+  assert.ok(html.includes('class="member-card"'), 'la carte ne porte pas de classe de type, donc pas de bande de couleur');
+  assert.ok(htmlCarteFiche(fiche('A', { logo: 'https://exemple.org/a.png' })).includes('<img src="https://exemple.org/a.png"'));
+});
+
+test('chaque type a un nom court dans les textes', () => {
+  for (const cle of Object.values(CLES_TYPE).concat(['autre'])) assert.equal(typeof TEXTES.typesCourts[cle], 'string', cle);
 });

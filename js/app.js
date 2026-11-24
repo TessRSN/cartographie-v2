@@ -1,31 +1,81 @@
 /**
- * Accueil de la cartographie : chargement des fiches, recherche, filtres,
- * cartes de fiches et fenêtre de fiche. La carte (carte.js) et le graphe
- * (graphe.js) s'abonnent aux fiches visibles par surChangement().
+ * Accueil de la cartographie : chargement des fiches, recherche et suggestions,
+ * filtres à choix multiples, bandeau de chiffres, cartes de fiches, fenêtre de
+ * fiche et mode clair ou sombre. Interface reprise du bottin des membres.
+ * La carte (carte.js) et le graphe (graphe.js) s'abonnent par surChangement().
  */
 (function () {
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const etat = { ressources: [], visibles: [], carte: { cle: '' }, pret: false, filtres: { type: '', modeAcces: '', porteur: '', etat: '', horsCarte: false } };
+const PAR_PAGE = 30;
+const FILTRES = { type: 'filtreType', modeAcces: 'filtreModeAcces', porteur: 'filtrePorteur', etat: 'filtreEtat' };
+
+const etat = {
+  ressources: [],   // toutes les fiches
+  filtrees: [],     // fiches retenues par les filtres seuls
+  visibles: [],     // fiches retenues par les filtres et la recherche, dans l'ordre d'affichage
+  requete: '',
+  carte: { cle: '' },
+  pret: false,      // les données sont arrivées
+  echec: false,     // l'export a échoué
+  vue: 'carte',     // 'carte' ou 'connexions'
+  filtres: { type: [], modeAcces: [], porteur: [], etat: [], horsCarte: false },
+  page: 1,
+  tri: 'propose',
+};
 const abonnes = [];
 let index = null;          // index de recherche Fuse
-let documents = [];        // repli si Fuse n'est pas chargé
+let documents = [];        // ce que la recherche lit de chaque fiche
+let chiffres = null;       // chiffres du bandeau
 let ficheOuverte = null;
 let focusAvant = null;
+let fermetureEnCours = false;
+let connexionsGardees = null;
 
-function surChangement(fn) { abonnes.push(fn); if (etat.pret) fn(etat); }
-function prevenir() { for (const fn of abonnes) { try { fn(etat); } catch (err) { console.error(err); } } }
+// motif : 'donnees', 'filtres', 'vue' ou 'theme'.
+function surChangement(fn) { abonnes.push(fn); if (etat.pret) fn(etat, 'donnees'); }
+function prevenir(motif) { for (const fn of abonnes) { try { fn(etat, motif); } catch (err) { console.error(err); } } }
+
+// ─── Textes ───
+// Un élément marqué data-texte="chemin.de.la.cle" reçoit le texte de TEXTES ;
+// data-texte-aria, data-texte-titre, data-texte-indice et data-texte-alt remplissent un attribut.
+function texte(chemin) {
+  const valeur = String(chemin || '').split('.').reduce((o, cle) => (o && o[cle] !== undefined ? o[cle] : undefined), TEXTES);
+  return typeof valeur === 'string' ? valeur : null;
+}
+function poserTextes() {
+  const attributs = { texteAria: 'aria-label', texteTitre: 'title', texteIndice: 'placeholder', texteAlt: 'alt' };
+  document.querySelectorAll('[data-texte]').forEach((el) => { const t = texte(el.dataset.texte); if (t !== null) el.textContent = t; });
+  for (const [donnee, attribut] of Object.entries(attributs)) {
+    document.querySelectorAll(`[data-${donnee.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())}]`).forEach((el) => {
+      const t = texte(el.dataset[donnee]);
+      if (t !== null) el.setAttribute(attribut, t);
+    });
+  }
+}
+
+// ─── Mode clair ou sombre ───
+// L'icône montre le mode vers lequel on bascule, comme dans le bottin.
+function modeSombre() { return document.documentElement.getAttribute('data-theme') === 'dark'; }
+function majBoutonTheme() {
+  const sombre = modeSombre();
+  $('iconeSoleil').classList.toggle('hidden', !sombre);
+  $('iconeLune').classList.toggle('hidden', sombre);
+  $('boutonTheme').setAttribute('aria-label', sombre ? TEXTES.theme.clair : TEXTES.theme.sombre);
+  $('boutonTheme').title = sombre ? TEXTES.theme.clair : TEXTES.theme.sombre;
+}
+function basculerTheme() {
+  const sombre = modeSombre();
+  document.documentElement.setAttribute('data-theme', sombre ? 'light' : 'dark');
+  try { localStorage.setItem('rsn-theme', sombre ? 'light' : 'dark'); } catch (err) { /* stockage refusé : le choix vaut pour cette visite */ }
+  majBoutonTheme();
+  if (etat.pret) prevenir('theme');
+}
 
 // ─── Recherche ───
 function construireIndex() {
-  documents = etat.ressources.map((r) => {
-    const porteurs = (r.porteurs || []).map((p) => p.nom).join(' ');
-    const motsCles = (r.motsCles || []).join(' ');
-    const tout = [r.nom, r.autresNoms, motsCles, porteurs, r.phrase, r.description].join(' ');
-    return { r, nom: r.nom, autresNoms: r.autresNoms, motsCles, porteurs, phrase: r.phrase, description: r.description,
-      canon: motsCanoniques(tout).join(' '), plie: plier(tout) };
-  });
+  documents = etat.ressources.map(documentDeRecherche);
   if (typeof Fuse === 'undefined') { index = null; return; }
   index = new Fuse(documents, {
     includeScore: true, threshold: 0.25, ignoreLocation: true, minMatchCharLength: 2,
@@ -36,118 +86,465 @@ function construireIndex() {
   });
 }
 
-// Chaque mot de la requête doit être trouvé (lui ou sa forme canonique) ;
-// les fiches sont classées par pertinence.
-function chercher(requete) {
-  const mots = plier(requete).split(/[^a-z0-9]+/).filter((m) => m.length >= 2);
-  if (mots.length === 0) return etat.ressources;
-  let scores = null;
-  for (const mot of mots) {
-    const trouves = new Map();
-    const formes = [mot];
-    const c = canoniser(mot);
-    if (c && c !== mot) formes.push(c);
-    for (const forme of formes) {
-      if (index) {
-        for (const res of index.search(forme)) {
-          const precedent = trouves.get(res.item.r);
-          if (precedent === undefined || res.score < precedent) trouves.set(res.item.r, res.score);
-        }
-      } else {
-        for (const d of documents) if (d.plie.includes(forme) || d.canon.includes(forme)) trouves.set(d.r, 0.5);
-      }
-    }
-    if (scores === null) scores = trouves;
-    else {
-      for (const [r, s] of [...scores]) {
-        if (trouves.has(r)) scores.set(r, s + trouves.get(r)); else scores.delete(r);
-      }
-    }
-    if (scores.size === 0) break;
+function ordonner(liste, parPertinence) {
+  const nom = (a, b) => String(a.nom).localeCompare(String(b.nom), 'fr', { sensitivity: 'base' });
+  if (etat.tri === 'nom') return [...liste].sort(nom);
+  if (etat.tri === 'type') {
+    const rang = (r) => { const i = Object.keys(CLES_TYPE).indexOf(r.typePrincipal); return i < 0 ? 99 : i; };
+    return [...liste].sort((a, b) => rang(a) - rang(b) || nom(a, b));
   }
-  return [...scores.entries()].sort((a, b) => a[1] - b[1]).map(([r]) => r);
+  return parPertinence ? liste : [...liste].sort(nom);
 }
 
-// ─── Affichage ───
-function htmlCarte(r) {
-  const e = echapper;
-  const porteurs = (r.porteurs || []).map((p) => p.nom).join(' · ');
-  const acces = (r.modesAcces || []).map((m) => `<span class="pastille acces">${e(m)}</span>`).join('');
-  return `<a class="carte-fiche type-${cleType(r.typePrincipal)}" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}">
-    <h3>${e(r.nom)}</h3>
-    ${porteurs ? `<p class="carte-porteur">${e(porteurs)}</p>` : ''}
-    <p class="carte-pastilles">${r.typePrincipal ? `<span class="pastille type type-${cleType(r.typePrincipal)}">${e(r.typePrincipal)}</span>` : ''}${acces}</p>
-    ${r.phrase ? `<p class="carte-phrase">${e(r.phrase)}</p>` : ''}
-  </a>`;
+// ─── Menus déroulants à choix multiples (composant du bottin) ───
+function fermerMenus() {
+  document.querySelectorAll('.ms-panel.open').forEach((panneau) => {
+    panneau.classList.remove('open');
+    const bouton = panneau.previousElementSibling;
+    bouton.classList.remove('open');
+    bouton.setAttribute('aria-expanded', 'false');
+  });
 }
 
-function rafraichir() {
-  const requete = $('champRecherche').value.trim();
-  etat.visibles = filtrer(chercher(requete), etat.filtres);
-  $('cartes').innerHTML = etat.visibles.map(htmlCarte).join('');
-  $('compte').textContent = TEXTES.compte(etat.visibles.length);
-  const message = $('message');
-  message.hidden = etat.visibles.length > 0;
-  message.textContent = TEXTES.aucunResultat;
-  const f = etat.filtres;
-  $('effacerFiltres').hidden = !(requete || f.type || f.modeAcces || f.porteur || f.etat || f.horsCarte);
-  prevenir();
+function construireMenu(cle, valeurs) {
+  const id = FILTRES[cle];
+  const boite = $(id);
+  boite.textContent = '';
+  const bouton = document.createElement('button');
+  bouton.type = 'button'; bouton.className = 'ms-btn';
+  bouton.dataset.name = TEXTES.filtres[cle] + ' :';
+  bouton.setAttribute('aria-expanded', 'false');
+  bouton.setAttribute('aria-controls', id + 'Panneau');
+  bouton.setAttribute('aria-label', TEXTES.filtres[cle]);
+  const libelle = document.createElement('span'); libelle.className = 'ms-label'; libelle.textContent = TEXTES.filtres.tous;
+  const fleche = document.createElement('span'); fleche.className = 'ms-arrow'; fleche.textContent = '▼'; fleche.setAttribute('aria-hidden', 'true');
+  bouton.append(libelle, fleche);
+  const panneau = document.createElement('div');
+  panneau.className = 'ms-panel'; panneau.id = id + 'Panneau';
+  panneau.setAttribute('role', 'group'); panneau.setAttribute('aria-label', TEXTES.filtres[cle]);
+  valeurs.forEach(({ valeur, nombre }, i) => {
+    const ligne = document.createElement('div'); ligne.className = 'ms-item';
+    const case_ = document.createElement('input'); case_.type = 'checkbox'; case_.value = valeur; case_.id = `${id}Choix${i}`;
+    const nom = document.createElement('label'); nom.htmlFor = case_.id; nom.textContent = valeur;
+    const compte = document.createElement('span'); compte.className = 'ms-item-count'; compte.textContent = nombre;
+    ligne.append(case_, nom, compte);
+    case_.addEventListener('change', () => {
+      etat.filtres[cle] = [...panneau.querySelectorAll('input:checked')].map((c) => c.value);
+      majMenu(cle);
+      rafraichir();
+    });
+    // Un clic ailleurs sur la ligne (marge, nombre) coche aussi la case.
+    ligne.addEventListener('click', (ev) => { if (ev.target === ligne || ev.target === compte) case_.click(); });
+    panneau.appendChild(ligne);
+  });
+  bouton.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const ouvert = panneau.classList.contains('open');
+    fermerMenus();
+    if (!ouvert) { panneau.classList.add('open'); bouton.classList.add('open'); bouton.setAttribute('aria-expanded', 'true'); }
+  });
+  // Le menu reste ouvert pendant qu'on coche ; Échap le referme et rend le focus au bouton.
+  panneau.addEventListener('click', (ev) => ev.stopPropagation());
+  boite.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && panneau.classList.contains('open')) { ev.stopPropagation(); fermerMenus(); bouton.focus(); }
+  });
+  boite.append(bouton, panneau);
+}
+
+// Remet les cases et le libellé du bouton en accord avec etat.filtres.
+function majMenu(cle) {
+  const boite = $(FILTRES[cle]);
+  const bouton = boite.querySelector('.ms-btn');
+  if (!bouton) return;
+  const choisies = etat.filtres[cle];
+  boite.querySelectorAll('input[type="checkbox"]').forEach((c) => { c.checked = choisies.includes(c.value); });
+  const libelle = boite.querySelector('.ms-label');
+  const ancien = bouton.querySelector('.ms-count');
+  if (ancien) ancien.remove();
+  const couper = (t, n) => (t.length > n ? t.slice(0, n - 2) + '…' : t);
+  if (choisies.length === 0) libelle.textContent = TEXTES.filtres.tous;
+  else if (choisies.length === 1) libelle.textContent = couper(choisies[0], 28);
+  else {
+    libelle.textContent = couper(choisies[0], 20);
+    const pastille = document.createElement('span'); pastille.className = 'ms-count'; pastille.textContent = '+' + (choisies.length - 1);
+    bouton.insertBefore(pastille, bouton.querySelector('.ms-arrow'));
+  }
+  bouton.setAttribute('aria-label', choisies.length ? `${TEXTES.filtres[cle]} : ${choisies.join(', ')}` : TEXTES.filtres[cle]);
 }
 
 function remplirFiltres() {
-  const valeurs = valeursDeFiltre(etat.ressources);
-  const champs = { filtreType: 'type', filtreModeAcces: 'modeAcces', filtrePorteur: 'porteur', filtreEtat: 'etat' };
-  for (const [id, cle] of Object.entries(champs)) {
-    const select = $(id);
-    for (const v of valeurs[cle]) {
-      const option = document.createElement('option');
-      option.value = v; option.textContent = v;
-      select.appendChild(option);
-    }
-    select.addEventListener('change', () => { etat.filtres[cle] = select.value; rafraichir(); });
-  }
+  const comptes = comptesDeFiltre(etat.ressources);
+  for (const cle of Object.keys(FILTRES)) { construireMenu(cle, comptes[cle]); majMenu(cle); }
 }
 
 function definirFiltre(cle, valeur) {
-  etat.filtres[cle] = valeur;
+  if (!etat.pret) return;
+  etat.filtres[cle] = cle === 'horsCarte' ? !!valeur : enListe(valeur);
+  if (FILTRES[cle]) majMenu(cle);
+  rafraichir();
+}
+
+// Coche ou décoche une valeur d'un filtre (chiffres du bandeau).
+function basculerFiltre(cle, valeur) {
+  const actuelles = etat.filtres[cle];
+  definirFiltre(cle, actuelles.includes(valeur) ? actuelles.filter((v) => v !== valeur) : actuelles.concat([valeur]));
+}
+
+function definirRecherche(valeur) {
+  $('champRecherche').value = valeur;
+  cacherSuggestions();
   rafraichir();
 }
 
 function toutEffacer() {
   $('champRecherche').value = '';
-  for (const id of ['filtreType', 'filtreModeAcces', 'filtrePorteur', 'filtreEtat']) $(id).value = '';
-  Object.assign(etat.filtres, { type: '', modeAcces: '', porteur: '', etat: '', horsCarte: false });
+  Object.assign(etat.filtres, { type: [], modeAcces: [], porteur: [], etat: [], horsCarte: false });
+  for (const cle of Object.keys(FILTRES)) majMenu(cle);
+  cacherSuggestions();
   rafraichir();
+}
+
+// ─── Affichage ───
+function rafraichir({ garderPage = false } = {}) {
+  const champ = $('champRecherche');
+  $('effacerRecherche').classList.toggle('hidden', !champ.value);
+  // Tant que les données ne sont pas là (ou si l'export a échoué), rien à filtrer :
+  // le message de chargement ou de panne reste en place.
+  if (!etat.pret) return;
+  etat.requete = champ.value.trim();
+  etat.filtrees = filtrer(etat.ressources, etat.filtres);
+  const retenues = new Set(etat.filtrees);
+  const trouvees = chercher(documents, etat.requete, index ? (forme) => index.search(forme) : null);
+  const parPertinence = motsDeRequete(etat.requete).length > 0;
+  etat.visibles = ordonner(trouvees.filter((r) => retenues.has(r)), parPertinence);
+  if (!garderPage) etat.page = 1;
+  afficherListe();
+  afficherCompte();
+  afficherPortrait();
+  prevenir('filtres');
+}
+
+function nombrePages() { return Math.max(1, Math.ceil(etat.visibles.length / PAR_PAGE)); }
+
+function afficherListe() {
+  etat.page = Math.min(Math.max(1, etat.page), nombrePages());
+  const debut = (etat.page - 1) * PAR_PAGE;
+  $('cartes').innerHTML = etat.visibles.slice(debut, debut + PAR_PAGE).map(htmlCarteFiche).join('');
+  $('aucunResultat').classList.toggle('hidden', etat.visibles.length > 0);
+  $('compteListe').textContent = TEXTES.liste.compte(etat.visibles.length, etat.ressources.length);
+  afficherPagination();
+}
+
+function afficherPagination() {
+  const nav = $('pagination');
+  const total = nombrePages();
+  nav.textContent = '';
+  if (total <= 1) return;
+  const bouton = (libelle, page, { actif = false, inactif = false, nom = null } = {}) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'page-btn' + (actif ? ' active' : '');
+    b.textContent = libelle; b.disabled = inactif; b.dataset.page = page;
+    if (nom) b.setAttribute('aria-label', nom);
+    if (actif) b.setAttribute('aria-current', 'page');
+    nav.appendChild(b);
+  };
+  bouton(TEXTES.liste.precedent, etat.page - 1, { inactif: etat.page === 1 });
+  const pages = new Set([1, total]);
+  for (let i = Math.max(1, etat.page - 2); i <= Math.min(total, etat.page + 2); i++) pages.add(i);
+  let precedente = 0;
+  for (const p of [...pages].sort((a, b) => a - b)) {
+    if (p - precedente > 1) { const s = document.createElement('span'); s.textContent = '…'; s.setAttribute('aria-hidden', 'true'); nav.appendChild(s); }
+    bouton(String(p), p, { actif: p === etat.page, nom: TEXTES.liste.page(p) });
+    precedente = p;
+  }
+  bouton(TEXTES.liste.suivant, etat.page + 1, { inactif: etat.page === total });
+}
+
+function allerPage(page) {
+  if (page < 1 || page > nombrePages() || page === etat.page) return;
+  etat.page = page;
+  afficherListe();
+  $('fiches').scrollIntoView({ behavior: mouvementReduit() ? 'auto' : 'smooth', block: 'start' });
+}
+
+function mouvementReduit() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+function afficherCompte() {
+  const compte = $('compte');
+  compte.textContent = '';
+  const n = document.createElement('strong'); n.textContent = etat.visibles.length;
+  compte.append(n, ' ' + TEXTES.affichees(etat.visibles.length));
+  $('effacerFiltres').classList.toggle('hidden', !(etat.requete || filtresActifs(etat.filtres)));
+  // Pastille du filtre « En ligne ou hors Québec », posé depuis la carte.
+  const pastille = $('pastilleFiltre');
+  pastille.classList.toggle('hidden', !etat.filtres.horsCarte);
+  pastille.textContent = '';
+  if (etat.filtres.horsCarte) {
+    const nom = document.createElement('span'); nom.textContent = TEXTES.filtres.horsCarte;
+    const retirer = document.createElement('button');
+    retirer.type = 'button'; retirer.textContent = '×'; retirer.setAttribute('aria-label', `${TEXTES.filtres.retirer} : ${TEXTES.filtres.horsCarte}`);
+    retirer.addEventListener('click', () => definirFiltre('horsCarte', false));
+    pastille.append(nom, retirer);
+  }
+}
+
+// ─── Bandeau « Portrait de la cartographie » ───
+function jeton(genre, valeur, nombre, libelle, actif, titre) {
+  return `<button type="button" class="stat-token" data-jeton="${genre}" data-valeur="${echapper(valeur)}" aria-pressed="${actif ? 'true' : 'false'}"${titre ? ` title="${echapper(titre)}"` : ''}><strong>${Number(nombre)}</strong><span>${echapper(libelle)}</span></button>`;
+}
+
+function afficherPortrait() {
+  const bandeau = $('portrait');
+  if (!chiffres || !etat.ressources.length) return;
+  bandeau.hidden = false;
+  const T = TEXTES.portrait;
+  $('resumePortrait').innerHTML = `<strong>${chiffres.ressources}</strong> ${echapper(T.ressources(chiffres.ressources))} · <strong>${chiffres.porteurs}</strong> ${echapper(T.porteurs(chiffres.porteurs))}`;
+  const total = chiffres.types.reduce((s, t) => s + t.nombre, 0) || 1;
+  $('barreTypes').innerHTML = chiffres.types.map((t) => `<div class="seg type-${t.cle}" style="flex:${t.nombre} 1 0"></div>`).join('');
+  $('legendeTypes').innerHTML = chiffres.types.map((t) => {
+    const contenu = `<span class="map-legend-dot"></span><span class="nom">${echapper(TEXTES.typesCourts[t.cle])}</span> <strong>${t.nombre}</strong> · ${echapper(T.pourcent(100 * t.nombre / total))}`;
+    return t.type
+      ? `<button type="button" class="type-${t.cle}" data-jeton="type" data-valeur="${echapper(t.type)}" title="${echapper(t.type)}" aria-pressed="${etat.filtres.type.includes(t.type) ? 'true' : 'false'}">${contenu}</button>`
+      : `<span class="type-${t.cle}">${contenu}</span>`;
+  }).join('');
+  const requetePliee = plier(etat.requete);
+  $('sujetsPrincipaux').innerHTML = chiffres.sujets.map((s) => jeton('sujet', s.sujet, s.nombre, s.sujet, plier(s.sujet) === requetePliee)).join('');
+  $('porteursPrincipaux').innerHTML = chiffres.porteursPrincipaux.map((p) => jeton('porteur', p.nom, p.nombre, nomCourt(p.nom), etat.filtres.porteur.includes(p.nom), p.nom)).join('');
+  const ouvert = !bandeau.classList.contains('closed');
+  $('libelleBascule').textContent = ouvert ? T.replier : T.deplier;
+  $('basculePortrait').setAttribute('aria-expanded', ouvert ? 'true' : 'false');
+}
+
+// ─── Suggestions pendant la saisie (composant du bottin) ───
+let propositions = [];
+let propositionActive = -1;
+
+function cacherSuggestions() {
+  $('listeSuggestions').classList.add('hidden');
+  $('champRecherche').setAttribute('aria-expanded', 'false');
+  $('champRecherche').removeAttribute('aria-activedescendant');
+  propositionActive = -1;
+}
+
+function afficherSuggestions() {
+  const boite = $('listeSuggestions');
+  propositions = etat.pret ? suggestions(etat.ressources, $('champRecherche').value) : [];
+  propositionActive = -1;
+  if (!propositions.length) { boite.textContent = ''; cacherSuggestions(); return; }
+  const titres = { sujet: TEXTES.suggestions.sujets, porteur: TEXTES.suggestions.porteurs, ressource: TEXTES.suggestions.ressources };
+  let html = '';
+  let dernier = '';
+  propositions.forEach((p, i) => {
+    if (p.genre !== dernier) { html += `<div class="ss-group" role="presentation">${echapper(titres[p.genre])}</div>`; dernier = p.genre; }
+    const droite = p.genre === 'ressource' ? echapper(p.detail || '') : echapper(TEXTES.compte(p.nombre));
+    html += `<button type="button" class="ss-item" role="option" id="suggestion${i}" tabindex="-1" aria-selected="false" data-suggestion="${i}"><span>${echapper(p.libelle)}</span><small>${droite}</small></button>`;
+  });
+  boite.innerHTML = html;
+  boite.classList.remove('hidden');
+  $('champRecherche').setAttribute('aria-expanded', 'true');
+}
+
+// Un sujet lance la recherche sur ce sujet ; un porteur pose le filtre ; une ressource ouvre sa fiche.
+function choisirSuggestion(i) {
+  const p = propositions[i];
+  if (!p) return;
+  cacherSuggestions();
+  if (p.genre === 'ressource') { ouvrirFiche(p.valeur); return; }
+  if (p.genre === 'sujet') { definirRecherche(p.valeur); return; }
+  $('champRecherche').value = '';
+  if (!etat.filtres.porteur.includes(p.valeur)) etat.filtres.porteur = etat.filtres.porteur.concat([p.valeur]);
+  majMenu('porteur');
+  rafraichir();
+}
+
+function brancherRecherche() {
+  const champ = $('champRecherche');
+  const boite = $('listeSuggestions');
+  let minuterie = null;
+  champ.addEventListener('input', () => {
+    clearTimeout(minuterie);
+    minuterie = setTimeout(rafraichir, 200);
+    afficherSuggestions();
+  });
+  champ.addEventListener('focus', () => { if (champ.value) afficherSuggestions(); });
+  champ.addEventListener('blur', () => { setTimeout(cacherSuggestions, 180); });
+  champ.addEventListener('keydown', (ev) => {
+    if (boite.classList.contains('hidden')) return;
+    const lignes = boite.querySelectorAll('.ss-item');
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      const pas = ev.key === 'ArrowDown' ? 1 : -1;
+      propositionActive = propositionActive < 0 ? (pas > 0 ? 0 : lignes.length - 1) : (propositionActive + pas + lignes.length) % lignes.length;
+      lignes.forEach((el, k) => { el.classList.toggle('active', k === propositionActive); el.setAttribute('aria-selected', k === propositionActive ? 'true' : 'false'); });
+      if (lignes[propositionActive]) {
+        lignes[propositionActive].scrollIntoView({ block: 'nearest' });
+        champ.setAttribute('aria-activedescendant', lignes[propositionActive].id);
+      }
+    } else if (ev.key === 'Enter' && propositionActive >= 0) {
+      ev.preventDefault(); choisirSuggestion(propositionActive);
+    } else if (ev.key === 'Enter') {
+      cacherSuggestions();
+    } else if (ev.key === 'Escape') {
+      cacherSuggestions();
+    }
+  });
+  // mousedown plutôt que click : le champ perd le focus avant le clic et la liste se fermerait.
+  boite.addEventListener('mousedown', (ev) => {
+    const b = ev.target.closest('[data-suggestion]');
+    if (b) { ev.preventDefault(); choisirSuggestion(Number(b.dataset.suggestion)); }
+  });
+  $('effacerRecherche').addEventListener('click', () => { definirRecherche(''); champ.focus(); });
+}
+
+// ─── Vue du haut : carte ou connexions ───
+function definirVue(vue) {
+  const nouvelle = vue === 'connexions' ? 'connexions' : 'carte';
+  if (nouvelle === etat.vue) return;
+  etat.vue = nouvelle;
+  majSelecteurVue();
+  if (etat.pret) prevenir('vue');
+}
+function majSelecteurVue() {
+  document.querySelectorAll('.view-switch [data-vue]').forEach((b) => {
+    const actif = b.dataset.vue === etat.vue;
+    b.classList.toggle('active', actif);
+    b.setAttribute('aria-pressed', actif ? 'true' : 'false');
+  });
+  // La carte reste affichée (vide) tant que les données ne sont pas là ; ensuite chaque vue gère sa zone.
+  $('zoneCarte').classList.toggle('hidden', etat.vue !== 'carte');
+}
+
+// Connexions calculées une fois avec les réglages par défaut (fiche, « Ressources proches »).
+function connexions() {
+  if (!connexionsGardees || connexionsGardees.source !== etat.ressources) {
+    connexionsGardees = { source: etat.ressources, resultat: calculerConnexions(etat.ressources) };
+  }
+  return connexionsGardees.resultat;
 }
 
 // ─── Fiche ───
 function parAdresse(adresse) { return etat.ressources.find((r) => r.adresse === adresse) || null; }
+function cheminFiche(adresse) { return `/ressource/${adresse}`; }
+function profondeur() { return (history.state && history.state.profondeur) || 0; }
+
+function forceLien(poids) {
+  const F = TEXTES.fiche.force;
+  if (poids >= 6) return { points: '●●●', nom: F.forte };
+  if (poids >= 3.5) return { points: '●●○', nom: F.moyenne };
+  return { points: '●○○', nom: F.faible };
+}
+
+// Bloc « Ressources proches » : les cinq liens les plus forts, avec les sujets communs.
+function blocProches(r) {
+  const voisines = connexions().liens
+    .filter((l) => l.a === r.adresse || l.b === r.adresse)
+    .sort((x, y) => y.poids - x.poids).slice(0, 5)
+    .map((l) => ({ lien: l, autre: parAdresse(l.a === r.adresse ? l.b : l.a) }))
+    .filter((v) => v.autre);
+  if (!voisines.length) return null;
+  const T = TEXTES.fiche;
+  const bloc = document.createElement('section'); bloc.className = 'proches';
+  const titre = document.createElement('h3'); titre.textContent = T.proches;
+  const liste = document.createElement('ul');
+  for (const { lien, autre } of voisines) {
+    const li = document.createElement('li'); li.className = 'proche';
+    const ouvrir = document.createElement('button');
+    ouvrir.type = 'button'; ouvrir.className = 'proche-ouvrir'; ouvrir.dataset.fiche = autre.adresse;
+    const nom = document.createElement('strong'); nom.textContent = autre.nom;
+    const detail = document.createElement('span'); detail.className = 'proche-detail';
+    const porteur = document.createElement('span'); porteur.textContent = ((autre.porteurs || [])[0] || {}).nom || '';
+    const force = forceLien(lien.poids);
+    const mesure = document.createElement('span'); mesure.className = 'proche-force';
+    mesure.textContent = `${force.points} ${T.sujetsCommuns(lien.motsCommuns.length)}`;
+    mesure.title = force.nom;
+    const pourLecteur = document.createElement('span'); pourLecteur.className = 'visually-hidden'; pourLecteur.textContent = ` (${force.nom})`;
+    detail.append(porteur, mesure, pourLecteur);
+    ouvrir.append(nom, detail);
+    const sujets = document.createElement('details');
+    const resume = document.createElement('summary'); resume.textContent = T.voirSujetsCommuns;
+    const puces = document.createElement('div'); puces.className = 'card-chips-row';
+    for (const mot of lien.motsCommuns) { const p = document.createElement('span'); p.className = 'axe-chip'; p.textContent = mot; puces.appendChild(p); }
+    sujets.append(resume, puces);
+    li.append(ouvrir, sujets);
+    liste.appendChild(li);
+  }
+  bloc.append(titre, liste);
+  return bloc;
+}
+
+// Actions de la fiche : voir ses connexions, copier le lien direct.
+function blocActions(r) {
+  const T = TEXTES.fiche;
+  const rangee = document.createElement('div'); rangee.className = 'modal-actions';
+  const graphe = document.createElement('button');
+  graphe.type = 'button'; graphe.className = 'primary'; graphe.dataset.graphe = r.adresse;
+  graphe.innerHTML = ICONE_GRAPHE + '<span></span>';
+  graphe.querySelector('span').textContent = TEXTES.liste.voirConnexions;
+  const copier = document.createElement('button');
+  copier.type = 'button'; copier.textContent = T.copierLien;
+  copier.addEventListener('click', () => {
+    const adresse = location.origin + cheminFiche(r.adresse);
+    const fait = () => { copier.textContent = T.lienCopie; setTimeout(() => { copier.textContent = T.copierLien; }, 2000); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(adresse).then(fait, () => { window.prompt(T.copierLien, adresse); });
+    else window.prompt(T.copierLien, adresse);
+  });
+  rangee.append(graphe, copier);
+  return rangee;
+}
 
 function ouvrirFiche(adresse, { historique = true } = {}) {
   const r = parAdresse(adresse);
   if (!r) return false;
+  const fenetre = $('fenetreFiche');
   if (!ficheOuverte) focusAvant = document.activeElement;
   ficheOuverte = adresse;
-  $('contenuFiche').innerHTML = htmlFiche(r);
-  const titre = $('contenuFiche').querySelector('.fiche-nom');
+  const contenu = $('contenuFiche');
+  contenu.innerHTML = htmlFiche(r);
+  const titre = contenu.querySelector('.fiche-nom');
   if (titre) titre.id = 'titreFiche';
-  $('voile').hidden = false;
-  $('voile').scrollTop = 0;
+  const article = contenu.querySelector('.fiche') || contenu;
+  article.appendChild(blocActions(r));
+  const proches = blocProches(r);
+  if (proches) article.appendChild(proches);
+  // showModal() : le reste de la page devient inerte, le focus reste dans la fenêtre.
+  if (!fenetre.open) {
+    if (typeof fenetre.showModal === 'function') fenetre.showModal(); else fenetre.setAttribute('open', '');
+  }
+  fenetre.scrollTop = 0;
   document.body.style.overflow = 'hidden';
-  $('fenetre').focus();
-  document.title = `${r.nom} | Cartographie du RSN`;
-  if (historique && location.pathname !== `/ressource/${adresse}`) history.pushState({ fiche: adresse }, '', `/ressource/${adresse}`);
+  $('fermerFiche').focus();
+  document.title = TEXTES.titreOnglet(r.nom);
+  // Chaque fiche ouverte depuis la page ajoute une entrée : « Précédent » revient à la fiche d'avant, puis à l'accueil.
+  if (historique && location.pathname !== cheminFiche(adresse)) {
+    history.pushState({ fiche: adresse, profondeur: profondeur() + 1 }, '', cheminFiche(adresse));
+  }
   return true;
 }
 
-function fermerFiche({ historique = true } = {}) {
-  if (!ficheOuverte) return;
+// Referme la fenêtre sans toucher à l'historique.
+function masquerFiche() {
+  const fenetre = $('fenetreFiche');
+  const etaitOuverte = !!ficheOuverte;
   ficheOuverte = null;
-  $('voile').hidden = true;
+  if (fenetre.open) { if (typeof fenetre.close === 'function') fenetre.close(); else fenetre.removeAttribute('open'); }
   document.body.style.overflow = '';
   document.title = `${TEXTES.titre} | RSN`;
-  if (historique && location.pathname !== '/') history.pushState({}, '', '/');
-  if (focusAvant && document.contains(focusAvant)) focusAvant.focus();
+  if (etaitOuverte && focusAvant && document.contains(focusAvant)) focusAvant.focus();
+  focusAvant = null;
+}
+
+// Ferme la fiche et ramène l'adresse à l'accueil. Une fiche ouverte depuis
+// l'accueil : retour en arrière, sans ajouter d'entrée. Une arrivée directe sur
+// /ressource/<adresse> : l'entrée est remplacée par l'accueil.
+function fermerFiche() {
+  if (!ficheOuverte) return;
+  const pas = profondeur();
+  masquerFiche();
+  if (!adresseDansUrl()) return;
+  if (pas > 0) { fermetureEnCours = true; history.go(-pas); }
+  else history.replaceState({}, '', '/');
 }
 
 function adresseDansUrl() {
@@ -155,62 +552,157 @@ function adresseDansUrl() {
   return m ? m[1] : null;
 }
 
+// Met la page en accord avec l'adresse (bouton Précédent ou Suivant, arrivée directe).
 function suivreUrl() {
   const adresse = adresseDansUrl();
-  if (adresse) {
-    if (!ouvrirFiche(adresse, { historique: false })) fermerFiche({ historique: false });
-  } else fermerFiche({ historique: false });
+  const fermeture = fermetureEnCours;
+  fermetureEnCours = false;
+  if (!etat.pret) return;
+  if (adresse && fermeture) {
+    // On vient de fermer une fiche après une arrivée directe sur une autre : retour à l'accueil.
+    history.replaceState({}, '', '/');
+    masquerFiche();
+  } else if (adresse) {
+    if (!ouvrirFiche(adresse, { historique: false })) {
+      // Adresse inconnue : l'accueil, et l'adresse est corrigée.
+      history.replaceState({}, '', '/');
+      masquerFiche();
+    }
+  } else masquerFiche();
+}
+
+// « Voir ses connexions » : ferme la fiche, passe au graphe et y centre la ressource.
+function montrerConnexions(adresse) {
+  if (!parAdresse(adresse)) return;
+  fermerFiche();
+  definirVue('connexions');
+  $('vueHaut').scrollIntoView({ behavior: mouvementReduit() ? 'auto' : 'smooth', block: 'start' });
+  if (typeof api.centrerDansGraphe === 'function') api.centrerDansGraphe(adresse);
 }
 
 // ─── Événements ───
+function clicSimple(ev) { return !(ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey); }
+
 document.addEventListener('click', (ev) => {
-  if (ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey) return;
-  const motCle = ev.target.closest('[data-mot-cle]');
-  if (motCle) {
+  fermerMenus();
+  if (!clicSimple(ev)) return;
+  // Avant l'arrivée des données, les liens gardent leur comportement de lien ordinaire.
+  if (!etat.pret) return;
+  const cible = ev.target.closest('[data-vue], [data-mot-cle], [data-fiche], [data-graphe], [data-jeton], [data-porteur], [data-page]');
+  if (!cible) return;
+  if (cible.dataset.vue) { definirVue(cible.dataset.vue); return; }
+  if (cible.dataset.motCle !== undefined) {
     ev.preventDefault();
     fermerFiche();
-    $('champRecherche').value = motCle.dataset.motCle;
-    rafraichir();
-    $('filtres').scrollIntoView({ block: 'start' });
+    definirRecherche(cible.dataset.motCle);
+    $('fiches').scrollIntoView({ block: 'start' });
     return;
   }
-  const lien = ev.target.closest('[data-fiche]');
-  if (lien && parAdresse(lien.dataset.fiche)) { ev.preventDefault(); ouvrirFiche(lien.dataset.fiche); return; }
-  if (ev.target === $('voile')) fermerFiche();
+  if (cible.dataset.graphe) { montrerConnexions(cible.dataset.graphe); return; }
+  if (cible.dataset.fiche) {
+    if (parAdresse(cible.dataset.fiche)) { ev.preventDefault(); ouvrirFiche(cible.dataset.fiche); }
+    return;
+  }
+  if (cible.dataset.jeton) {
+    const valeur = cible.dataset.valeur;
+    if (cible.dataset.jeton === 'sujet') definirRecherche(plier(valeur) === plier(etat.requete) ? '' : valeur);
+    else basculerFiltre(cible.dataset.jeton, valeur);
+    return;
+  }
+  // « Voir les fiches de ce porteur », dans la fenêtre d'un lieu de la carte.
+  if (cible.dataset.porteur) {
+    definirFiltre('porteur', [cible.dataset.porteur]);
+    $('fiches').scrollIntoView({ behavior: mouvementReduit() ? 'auto' : 'smooth', block: 'start' });
+    return;
+  }
+  if (cible.dataset.page) allerPage(Number(cible.dataset.page));
 });
-document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && ficheOuverte) fermerFiche(); });
 window.addEventListener('popstate', suivreUrl);
 
+function brancherFenetres() {
+  const fenetre = $('fenetreFiche');
+  $('fermerFiche').addEventListener('click', fermerFiche);
+  // Échap : le navigateur demande la fermeture ; on la fait nous-mêmes pour remettre l'adresse.
+  fenetre.addEventListener('cancel', (ev) => { ev.preventDefault(); fermerFiche(); });
+  // Si le navigateur ferme tout de même la fenêtre (Échap répété), l'adresse et le focus suivent.
+  fenetre.addEventListener('close', () => { if (ficheOuverte) fermerFiche(); });
+  // Un clic sur le voile, hors de la fenêtre, la ferme.
+  for (const f of [fenetre, $('fenetreAide')]) {
+    f.addEventListener('click', (ev) => {
+      if (ev.target !== f) return;
+      const cadre = f.getBoundingClientRect();
+      const dedans = ev.clientX >= cadre.left && ev.clientX <= cadre.right && ev.clientY >= cadre.top && ev.clientY <= cadre.bottom;
+      if (dedans) return;
+      if (f === fenetre) fermerFiche(); else f.close();
+    });
+  }
+  $('fermerAide').addEventListener('click', () => $('fenetreAide').close());
+}
+
+function brancherPortrait() {
+  const bandeau = $('portrait');
+  try { if (localStorage.getItem('rsn-carto-portrait-replie') === '1') bandeau.classList.add('closed'); } catch (err) { /* sans mémoire : déplié */ }
+  $('basculePortrait').addEventListener('click', () => {
+    bandeau.classList.toggle('closed');
+    try { localStorage.setItem('rsn-carto-portrait-replie', bandeau.classList.contains('closed') ? '1' : '0'); } catch (err) { /* idem */ }
+    afficherPortrait();
+  });
+  $('triListe').addEventListener('change', () => { etat.tri = $('triListe').value; rafraichir(); });
+}
+
+function panne() {
+  etat.echec = true;
+  const message = $('texteChargement');
+  message.className = 'panne';
+  message.textContent = TEXTES.indisponible;
+  $('etatChargement').classList.remove('hidden');
+}
+
 function demarrer() {
-  $('fermerFiche').addEventListener('click', () => fermerFiche());
+  poserTextes();
+  majBoutonTheme();
+  majSelecteurVue();
+  $('boutonTheme').addEventListener('click', basculerTheme);
   $('effacerFiltres').addEventListener('click', toutEffacer);
-  $('lienAccueil').addEventListener('click', (ev) => { ev.preventDefault(); fermerFiche(); toutEffacer(); window.scrollTo(0, 0); });
-  let minuterie = null;
-  $('champRecherche').addEventListener('input', () => { clearTimeout(minuterie); minuterie = setTimeout(rafraichir, 120); });
+  // Logo : retour à l'accueil sans recharger. Sans les données, le lien reste un lien ordinaire.
+  $('lienAccueil').addEventListener('click', (ev) => {
+    if (!etat.pret || !clicSimple(ev)) return;
+    ev.preventDefault();
+    fermerFiche();
+    etat.tri = 'propose'; $('triListe').value = 'propose';
+    definirVue('carte');
+    toutEffacer();
+    window.scrollTo({ top: 0, behavior: mouvementReduit() ? 'auto' : 'smooth' });
+  });
+  brancherRecherche();
+  brancherFenetres();
+  brancherPortrait();
 
   fetch('/api/export', { cache: 'no-cache' })
     .then((rep) => { if (!rep.ok) throw new Error(`export ${rep.status}`); return rep.json(); })
     .then((donnees) => {
       etat.ressources = donnees.ressources || [];
       etat.carte = donnees.carte || { cle: '' };
-      etat.pret = true;
       construireIndex();
+      chiffres = statistiquesBandeau(etat.ressources, 6);
+      etat.pret = true;
       remplirFiltres();
       const q = new URLSearchParams(location.search).get('q');
       if (q) $('champRecherche').value = q;
       // La page d'une ressource servie par le serveur laisse la place à l'accueil complet.
       $('ficheStatique').hidden = true;
       $('accueil').hidden = false;
+      $('etatChargement').classList.add('hidden');
       rafraichir();
       suivreUrl();
     })
     .catch((err) => {
       console.error(err);
-      $('message').hidden = false;
-      $('message').textContent = TEXTES.indisponible;
+      panne();
     });
 }
 
-window.Cartographie = { etat, surChangement, ouvrirFiche, fermerFiche, definirFiltre, rafraichir };
+const api = { etat, surChangement, ouvrirFiche, fermerFiche, definirFiltre, basculerFiltre, definirVue, rafraichir, connexions, modeSombre, mouvementReduit, centrerDansGraphe: null };
+window.Cartographie = api;
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer); else demarrer();
 })();

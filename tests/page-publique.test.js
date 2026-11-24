@@ -24,7 +24,10 @@ test('rendrePage remplit le titre, la description, l\'adresse canonique et le co
   assert.ok(html.includes('<link rel="canonical" href="https://carto.exemple.org/ressource/cartagene">'));
   assert.ok(html.includes('<meta name="robots" content="index, follow">'));
   const corps = html.slice(html.indexOf('<main id="ficheStatique"'), html.indexOf('</main>'));
-  assert.ok(!corps.includes('hidden'), 'la fiche doit être visible sans JavaScript');
+  // L'attribut hidden du bloc est retiré (la fiche elle-même peut porter des aria-hidden décoratifs).
+  assert.ok(html.includes('<main id="ficheStatique" class="fiche-statique"><article'), 'la fiche doit être visible sans JavaScript');
+  assert.ok(!/<main[^>]*\shidden/.test(html), 'la fiche doit être visible sans JavaScript');
+  assert.ok(!/(?<!aria-)hidden/.test(corps), 'aucun élément de la fiche n\'est masqué');
   for (const attendu of ['CARTaGENE', 'Une grande cohorte.', 'Sur demande évaluée', 'href="https://www.cartagene.qc.ca/"']) {
     assert.ok(corps.includes(attendu), attendu);
   }
@@ -120,4 +123,37 @@ test('la fonction sert robots, plan du site et accueil', async () => {
   res = reponse(); await g(requete({ vue: 'accueil' }), res);
   assert.equal(res.code, 200);
   assert.ok(res.corps.includes('<link rel="canonical" href="https://carto.exemple.org/">'));
+});
+
+test('le gabarit garde chaque repère du serveur exactement une fois', () => {
+  const reperes = [
+    /<title>[^<]*<\/title>/g, /<meta name="description" content="[^"]*">/g, /<meta name="robots" content="noindex, nofollow">/g,
+    /<link rel="canonical" href="\/">/g, /<meta property="og:title" content="[^"]*">/g, /<meta property="og:description" content="[^"]*">/g,
+    /<script type="application\/ld\+json" id="donneesStructurees">[\s\S]*?<\/script>/g,
+    /<main id="ficheStatique" class="fiche-statique" hidden><!--FICHE--><\/main>/g, /<div id="accueil">/g,
+  ];
+  for (const re of reperes) assert.equal((gabarit.match(re) || []).length, 1, String(re));
+});
+
+test('le gabarit : chemins absolus, textes tous présents dans TEXTES, pas de tiret cadratin', () => {
+  const { TEXTES } = require('../js/texte.js');
+  const locaux = [...gabarit.matchAll(/(?:src|href)="([^"]+\.(?:js|css|png|webp))"/g)].map((m) => m[1]).filter((u) => !/^https:\/\//.test(u));
+  assert.ok(locaux.length >= 9);
+  for (const chemin of locaux) {
+    assert.ok(chemin.startsWith('/'), chemin);
+    assert.ok(fs.existsSync(path.join(__dirname, '..', chemin)), `${chemin} doit exister`);
+  }
+  const cles = [...gabarit.matchAll(/data-texte(?:-aria|-titre|-indice|-alt)?="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(cles.length > 20);
+  for (const cle of cles) {
+    const valeur = cle.split('.').reduce((o, k) => (o ? o[k] : undefined), TEXTES);
+    assert.equal(typeof valeur, 'string', `TEXTES.${cle}`);
+  }
+  // Le texte écrit dans le gabarit (affiché avant le script) est le même que celui de TEXTES.
+  for (const m of gabarit.matchAll(/data-texte="([^"]+)">([^<]*)</g)) {
+    const valeur = m[1].split('.').reduce((o, k) => (o ? o[k] : undefined), TEXTES);
+    assert.equal(m[2], valeur, m[1]);
+  }
+  assert.ok(!gabarit.includes('—'));
+  assert.ok(!JSON.stringify(TEXTES, (k, v) => (typeof v === 'function' ? String(v) : v)).includes('—'));
 });
