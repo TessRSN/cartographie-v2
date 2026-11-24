@@ -55,18 +55,6 @@
 
 <div id="accueil">
 
-    <!-- Barre de filtres pleine largeur ; les menus déroulants sont en verre. -->
-    <div class="controls" id="barreFiltres">
-        <div class="filters-row" id="rangeeFiltres">
-            <div class="filter-group"><label id="nomFiltreType" data-texte="filtres.type">Type</label><div id="filtreType" class="ms-wrap"></div></div>
-            <div class="filter-group"><label id="nomFiltreModeAcces" data-texte="filtres.modeAcces">Mode d'accès</label><div id="filtreModeAcces" class="ms-wrap"></div></div>
-            <div class="filter-group"><label id="nomFiltrePorteur" data-texte="filtres.porteur">Porteur</label><div id="filtrePorteur" class="ms-wrap"></div></div>
-            <div class="filter-group"><label id="nomFiltreEtat" data-texte="filtres.etat">État</label><div id="filtreEtat" class="ms-wrap"></div></div>
-        </div>
-        <div class="results-count" id="compte" aria-live="polite"></div>
-        <button type="button" class="reset-btn hidden" id="effacerFiltres" data-texte="filtres.effacer">Tout réinitialiser</button>
-    </div>
-
     <!-- Vue du haut : la carte ou le graphe des connexions, au choix. -->
     <div class="hero" id="vueHaut">
         <div class="hero-tools">
@@ -76,6 +64,12 @@
             </div>
             <!-- Sélection en cours, toujours visible sur la carte ou le graphe : une étiquette par filtre, avec sa croix, et « Tout réinitialiser ». -->
             <div class="selection glass hidden js-selection" role="group" data-texte-aria="selection.titre" aria-label="Sélection en cours"></div>
+            <!-- Types de ressources : légende des couleurs et filtre à la fois, en verre sur la carte ou le graphe. -->
+            <span class="rupture" aria-hidden="true"></span>
+            <section class="panneau-types glass hidden" id="panneauTypes" aria-labelledby="titrePanneauTypes">
+                <h2 id="titrePanneauTypes" data-texte="portrait.types">Types de ressources</h2>
+                <div id="listeTypes"></div>
+            </section>
         </div>
         <div id="zoneCarte">
             <div id="carte"></div>
@@ -125,6 +119,18 @@
             </div>
         </div>
         <div id="chargementConnexions" class="hidden" role="status"><p data-texte="graphe.calcul">Calcul des connexions…</p></div>
+    </div>
+
+    <!-- Barre de filtres pleine largeur, sous la vue du haut ; les menus déroulants sont en verre. -->
+    <div class="controls" id="barreFiltres">
+        <div class="filters-row" id="rangeeFiltres">
+            <div class="filter-group filtre-type"><label id="nomFiltreType" data-texte="filtres.type">Type</label><div id="filtreType" class="ms-wrap"></div></div>
+            <div class="filter-group"><label id="nomFiltreModeAcces" data-texte="filtres.modeAcces">Mode d'accès</label><div id="filtreModeAcces" class="ms-wrap"></div></div>
+            <div class="filter-group"><label id="nomFiltrePorteur" data-texte="filtres.porteur">Porteur</label><div id="filtrePorteur" class="ms-wrap"></div></div>
+            <div class="filter-group"><label id="nomFiltreEtat" data-texte="filtres.etat">État</label><div id="filtreEtat" class="ms-wrap"></div></div>
+        </div>
+        <div class="results-count" id="compte" aria-live="polite"></div>
+        <button type="button" class="reset-btn hidden" id="effacerFiltres" data-texte="filtres.effacer">Tout réinitialiser</button>
     </div>
 
     <!-- Bandeau dépliable « Portrait de la cartographie » : chiffres cliquables qui filtrent la carte et les fiches. -->
