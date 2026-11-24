@@ -1,6 +1,7 @@
 {
   "functions": {
-    "api/ressource.js": { "includeFiles": "gabarit.html" }
+    "api/export.js": { "maxDuration": 30 },
+    "api/ressource.js": { "includeFiles": "gabarit.html", "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/", "destination": "/api/ressource?vue=accueil" },

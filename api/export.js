@@ -14,32 +14,65 @@ async function lireNotion() {
   return assembler(ressources, porteurs);
 }
 
+const ATTENTE_AVEC_GARDE_MS = 4000;    // au-delà, la lecture gardée est servie
+const ATTENTE_SANS_GARDE_MS = 20000;   // au-delà, sans lecture gardée, la demande échoue
+const REPRISE_APRES_ECHEC_MS = 45000;  // pause avant de réinterroger Notion après un échec
+
+function delai(ms, message) {
+  let minuterie;
+  const promesse = new Promise((_, rejeter) => { minuterie = setTimeout(() => rejeter(new Error(message)), ms); });
+  return { promesse, annuler: () => clearTimeout(minuterie) };
+}
+
 // Fabrique une source de données avec mémoire. Séparée du gestionnaire pour
-// que les pages publiques (api/ressource.js) partagent la même lecture.
-function creerSource({ lire = lireNotion, maintenant = Date.now, dureeMs = DUREE_MEMOIRE_MS, journal = console.error } = {}) {
-  let garde = null;      // { a, donnees }
-  let enCours = null;    // lecture en vol, partagée entre appels simultanés
-  return async function source() {
-    if (garde && maintenant() - garde.a < dureeMs) return garde.donnees;
+// que les pages publiques (api/ressource.js) utilisent le même mécanisme.
+// Notion lent ou en panne : la dernière lecture réussie est servie sans attendre,
+// et Notion n'est pas réinterrogé à chaque visite.
+function creerSource({
+  lire = lireNotion, maintenant = Date.now, dureeMs = DUREE_MEMOIRE_MS, journal = console.error,
+  attenteMs = ATTENTE_AVEC_GARDE_MS, attenteSansGardeMs = ATTENTE_SANS_GARDE_MS, repriseMs = REPRISE_APRES_ECHEC_MS,
+} = {}) {
+  let garde = null;        // { a, donnees }
+  let enCours = null;      // lecture en vol, partagée entre appels simultanés
+  let dernierEchec = null; // moment du dernier échec
+
+  function lancer() {
     if (!enCours) {
       enCours = (async () => {
         try {
           const donnees = await lire();
           garde = { a: maintenant(), donnees: { ...donnees, genereLe: new Date(maintenant()).toISOString() } };
+          dernierEchec = null;
           return garde.donnees;
+        } catch (err) {
+          dernierEchec = maintenant();
+          throw err;
         } finally {
           enCours = null;
         }
       })();
+      enCours.catch(() => {}); // l'échec est traité par ceux qui attendent
     }
+    return enCours;
+  }
+
+  return async function source() {
+    if (garde && maintenant() - garde.a < dureeMs) return garde.donnees;
+    const enPause = dernierEchec !== null && maintenant() - dernierEchec < repriseMs;
+    if (garde && enPause) return garde.donnees;
+    if (!garde && enPause) throw new Error('Notion indisponible, nouvel essai différé');
+    const limite = delai(garde ? attenteMs : attenteSansGardeMs, 'Notion ne répond pas');
     try {
-      return await enCours;
+      return await Promise.race([lancer(), limite.promesse]);
     } catch (err) {
+      if (dernierEchec === null) dernierEchec = maintenant();
       if (garde) {
         journal('[export] Notion indisponible, données gardées servies :', err.message);
         return garde.donnees;
       }
       throw err;
+    } finally {
+      limite.annuler();
     }
   };
 }
@@ -70,7 +103,6 @@ function creerGestionnaire({ source, journal = console.error } = {}) {
 const donneesPubliques = creerSource();
 
 module.exports = creerGestionnaire({ source: donneesPubliques });
-module.exports.config = { maxDuration: 30 };
 module.exports.creerGestionnaire = creerGestionnaire;
 module.exports.creerSource = creerSource;
 module.exports.donneesPubliques = donneesPubliques;

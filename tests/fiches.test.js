@@ -105,3 +105,29 @@ test('seuls les porteurs d\'une fiche publique sortent, sans identifiant', () =>
   const resultat = assembler([brute('a', 'Fiche', { 'Porté par': f.rel('p1') })], porteurs);
   assert.deepEqual(resultat.porteurs, [{ nom: 'Utile', latitude: 45, longitude: -73 }]);
 });
+
+test('nomLisible traite les ligatures et borne la longueur', () => {
+  assert.equal(nomLisible('Cœur et Œil, Lætitia'), 'coeur-et-oeil-laetitia');
+  const long = nomLisible('mot '.repeat(80));
+  assert.ok(long.length <= 80, `longueur ${long.length}`);
+  assert.ok(!long.endsWith('-'));
+});
+
+test('une adresse reste acceptable par le serveur même pour un nom très long et des homonymes', () => {
+  const nom = 'Très long nom '.repeat(30);
+  const { ressources } = assembler([
+    brute('a', nom, { 'Porté par': f.rel('p1') }), brute('b', nom, { 'Porté par': f.rel('p1') }),
+  ], [porteur('p1', 'Porteur au nom lui aussi très long '.repeat(10))]);
+  for (const r of ressources) assert.match(r.adresse, /^[a-z0-9-]{1,200}$/);
+  assert.notEqual(ressources[0].adresse, ressources[1].adresse);
+});
+
+test('le logo sort seulement si c\'est une adresse http(s)', () => {
+  const { ressources } = assembler([
+    brute('a', 'Avec', { 'Logo': f.url('https://exemple.org/logo.png') }),
+    brute('b', 'Douteux', { 'Logo': f.url('javascript:alert(1)') }),
+    brute('c', 'Sans'),
+  ], []);
+  const parNom = Object.fromEntries(ressources.map((r) => [r.nom, r.logo]));
+  assert.deepEqual(parNom, { Avec: 'https://exemple.org/logo.png', Douteux: null, Sans: null });
+});

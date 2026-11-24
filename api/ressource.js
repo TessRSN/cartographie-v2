@@ -81,6 +81,5 @@ function creerGestionnaire({ source = donneesPubliques, gabarit = lireGabarit, j
 }
 
 module.exports = creerGestionnaire();
-module.exports.config = { maxDuration: 30 };
 module.exports.creerGestionnaire = creerGestionnaire;
 module.exports.origineDe = origineDe;

@@ -45,6 +45,7 @@ function pageRessource(id, nom, props = {}) {
       'Dictionnaire ou catalogue détaillé': url(null),
       'Dépôt de code': url(null),
       'Licence': rt(),
+      'Logo': url(null),
       'Statut de la fiche': sel('Brouillon'),
       'Fait partie de': rel(),
       'Repose sur': rel(),

@@ -76,3 +76,39 @@ test('la clé du fond de carte vient de l\'environnement, vide si absente', asyn
   assert.deepEqual(res.corps.carte, { cle: 'abc' });
   if (avant === undefined) delete process.env.CARTO_BASEMAP_KEY; else process.env.CARTO_BASEMAP_KEY = avant;
 });
+
+test('si Notion ne répond pas et qu\'une lecture est gardée, elle est servie sans attendre', async () => {
+  let bloque = false; let maintenant = 0;
+  const source = creerSource({
+    lire: () => (bloque ? new Promise(() => {}) : Promise.resolve(donnees)),
+    maintenant: () => maintenant, dureeMs: 10, attenteMs: 20, journal: () => {},
+  });
+  await source();
+  bloque = true; maintenant = 1000;
+  const resultat = await Promise.race([source(), new Promise((r) => setTimeout(() => r('trop long'), 500))]);
+  assert.notEqual(resultat, 'trop long');
+  assert.deepEqual(resultat.ressources, donnees.ressources);
+});
+
+test('après un échec, Notion n\'est pas réinterrogé avant le délai de reprise', async () => {
+  let appels = 0; let maintenant = 0; let echoue = false;
+  const source = creerSource({
+    lire: async () => { appels++; if (echoue) throw new Error('panne'); return donnees; },
+    maintenant: () => maintenant, dureeMs: 10, repriseMs: 30000, journal: () => {},
+  });
+  await source();
+  echoue = true; maintenant = 1000;
+  await source(); await source();
+  assert.equal(appels, 2, 'un seul nouvel essai pendant le délai de reprise');
+  maintenant = 1000 + 30001;
+  await source();
+  assert.equal(appels, 3);
+});
+
+test('sans lecture gardée, une lecture sans réponse finit par un 502', async () => {
+  const source = creerSource({ lire: () => new Promise(() => {}), attenteSansGardeMs: 20, journal: () => {} });
+  const gestionnaire = creerGestionnaire({ source, journal: () => {} });
+  const res = reponse();
+  await Promise.race([gestionnaire({ method: 'GET' }, res), new Promise((r) => setTimeout(r, 500))]);
+  assert.equal(res.code, 502);
+});
