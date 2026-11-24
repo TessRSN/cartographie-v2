@@ -157,3 +157,90 @@ test('le gabarit : chemins absolus, textes tous présents dans TEXTES, pas de ti
   assert.ok(!gabarit.includes('—'));
   assert.ok(!JSON.stringify(TEXTES, (k, v) => (typeof v === 'function' ? String(v) : v)).includes('—'));
 });
+
+// ─── Données structurées enrichies ───
+
+test('jeu de données : créateur, catalogue, accès, langues, bailleurs, portée', () => {
+  const d = donneesStructurees(fiche({
+    langues: ['Français', 'Anglais'], financePar: ['FRQ', 'Génome Québec'], portee: 'Le Québec',
+    typesDonnees: ['génomique', 'questionnaires'], modesAcces: ['Sur inscription', 'Sur demande évaluée'], frais: 'Non',
+  }), origine);
+  assert.deepEqual(d.creator, { '@type': 'Organization', name: 'CHU Sainte-Justine' });
+  assert.deepEqual(d.publisher, d.creator);
+  assert.deepEqual(d.includedInDataCatalog, { '@type': 'DataCatalog', name: 'Cartographie des ressources en santé numérique', url: 'https://carto.exemple.org/' });
+  assert.deepEqual(d.inLanguage, ['fr', 'en']);
+  assert.deepEqual(d.funder, [{ '@type': 'Organization', name: 'FRQ' }, { '@type': 'Organization', name: 'Génome Québec' }]);
+  assert.equal(d.spatialCoverage, 'Le Québec');
+  assert.deepEqual(d.variableMeasured, ['génomique', 'questionnaires']);
+  assert.equal(d.conditionsOfAccess, 'Sur inscription ; Sur demande évaluée');
+  assert.equal(d.isAccessibleForFree, true);
+});
+
+test('la gratuité n\'est déclarée que si la fiche la précise', () => {
+  assert.equal(donneesStructurees(fiche({ frais: 'Oui' }), origine).isAccessibleForFree, false);
+  assert.ok(!('isAccessibleForFree' in donneesStructurees(fiche({ frais: 'Non précisé' }), origine)));
+  assert.ok(!('isAccessibleForFree' in donneesStructurees(fiche({ frais: null }), origine)));
+});
+
+test('un mode d\'accès non précisé ou sans objet n\'est pas déclaré', () => {
+  assert.ok(!('conditionsOfAccess' in donneesStructurees(fiche({ modesAcces: ['Non précisé par la ressource'] }), origine)));
+  assert.ok(!('conditionsOfAccess' in donneesStructurees(fiche({ modesAcces: ['Sans objet'] }), origine)));
+  assert.ok(!('conditionsOfAccess' in donneesStructurees(fiche({ modesAcces: [] }), origine)));
+});
+
+test('la période n\'est déclarée que si elle se lit sans ambiguïté', () => {
+  const p = (periode) => donneesStructurees(fiche({ periode }), origine).temporalCoverage;
+  assert.equal(p('Depuis 1980'), '1980/..');
+  assert.equal(p('1995 à 2022'), '1995/2022');
+  assert.equal(p('2015'), '2015');
+  assert.equal(p('Suivi sur plus de dix ans'), undefined);
+  assert.equal(p('2020 à 2024 ; recrutement des adultes terminé le 14 février 2023'), undefined);
+  assert.equal(p(''), undefined);
+});
+
+test('une licence connue devient une adresse, une licence en texte libre reste telle quelle', () => {
+  const l = (licence, props = {}) => donneesStructurees(fiche({ licence, ...props }), origine).license;
+  assert.equal(l('MIT'), 'https://spdx.org/licenses/MIT.html');
+  assert.equal(l('GPL-3.0'), 'https://spdx.org/licenses/GPL-3.0.html');
+  assert.equal(l('CC BY 4.0'), 'https://creativecommons.org/licenses/by/4.0/');
+  assert.equal(l('CC BY-NC 4.0'), 'https://creativecommons.org/licenses/by-nc/4.0/');
+  assert.equal(l('Licence propre à CIVET (usage non commercial seulement)'), 'Licence propre à CIVET (usage non commercial seulement)');
+  assert.equal(l(''), undefined);
+});
+
+test('logiciel avec dépôt : le type couvre aussi le code source', () => {
+  const avec = donneesStructurees(fiche({ typePrincipal: 'Logiciel ou application', depotCode: 'https://github.com/exemple/outil', langues: ['Anglais'] }), origine);
+  assert.deepEqual(avec['@type'], ['SoftwareApplication', 'SoftwareSourceCode']);
+  assert.equal(avec.codeRepository, 'https://github.com/exemple/outil');
+  assert.deepEqual(avec.inLanguage, 'en');
+  assert.ok(!('creator' in avec));
+  assert.ok(!('includedInDataCatalog' in avec));
+  const sans = donneesStructurees(fiche({ typePrincipal: 'Logiciel ou application', depotCode: 'voir le site' }), origine);
+  assert.equal(sans['@type'], 'SoftwareApplication');
+  assert.ok(!('codeRepository' in sans));
+});
+
+test('service : fournisseur, territoire et nature du service, sans propriété réservée aux œuvres', () => {
+  const d = donneesStructurees(fiche({
+    typePrincipal: 'Service ou accompagnement', portee: 'Le Canada', langues: ['Français'], financePar: ['FRQ'], frais: 'Non', licence: 'MIT',
+  }), origine);
+  assert.equal(d['@type'], 'Service');
+  assert.deepEqual(d.provider, { '@type': 'Organization', name: 'CHU Sainte-Justine' });
+  assert.equal(d.areaServed, 'Le Canada');
+  assert.equal(d.serviceType, 'Service ou accompagnement');
+  for (const cle of ['inLanguage', 'funder', 'isAccessibleForFree', 'license', 'spatialCoverage', 'conditionsOfAccess', 'publisher', 'creator']) assert.ok(!(cle in d), cle);
+});
+
+test('une fiche minimale ne déclare aucun champ vide', () => {
+  const d = donneesStructurees(fiche({ autresNoms: '', motsCles: [], lien: '', porteurs: [], licence: '', frais: null, modesAcces: [], description: '', phrase: '' }), origine);
+  assert.deepEqual(Object.keys(d).sort(), ['@context', '@type', 'includedInDataCatalog', 'name', 'url']);
+});
+
+test('l\'accueil déclare le site avec son adresse, sa langue et son éditeur', () => {
+  const html = rendreAccueil(gabarit, { origine, indexation: true });
+  const bloc = JSON.parse(/<script type="application\/ld\+json" id="donneesStructurees">([\s\S]*?)<\/script>/.exec(html)[1]);
+  assert.equal(bloc['@type'], 'WebSite');
+  assert.equal(bloc.url, 'https://carto.exemple.org/');
+  assert.equal(bloc.inLanguage, 'fr');
+  assert.deepEqual(bloc.publisher, { '@type': 'Organization', name: 'Réseau santé numérique', url: 'https://rsn.quebec/' });
+});
