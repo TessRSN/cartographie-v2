@@ -42,7 +42,6 @@ const TEXTES = {
   indisponible: 'Les données ne sont pas disponibles pour le moment.',
   chargement: 'Chargement des ressources…',
   vues: { choisir: 'Choisir la vue', carte: 'Carte', connexions: 'Connexions', recentrer: 'Recentrer' },
-  accroche: { titre: 'Quelles ressources portent sur les mêmes sujets ?', lien: 'Voir les connexions' },
   carte: {
     titre: 'Carte',
     surLaCarte: (n) => (n === 0 ? 'Aucune ressource sur la carte' : n === 1 ? '1 ressource sur la carte' : `${n} ressources sur la carte`),
