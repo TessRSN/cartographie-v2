@@ -114,6 +114,8 @@
                 <div id="graphe"></div>
                 <button type="button" class="view-reset glass graph-reset js-recentrer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span data-texte="vues.recentrer">Recentrer</span></button>
                 <div id="calculConnexions" class="graphe-message hidden" role="status" data-texte="graphe.calcul">Calcul des connexions…</div>
+                <!-- Au clic sur un point : ce qui relie cette ressource aux autres, sujet par sujet. -->
+                <aside class="panneau-liens glass hidden" id="panneauLiens" aria-live="polite"></aside>
             </div>
             <div class="graphe-reglages">
                 <ul class="graphe-legende" id="legendeGraphe"></ul>
@@ -122,7 +124,7 @@
                 <span id="compteConnexions" aria-live="polite"></span>
             </div>
             <div id="introConnexions">
-                <span data-texte="graphe.intro">Chaque point est une ressource. Un trait relie deux ressources qui partagent des sujets distinctifs ; plus il est épais, plus la proximité est forte. Cliquez sur un point pour ouvrir la fiche, survolez un trait pour voir les sujets communs.</span>
+                <span data-texte="graphe.intro">Chaque point est une ressource. Un trait relie deux ressources qui partagent des sujets distinctifs ; plus il est épais, plus la proximité est forte. Cliquez sur un point pour voir ce qui le relie aux autres.</span>
                 <button type="button" id="boutonAide" class="reset-btn bouton-aide" data-texte-titre="graphe.aideBouton" title="Comment sont calculées les connexions ?" data-texte-aria="graphe.aideBouton" aria-label="Comment sont calculées les connexions ?">?</button>
             </div>
         </div>

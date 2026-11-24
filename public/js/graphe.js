@@ -85,6 +85,8 @@ function dessinerIcones(ctx) {
     const cx = p.x + rayon * 0.72, cy = p.y + rayon * 0.72;
     const c = couleursDe(n.cleType);
     ctx.save();
+    // Un point estompé (recherche, ressource choisie) garde une pastille estompée.
+    ctx.globalAlpha = typeof n.opacity === 'number' ? n.opacity : 1;
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI);
     ctx.fillStyle = c.fond; ctx.fill();
     ctx.lineWidth = Math.max(1, r * 0.22); ctx.strokeStyle = c.bord; ctx.stroke();
@@ -142,7 +144,7 @@ function couleurLogo(hex) {
 // Les titres sont de simples chaînes : vis-network les affiche comme du texte, jamais comme du HTML.
 function faireLien(l, couleur) {
   return {
-    id: `${l.a}|${l.b}`, from: l.a, to: l.b, value: l.poids,
+    id: `${l.a}|${l.b}`, from: l.a, to: l.b, value: l.poids, mots: l.motsCommuns,
     title: `${TEXTES.graphe.sujetsCommuns} : ${l.motsCommuns.join(' · ')}`,
     color: { color: couleur, highlight: '#a855f7', hover: '#a855f7' },
     // Le bottin divise par 6 des scores de 4 à 50 ; ici les scores vont de 1,6 à 16 environ.
@@ -254,6 +256,76 @@ function centrer(adresse, duree) {
   if (C.mouvementReduit()) appliquerCalme();
 }
 
+// ─── Liens d'une ressource : panneau ouvert au clic sur un point ───
+let choisie = null;   // adresse de la ressource dont on montre les liens
+
+// Les liens affichés de cette ressource, du plus fort au plus faible, vers des ressources visibles.
+function liensDe(adresse) {
+  return g.liens
+    .filter((l) => l.from === adresse || l.to === adresse)
+    .map((l) => ({ lien: l, autre: g.noeudsDS.get(l.from === adresse ? l.to : l.from) }))
+    .filter((v) => v.autre && !v.autre.hidden)
+    .sort((x, y) => y.lien.value - x.lien.value);
+}
+
+function choisir(adresse) {
+  if (!reseau || !g || !g.noeudsDS.get(adresse)) return;
+  choisie = adresse;
+  const voisines = liensDe(adresse);
+  // Les autres points s'effacent : on ne voit plus que la ressource et celles qui lui sont reliées.
+  const gardes = new Set([adresse, ...voisines.map((v) => v.autre.id)]);
+  g.noeudsDS.update(g.noeuds.map((n) => ({ id: n.id, opacity: gardes.has(n.id) ? 1 : 0.18 })));
+  reseau.selectNodes([adresse]);
+  afficherPanneauLiens(adresse, voisines);
+}
+
+function relacher() {
+  if (!choisie) return;
+  choisie = null;
+  $('panneauLiens').classList.add('hidden');
+  if (reseau) reseau.unselectAll();
+  appliquerFiltres();
+}
+
+// Construit par le DOM (textContent) : aucun texte de Notion n'est injecté comme HTML.
+function afficherPanneauLiens(adresse, voisines) {
+  const panneau = $('panneauLiens');
+  const noeud = g.noeudsDS.get(adresse);
+  const ressource = C.etat.ressources.find((r) => r.adresse === adresse) || {};
+  panneau.textContent = '';
+  const entete = document.createElement('div'); entete.className = `panneau-entete type-${noeud.cleType}`;
+  const titre = document.createElement('h2');
+  titre.innerHTML = puceType(noeud.cleType);
+  const nom = document.createElement('span'); nom.textContent = ressource.nom || noeud.label;
+  titre.appendChild(nom);
+  const fermer = document.createElement('button');
+  fermer.type = 'button'; fermer.className = 'member-modal-close'; fermer.textContent = '×';
+  fermer.title = TEXTES.graphe.fermerLiens; fermer.setAttribute('aria-label', TEXTES.graphe.fermerLiens);
+  fermer.addEventListener('click', relacher);
+  entete.append(titre, fermer);
+  const fiche = document.createElement('a');
+  fiche.className = 'card-action'; fiche.href = `/ressource/${adresse}`; fiche.dataset.fiche = adresse; fiche.textContent = TEXTES.liste.voirFiche;
+  const aide = document.createElement('p'); aide.className = 'panneau-aide';
+  aide.textContent = voisines.length ? TEXTES.graphe.relieeA(voisines.length) : TEXTES.graphe.sansLien;
+  const liste = document.createElement('ul');
+  for (const { lien, autre } of voisines) {
+    const li = document.createElement('li'); li.className = `type-${autre.cleType}`;
+    const bouton = document.createElement('button'); bouton.type = 'button';
+    bouton.innerHTML = puceType(autre.cleType);
+    const libelle = document.createElement('strong');
+    libelle.textContent = (C.etat.ressources.find((r) => r.adresse === autre.id) || {}).nom || autre.label;
+    bouton.appendChild(libelle);
+    bouton.addEventListener('click', () => { choisir(autre.id); centrer(autre.id, 500); });
+    const sujets = document.createElement('div'); sujets.className = 'card-chips-row';
+    for (const mot of lien.mots || []) { const p = document.createElement('span'); p.className = 'axe-chip'; p.textContent = mot; sujets.appendChild(p); }
+    li.append(bouton, sujets);
+    liste.appendChild(li);
+  }
+  panneau.append(entete, fiche, aide, liste);
+  panneau.classList.remove('hidden');
+  panneau.scrollTop = 0;
+}
+
 // ─── Filtres et recherche appliqués au graphe en place ───
 function appliquerFiltres() {
   if (!reseau || !g) return;
@@ -272,11 +344,13 @@ function appliquerFiltres() {
   const montres = new Set(majs.filter((m) => !m.hidden).map((m) => m.id));
   const liensMontres = g.liens.filter((l) => montres.has(l.from) && montres.has(l.to)).length;
   $('compteConnexions').textContent = TEXTES.graphe.compte(montres.size, liensMontres);
+  // Une ressource choisie reste mise en avant tant qu'elle est affichée ; sinon son panneau se referme.
+  if (choisie) { if (montres.has(choisie)) choisir(choisie); else { choisie = null; $('panneauLiens').classList.add('hidden'); } }
 
   // Aucun cadrage animé tant que le graphe est caché ou en cours de placement.
   const visible = !$('zoneConnexions').classList.contains('hidden');
   if (!visible || !calme) return;
-  if (aCentrer) { const adresse = aCentrer; aCentrer = null; if (montres.has(adresse)) centrer(adresse, 600); derniereCle = cle(etat); return; }
+  if (aCentrer) { const adresse = aCentrer; aCentrer = null; if (montres.has(adresse)) { centrer(adresse, 600); choisir(adresse); } derniereCle = cle(etat); return; }
   const signature = cle(etat);
   const change = derniereCle !== undefined && derniereCle !== signature;
   derniereCle = signature;
@@ -346,6 +420,7 @@ function construire() {
   g = { source: etat.ressources, liens: liensBruts.map((l) => faireLien(l, couleur)) };
   compterDegres();
   couleursIcones = new Map();
+  choisie = null; $('panneauLiens').classList.add('hidden');
   g.noeuds = bruts.map((n) => {
     const cleDuType = cleType(n.type);
     const r = parAdresse.get(n.adresse) || {};
@@ -399,7 +474,8 @@ function construire() {
   });
   reseau.on('zoom', auZoom);
   reseau.on('afterDrawing', dessinerIcones);
-  reseau.on('click', (p) => { if (p.nodes && p.nodes.length) C.ouvrirFiche(p.nodes[0]); });
+  // Un clic sur un point montre ce qui le relie aux autres ; un clic dans le vide referme le panneau.
+  reseau.on('click', (p) => { if (p.nodes && p.nodes.length) choisir(p.nodes[0]); else if (!p.edges || !p.edges.length) relacher(); });
   reseau.on('hoverNode', () => { conteneur.style.cursor = 'pointer'; });
   reseau.on('blurNode', () => { conteneur.style.cursor = ''; });
   // La zone de dessin suit la taille réelle de son cadre une fois celui-ci affiché.
@@ -478,6 +554,7 @@ C.centrerDansGraphe = function (adresse) {
 // Croix de l'étiquette « Connexions de : … » ou « Tout réinitialiser » : plus de ressource centrée, retour à la vue de départ.
 C.libererGraphe = function () {
   aCentrer = null;
+  if (choisie) { choisie = null; $('panneauLiens').classList.add('hidden'); if (reseau && g) appliquerFiltres(); }
   if (!reseau || !g || !calme || $('zoneConnexions').classList.contains('hidden')) return;
   reseau.unselectAll();
   vueDepart(true);
@@ -489,6 +566,7 @@ $('densiteConnexions').addEventListener('change', appliquerDensite);
 $('masquerIsoles').addEventListener('change', appliquerFiltres);
 document.querySelector('#zoneConnexions .js-recentrer').addEventListener('click', () => {
   if (!reseau) return;
+  relacher();
   reseau.unselectAll();
   reseau.once('animationFinished', appliquerCalme);
   vueDepart(true);

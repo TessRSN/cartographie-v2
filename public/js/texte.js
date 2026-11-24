@@ -57,13 +57,17 @@ const TEXTES = {
   },
   graphe: {
     titre: 'Connexions',
-    intro: 'Chaque point est une ressource. Un trait relie deux ressources qui partagent des sujets distinctifs ; plus il est épais, plus la proximité est forte. Cliquez sur un point pour ouvrir la fiche, survolez un trait pour voir les sujets communs.',
+    intro: 'Chaque point est une ressource. Un trait relie deux ressources qui partagent des sujets distinctifs ; plus il est épais, plus la proximité est forte. Cliquez sur un point pour voir ce qui le relie aux autres.',
     aideBouton: 'Comment sont calculées les connexions ?',
     calcul: 'Calcul des connexions…',
     densite: 'Liens : tous ↔ les plus forts',
     masquerIsoles: 'Masquer les ressources sans lien',
     compte: (n, l) => `${n} ${n > 1 ? 'ressources' : 'ressource'}, ${l} ${l > 1 ? 'connexions affichées' : 'connexion affichée'}`,
     sujetsCommuns: 'Sujets communs',
+    // Panneau des liens d'une ressource, ouvert au clic sur un point.
+    relieeA: (n) => (n > 1 ? `Reliée à ${n} ressources par leurs sujets communs` : 'Reliée à une ressource par leurs sujets communs'),
+    sansLien: "Cette ressource n'a de sujet distinctif en commun avec aucune autre.",
+    fermerLiens: 'Fermer et revenir à la vue d’ensemble',
     vide: 'Aucun lien entre les ressources affichées.',
     indisponible: "Le graphe n'a pas pu être chargé. Vérifiez votre connexion et rechargez la page.",
     aide: 'Deux ressources sont reliées quand elles partagent des sujets distinctifs.',
