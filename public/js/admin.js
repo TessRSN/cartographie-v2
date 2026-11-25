@@ -213,7 +213,7 @@ function ecranAccueil() {
   if (!a) return `${tete}<p class="muted" role="status">${e(T.chargement)}</p>`;
   const tuile = (n, textes) => `<button type="button" class="tile" data-act="voir-propositions"><strong>${Number(n)}</strong><span>${e(n > 1 ? textes.plusieurs : textes.une)}</span><small>${e(textes.aide)}</small></button>`;
   const activite = a.activite.length
-    ? a.activite.map((x) => `<div><div class="grow">${x.sorte === 'verification' ? '' : `<b>${e(x.qui || T.activite.quelquun)}</b> `}${e(texteActivite(x))}</div><span class="muted small">${e(jourEtHeure(x.quand))}</span></div>`).join('')
+    ? a.activite.map((x) => `<div><div class="grow">${x.sorte === 'verification' ? '' : `<b class="qui">${e(x.qui || T.activite.quelquun)}</b> `}${e(texteActivite(x))}</div><span class="muted small">${e(jourEtHeure(x.quand))}</span></div>`).join('')
     : `<div><div class="grow muted">${e(T.activite.aucune)}</div></div>`;
   const v = a.envois;
   return `${tete}
@@ -1911,12 +1911,19 @@ function formulaireInvitation() {
       <button type="submit" class="btn primary"${fige}>${e(q.enCours === 'inviter' ? T.enCours : I.bouton)}</button></div>
     ${erreurs}<p class="muted small">${e(I.aide)}</p></form>`;
 }
+// La couleur du point devant chaque ligne du journal, selon la famille du geste.
+const TEINTES_GESTE = {
+  'Approbation': 'ok', 'Fiche republiée': 'ok', 'Fiche vérifiée': 'ok', 'Invitation': 'ok', 'Fiche créée': 'ok', 'Porteur créé': 'ok',
+  'Refus': 'bad', 'Fiche écartée': 'bad', 'Personne retirée': 'bad',
+  'Second regard': 'warn', 'Fiche à revoir': 'warn', 'Modification proposée': 'warn', 'Rôle changé': 'warn',
+};
+const pointGeste = (geste) => `<span class="pt pt-${TEINTES_GESTE[geste] || 'info'}" aria-hidden="true"></span>`;
 function journalDeLEquipe() {
   const j = etat.equipe.journal; const J = EQ.journal;
   if (!j.actif) return `<p class="muted">${e(J.absent)}</p>`;
   if (!j.lu) return `<div class="note warn">${e(J.illisible)}</div>`;
   if (!j.lignes.length) return `<p class="muted">${e(J.vide)}</p>`;
-  return `<p class="muted small">${e(J.intro)}</p><div class="list">${j.lignes.map((l) => `<div><div class="grow"><b>${e(l.qui || J.ancienMembre)}</b> ${e(l.phrase)}</div><span class="muted small">${e(jourEtHeure(l.le))}</span></div>`).join('')}</div>`;
+  return `<p class="muted small">${e(J.intro)}</p><div class="list">${j.lignes.map((l) => `<div>${pointGeste(l.geste)}<div class="grow"><b class="qui">${e(l.qui || J.ancienMembre)}</b> ${e(l.phrase)}</div><span class="muted small">${e(jourEtHeure(l.le))}</span></div>`).join('')}</div>`;
 }
 function corpsEquipe() {
   if (!etat.equipe) return `<p class="muted" role="status">${e(T.chargement)}</p>`;
