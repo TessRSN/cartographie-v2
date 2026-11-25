@@ -40,7 +40,9 @@
 [data-theme="dark"] .f-groupe > h3 { color: var(--rsn-accent); }
 .champ { margin-top: 0.95rem; border: 0; padding: 0; min-width: 0; }
 .champ > label, .champ legend { display: block; font-size: 0.9rem; font-weight: 600; color: var(--ink); padding: 0; }
-.champ .oblig { font-weight: 500; font-size: 0.75rem; color: var(--muted-strong); margin-left: 0.35rem; }
+.champ .oblig { font-weight: 600; font-size: 0.75rem; color: #c53030; margin-left: 0.35rem; white-space: nowrap; }
+.champ .oblig::before { content: "* "; font-size: 0.95rem; }
+[data-theme="dark"] .champ .oblig { color: #feb2b2; }
 .champ .aide { font-size: 0.8rem; color: var(--muted-strong); margin-top: 0.1rem; line-height: 1.4; }
 .champ input[type="text"], .champ input[type="url"], .champ input[type="email"], .champ select, .champ textarea {
     width: 100%; margin-top: 0.35rem; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--rsn-border);
