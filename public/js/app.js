@@ -86,7 +86,7 @@ function construireIndex() {
   index = new Fuse(documents, {
     includeScore: true, threshold: 0.25, ignoreLocation: true, minMatchCharLength: 2,
     keys: [
-      { name: 'nom', weight: 3 }, { name: 'autresNoms', weight: 2 }, { name: 'motsCles', weight: 2 },
+      { name: 'nom', weight: 3 }, { name: 'autresNoms', weight: 2 }, { name: 'motsCles', weight: 2 }, { name: 'normes', weight: 2 },
       { name: 'porteurs', weight: 1.5 }, { name: 'phrase', weight: 1 }, { name: 'canon', weight: 1 }, { name: 'description', weight: 0.5 },
     ],
   });
@@ -580,11 +580,14 @@ function ouvrirFiche(adresse, { historique = true } = {}) {
   fenetre.scrollTop = 0;
   document.body.style.overflow = 'hidden';
   $('fermerFiche').focus();
-  document.title = TEXTES.titreOnglet(r.nom);
   // Chaque fiche ouverte depuis la page ajoute une entrée : « Précédent » revient à la fiche d'avant, puis à l'accueil.
   if (historique && location.pathname !== cheminFiche(adresse)) {
     history.pushState({ fiche: adresse, profondeur: profondeur() + 1 }, '', cheminFiche(adresse));
   }
+  // Le titre de l'onglet est changé APRÈS l'ajout de l'entrée : le navigateur garde pour chaque entrée
+  // le titre qu'elle avait en la quittant, et le réaffiche au retour. Changé avant, le nom de la fiche
+  // restait dans l'onglet une fois la fiche refermée.
+  document.title = TEXTES.titreOnglet(r.nom);
   return true;
 }
 

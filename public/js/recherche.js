@@ -29,10 +29,12 @@ function decouper(texte) {
 function documentDeRecherche(r) {
   const porteurs = (r.porteurs || []).map((p) => p.nom).join(' ');
   const motsCles = (r.motsCles || []).join(' ');
-  const tout = [r.nom, r.autresNoms, motsCles, porteurs, r.phrase, r.description].filter(Boolean).join(' ');
+  // Normes, formats et outils : on peut chercher « FHIR » ou « Docker ».
+  const normes = (r.normes || []).concat(r.outils || []).join(' ');
+  const tout = [r.nom, r.autresNoms, motsCles, normes, porteurs, r.phrase, r.description].filter(Boolean).join(' ');
   const canoniques = mots.motsCanoniques(tout);
   return {
-    r, nom: r.nom, autresNoms: r.autresNoms, motsCles, porteurs, phrase: r.phrase, description: r.description,
+    r, nom: r.nom, autresNoms: r.autresNoms, motsCles, normes, porteurs, phrase: r.phrase, description: r.description,
     canon: canoniques.join(' '), plie: mots.plier(tout),
     motsEntiers: new Set(decouper(tout)), motsCanoniques: new Set(canoniques),
   };

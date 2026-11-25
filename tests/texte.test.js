@@ -308,3 +308,22 @@ test('chaque type a son icône, tracée dans une grille de 24', () => {
   assert.notEqual(iconeType('jeu'), iconeType('catalogue'));
   assert.equal(puceType('jeu'), `<span class="puce-type">${iconeType('jeu')}</span>`);
 });
+
+// ─── Normes, outils, et cinq types ───
+
+test('htmlFiche affiche les normes et formats, et les outils, quand la fiche en a', () => {
+  const avec = htmlFiche(fiche('CODA', { normes: ['HL7 FHIR', 'CIM-10'], outils: ['Docker'] }));
+  assert.ok(avec.includes(TEXTES.fiche.normes) && avec.includes('HL7 FHIR') && avec.includes('CIM-10'));
+  assert.ok(avec.includes(TEXTES.fiche.outils) && avec.includes('Docker'));
+  const sans = htmlFiche(fiche('Vide', { normes: [], outils: [] }));
+  assert.ok(!sans.includes(TEXTES.fiche.normes) && !sans.includes(TEXTES.fiche.outils));
+  const hostile = htmlFiche(fiche('H', { normes: ['<b>x</b>'] }));
+  assert.ok(!hostile.includes('<b>x</b>'));
+});
+
+test('le site ne connaît plus que cinq types : « Initiative » est retiré', () => {
+  assert.deepEqual(Object.values(CLES_TYPE), ['jeu', 'catalogue', 'plateforme', 'logiciel', 'service']);
+  assert.equal(TEXTES.typesCourts.initiative, undefined);
+  assert.equal(TEXTES.typesAides.initiative, undefined);
+  assert.equal(require('../public/js/texte.js').TRACES_ICONES.initiative, undefined);
+});

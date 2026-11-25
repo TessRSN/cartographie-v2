@@ -57,3 +57,18 @@ test('porteurDepuisPage lit le lieu et le lien avec le bottin', () => {
   assert.equal(sans.institutionBottinId, null);
   assert.equal(sans.adresse, '');
 });
+
+test('ficheDepuisPage lit les normes et formats, et les outils et environnements', () => {
+  const page = { id: 'r-9', properties: {
+    Nom: { title: [{ plain_text: 'CODA' }] },
+    'Normes et formats': { multi_select: [{ name: 'HL7 FHIR' }, { name: 'DICOM' }] },
+    'Outils et environnements': { multi_select: [{ name: 'Docker' }] },
+  } };
+  const fiche = ficheDepuisPage(page);
+  assert.deepEqual(fiche.normes, ['HL7 FHIR', 'DICOM']);
+  assert.deepEqual(fiche.outils, ['Docker']);
+  // Une page sans ces colonnes donne des listes vides, rien d'inventé.
+  const sans = ficheDepuisPage({ id: 'r-10', properties: { Nom: { title: [{ plain_text: 'X' }] } } });
+  assert.deepEqual(sans.normes, []);
+  assert.deepEqual(sans.outils, []);
+});

@@ -122,3 +122,12 @@ test('suggestions : deux ou trois lettres ne proposent que des débuts de mot', 
   const liste = [fiche('A', { motsCles: ['IA', 'déterminants sociaux'], porteurs: [{ nom: 'Institut familial' }] })];
   assert.deepEqual(suggestions(liste, 'ia').map((x) => x.libelle), ['IA']);
 });
+
+test('la recherche lit aussi les normes et les outils d\'une fiche', () => {
+  const liste = [fiche('Avec', { normes: ['HL7 FHIR', 'DICOM'], outils: ['Docker'] }), fiche('Sans')];
+  const docs = documents(liste);
+  assert.ok(docs[0].plie.includes('fhir') && docs[0].plie.includes('docker'));
+  assert.equal(docs[0].normes, 'HL7 FHIR DICOM Docker');
+  assert.equal(docs[1].normes, '');
+  assert.deepEqual(noms(chercher(docs, 'fhir')), ['Avec']);
+});
