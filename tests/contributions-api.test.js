@@ -157,7 +157,7 @@ test('le formulaire de modification est prérempli, sans champ interne ni champ 
   assert.deepEqual(res.corps.fiche.valeurs.porteurs, ['CHUM']);
   const brut = JSON.stringify(res.corps);
   assert.ok(!brut.includes('secret') && !brut.includes('fiche-1') && !brut.includes('statutFiche'));
-  for (const reserve of ['etat', 'profilResponsable', 'faitPartieDe']) assert.ok(!(reserve in res.corps.fiche.valeurs), reserve);
+  for (const reserve of ['etat', 'faitPartieDe']) assert.ok(!(reserve in res.corps.fiche.valeurs), reserve);
   assert.equal(res.corps.dejaEnAttente, true);
 });
 

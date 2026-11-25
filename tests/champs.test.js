@@ -27,7 +27,7 @@ test('chaque champ du catalogue correspond à une colonne lue dans Notion', () =
   assert.deepEqual(LIENS_AVEC_RESSOURCE, ['responsable', 'jy-travaille', 'aucun']);
   assert.deepEqual(CHAMPS.filter((c) => c.section === 'donnees').map((c) => c.cle).sort(), ['collecte', 'dictionnaire', 'jumelage', 'periode', 'population', 'typesDonnees']);
   assert.deepEqual(CHAMPS.filter((c) => c.section === 'logiciel').map((c) => c.cle).sort(), ['depotCode', 'licence']);
-  assert.deepEqual(CHAMPS.filter((c) => c.role === 'approbateur').map((c) => c.cle).sort(), ['donneAccesA', 'etat', 'faitPartieDe', 'profilResponsable', 'remplace', 'reposeSur']);
+  assert.deepEqual(CHAMPS.filter((c) => c.role === 'approbateur').map((c) => c.cle).sort(), ['donneAccesA', 'etat', 'faitPartieDe', 'remplace', 'reposeSur']);
 });
 
 test('une saisie valide ressort rognée, sans erreur', () => {
@@ -46,9 +46,16 @@ test("un champ inconnu ou réservé aux approbateurs disparaît de la saisie d'u
 });
 
 test('un approbateur peut saisir les champs qui lui sont réservés', () => {
-  const { valeurs, erreurs } = nettoyer({ etat: 'Archivé', faitPartieDe: ['cartagene'], profilResponsable: 'https://bottin.rsn.quebec/x' }, { role: 'approbateur', options, genre: 'modification' });
+  const { valeurs, erreurs } = nettoyer({ etat: 'Archivé', faitPartieDe: ['cartagene'] }, { role: 'approbateur', options, genre: 'modification' });
   assert.deepEqual(erreurs, {});
-  assert.deepEqual(valeurs, { etat: 'Archivé', faitPartieDe: ['cartagene'], profilResponsable: 'https://bottin.rsn.quebec/x' });
+  assert.deepEqual(valeurs, { etat: 'Archivé', faitPartieDe: ['cartagene'] });
+});
+
+test('un proposant peut donner le lien du profil du responsable, si c\'est une adresse web', () => {
+  const bon = proposant({ ...base, responsable: 'Ada Lovelace', profilResponsable: ' https://exemple.org/ada ' });
+  assert.deepEqual(bon.erreurs, {});
+  assert.equal(bon.valeurs.profilResponsable, 'https://exemple.org/ada');
+  assert.ok(proposant({ ...base, profilResponsable: 'javascript:alert(1)' }).erreurs.profilResponsable);
 });
 
 test('une adresse web doit commencer par http:// ou https://', () => {

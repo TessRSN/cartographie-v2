@@ -142,6 +142,7 @@ const TEXTES = {
       doi: { libelle: 'DOI', aide: 'Sous la forme https://doi.org/…' },
       contact: { libelle: 'Courriel de contact', aide: 'Une adresse publique, affichée sur la fiche.' },
       responsable: { libelle: 'Responsable', aide: 'Le nom de la personne responsable, affiché sur la fiche.' },
+      profilResponsable: { libelle: 'Profil du responsable', aide: 'Un lien vers son profil universitaire ou sa page du bottin. Le nom du responsable y mènera.' },
       logo: { libelle: 'Logo', aide: 'Déposez une image, ou donnez son adresse sur le Web.' },
       population: { libelle: 'Population', aide: 'Qui est décrit par les données.' },
       periode: { libelle: 'Période couverte', aide: 'Par exemple 2009 à aujourd’hui.' },

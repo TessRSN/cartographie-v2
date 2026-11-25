@@ -412,3 +412,8 @@ test('textes du formulaire de contribution', () => {
   const tout = JSON.stringify(C, (cle, v) => (typeof v === 'function' ? v('X') : v));
   assert.ok(!tout.includes('—'), 'pas de tiret cadratin');
 });
+
+test('le profil du responsable suit le nom du responsable dans le formulaire', () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/js/proposer.js'), 'utf8');
+  assert.match(source, /\['contact', \['contact', 'responsable', 'profilResponsable'\]\]/);
+});

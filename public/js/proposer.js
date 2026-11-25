@@ -25,7 +25,7 @@ const GROUPES = [
   ['acces', ['modesAcces', 'commentAcceder', 'frais', 'reserveA', 'environnementSecurise']],
   ['portee', ['portee', 'langues']],
   ['sujets', ['motsCles', 'normes', 'outils']],
-  ['contact', ['contact', 'responsable']],
+  ['contact', ['contact', 'responsable', 'profilResponsable']],
 ];
 const PROPRES = {
   donnees: ['population', 'periode', 'typesDonnees', 'collecte', 'jumelage', 'dictionnaire'],
