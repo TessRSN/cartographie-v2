@@ -100,6 +100,9 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 1.1rem; }
 label.f, .f { display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; font-weight: 700; color: var(--muted); min-width: 0; }
 .f small { font-weight: 400; }
 input[type="text"], input[type="email"], input[type="number"], input[type="search"], input[type="url"], select, textarea { width: 100%; min-height: 40px; padding: .45rem .65rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--fg); font-weight: 400; font-size: .93rem; }
+/* Liste déroulante : flèche dessinée, à bonne distance du bord dans tous les navigateurs. */
+select { appearance: none; -webkit-appearance: none; padding-right: 2.3rem; cursor: pointer; background-repeat: no-repeat; background-position: right .8rem center; background-size: 15px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a94a0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
 textarea { min-height: 220px; resize: vertical; line-height: 1.5; }
 textarea.notes { min-height: 84px; }
 input[type="color"] { width: 44px; height: 40px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
@@ -239,6 +242,8 @@ body { margin: 0; }
 .t-plateforme { --t: var(--type-plateforme); --ts: var(--type-plateforme-sur); } .t-logiciel { --t: var(--type-logiciel); --ts: var(--type-logiciel-sur); }
 .t-service { --t: var(--type-service); --ts: var(--type-service-sur); }
 .pill.tp, .avatar.tp { background: var(--t, var(--surface2)); color: var(--ts, var(--muted)); }
+.who .tbtn.icone { width: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.who .tbtn.icone svg { width: 17px; height: 17px; }
 .who .tbtn { background: color-mix(in oklab, var(--on-brand) 14%, transparent); color: var(--on-brand); border: 1px solid color-mix(in oklab, var(--on-brand) 35%, transparent); border-radius: 999px; min-height: 36px; padding: .3rem .8rem; cursor: pointer; font-size: .84rem; }
 .cols.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .modal.wide { width: min(1100px, calc(100% - 32px)); }

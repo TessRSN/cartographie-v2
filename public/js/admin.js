@@ -533,7 +533,7 @@ function contenuFenetre() {
   const occupe = f.enCours ? ' disabled' : '';
   let actions = '';
   if (ouvert && peut()) {
-    actions = `<button type="button" class="btn primary" data-act="approuver"${f.enCours || ficheDisparue || approbationVide() ? ' disabled' : ''}>${e(f.enCours ? T.enCours : (nb ? T.approuverCorrige(nb) : T.approuver))}</button>
+    actions = `<button type="button" class="btn primary" data-act="demander-approbation"${f.enCours || ficheDisparue || approbationVide() ? ' disabled' : ''}>${e(f.enCours ? T.enCours : (nb ? T.approuverCorrige(nb) : T.approuver))}</button>
       ${p.statut === 'attente' ? `<button type="button" class="btn" data-act="second-regard" data-id="${e(p.id)}"${occupe}>${e(T.demanderSecondRegard)}</button>` : ''}
       <button type="button" class="btn danger" data-act="refuser"${occupe}>${e(T.refuser)}</button>`;
   }
@@ -832,6 +832,14 @@ document.addEventListener('click', async (evenement) => {
     return cible.setAttribute('aria-pressed', String(choisies.has(v)));
   }
   if (act === 'logo') { f.sansLogo = !f.sansLogo; return dessinerFenetre(); }
+  // « Approuver » ouvre la confirmation ; l'approbation ne part que du bouton de la confirmation.
+  if (act === 'demander-approbation') {
+    if (f.edition && !garder()) return;
+    f.confirmation = 'approbation'; dessinerFenetre();
+    const zone = $('#confirmationApprobation');
+    if (zone) { zone.scrollIntoView({ block: 'center' }); const oui = zone.querySelector('[data-act="approuver"]'); if (oui) oui.focus(); }
+    return;
+  }
   if (act === 'approuver') return trancher('approuver');
   if (act === 'refuser') { f.confirmation = 'refus'; dessinerFenetre(); const zone = $('#refusTxt'); if (zone) { zone.focus(); zone.scrollIntoView({ block: 'center' }); } return; }
   if (act === 'annuler-confirmation') { f.confirmation = null; f.commentaire = ''; delete f.erreurs.commentaire; return dessinerFenetre(); }
@@ -924,7 +932,16 @@ window.addEventListener('hashchange', () => {
 function theme() {
   return document.documentElement.getAttribute('data-theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 }
-function libelleTheme() { $('#boutonTheme').textContent = theme() === 'dark' ? T.modeClair : T.modeSombre; }
+// Le bouton montre seulement une icône : le soleil en mode sombre (pour passer au clair), la lune en mode clair.
+const ICONE_SOLEIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const ICONE_LUNE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+function libelleTheme() {
+  const bouton = $('#boutonTheme'); const sombre = theme() === 'dark';
+  bouton.classList.add('icone');
+  bouton.innerHTML = sombre ? ICONE_SOLEIL : ICONE_LUNE;
+  bouton.setAttribute('aria-label', sombre ? T.modeClair : T.modeSombre);
+  bouton.title = sombre ? T.modeClair : T.modeSombre;
+}
 function changerTheme() {
   const nouveau = theme() === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', nouveau);
