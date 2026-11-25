@@ -399,3 +399,72 @@ test('le formulaire d\'une nouvelle ressource : des champs vides et les listes d
   assert.deepEqual(d.existantes.porteurs, ['CHUM', 'Université McGill']);
   assert.ok(d.options.typePrincipal.length > 0);
 });
+
+// ─── Constats de la relecture ───
+test('rétablir est refusé si une version plus récente est illisible : la fiche ne reçoit pas un état mélangé', async () => {
+  const b = banc();
+  await enregistrer(b, { phrase: 'Deuxième.' }, { phrase: 'Une phrase.' });
+  await enregistrer(b, { phrase: 'Troisième.' }, { phrase: 'Deuxième.' });
+  // Le bloc de la version 3 est abîmé.
+  const [, page3] = pagesVersions(b);
+  b.faux.blocs.get(page3.id)[0].code.rich_text = [{ type: 'text', text: { content: 'pas du json' } }];
+  const ecritures = b.de('mettreAJourFiche').length;
+  const retour = await b.ressources.retablir({ repere: 'cohorte-x', numero: 1, par: TESS });
+  assert.equal(retour.code, 'invalide');
+  assert.match(retour.erreurs._, /illisible/);
+  assert.equal(b.de('mettreAJourFiche').length, ecritures);
+  assert.equal(b.fiches[0].phrase, 'Troisième.');
+  // Rétablir la version 3 elle-même (rien de plus récent n'est illisible) reste sans effet et sans erreur.
+  assert.equal((await b.ressources.retablir({ repere: 'cohorte-x', numero: 3, par: TESS })).inchangee, true);
+});
+
+test('rétablir : un champ qui ne peut plus revenir est laissé de côté et nommé, les autres reviennent', async () => {
+  const b = banc();
+  await enregistrer(b, { porteurs: ['Université McGill'] }, { porteurs: ['CHUM'] });
+  await enregistrer(b, { phrase: 'Deuxième.' }, { phrase: 'Une phrase.' });
+  // Le porteur de la version 1 a été renommé depuis.
+  b.porteurs.find((p) => p.nom === 'CHUM').nom = 'Centre hospitalier de l\'UdeM';
+  const retour = await b.ressources.retablir({ repere: 'cohorte-x', numero: 1, par: TESS });
+  assert.equal(retour.ok, true);
+  assert.deepEqual(retour.laisses, ['porteurs']);
+  assert.equal(retour.champs, 1);
+  assert.equal(b.fiches[0].phrase, 'Une phrase.');
+  assert.deepEqual(b.fiches[0].porteurIds, ['id-notion-mcgill'], 'les porteurs ne bougent pas');
+  const versions = await b.versions.lister('id-notion-x');
+  const derniere = versions[versions.length - 1];
+  assert.deepEqual(Object.keys(derniere.changements), ['phrase']);
+  assert.match(derniere.note, /Retour à la version 1/);
+});
+
+test('rétablir : si aucun champ ne peut revenir, rien n\'est écrit et les champs sont nommés', async () => {
+  const b = banc();
+  await enregistrer(b, { porteurs: ['Université McGill'] }, { porteurs: ['CHUM'] });
+  b.porteurs.find((p) => p.nom === 'CHUM').nom = 'Autre nom';
+  const ecritures = b.de('mettreAJourFiche').length;
+  const retour = await b.ressources.retablir({ repere: 'cohorte-x', numero: 1, par: TESS });
+  assert.equal(retour.code, 'invalide');
+  assert.ok(retour.erreurs.porteurs);
+  assert.equal(b.de('mettreAJourFiche').length, ecritures);
+});
+
+test('vider l\'adresse du logo ne retire pas l\'image déposée', async () => {
+  const fiches = [brute({ logo: 'https://vieux.exemple/logo.png', logoFichier: 'logo.png', logoFichierUrl: 'https://notion.exemple/x' })];
+  const b = banc({ fiches });
+  const retour = await enregistrer(b, { logo: '' }, { logo: 'https://vieux.exemple/logo.png' });
+  assert.equal(retour.ok, true);
+  assert.ok(!(PROP.logoFichier in b.de('mettreAJourFiche')[0].proprietes));
+  assert.equal(b.fiches[0].logoFichier, 'logo.png');
+});
+
+test('ajouter une ressource qui ressemble à une fiche existante demande confirmation', async () => {
+  const b = banc();
+  for (const proche of [{ ...NEUVE, lien: 'https://WWW.cohorte-x.org/' }, { ...NEUVE, nom: 'cohorte  x' }, { ...NEUVE, nom: 'Vieille Fiche' }]) {
+    const retour = await b.ressources.creer({ valeurs: proche, par: TESS });
+    assert.equal(retour.code, 'ressemble', JSON.stringify(proche).slice(0, 60));
+    assert.ok(['Cohorte X', 'Vieille fiche'].includes(retour.nom));
+  }
+  assert.equal(b.de('creerFiche').length, 0);
+  const force = await b.ressources.creer({ valeurs: { ...NEUVE, lien: 'https://WWW.cohorte-x.org/' }, par: TESS, malgreRessemblance: true });
+  assert.equal(force.ok, true);
+  assert.equal(b.de('creerFiche').length, 1);
+});

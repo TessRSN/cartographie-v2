@@ -56,7 +56,7 @@ const CONTENUS_TRANCHEES_MAX = 40;
 const ACTIVITE_MAX = 20;
 // Jour d'envoi du résumé hebdomadaire : celui du planificateur (« crons » dans vercel.json), vérifié par un essai.
 const JOUR_RESUME = 'lundi';
-const CODES = { 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
+const CODES = { 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
 const CLES = new Set(CHAMPS.map((c) => c.cle));
 const idValide = (id) => typeof id === 'string' && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(id);
 const estObjet = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -262,7 +262,7 @@ function creerGestionnaire(donnees) {
         let retour;
         if (action === 'creer') {
           if (!estObjet(corps.valeurs)) return illisible();
-          retour = await d.ressources.creer({ valeurs: corps.valeurs, par: approbateur });
+          retour = await d.ressources.creer({ valeurs: corps.valeurs, par: approbateur, malgreRessemblance: corps.malgreRessemblance === true });
         } else {
           if (!repereValide(corps.fiche)) return illisible();
           if (action === 'enregistrer' && !(estObjet(corps.valeurs) && estObjet(corps.depart))) return illisible();
@@ -339,7 +339,7 @@ function creerGestionnaire(donnees) {
       const resultat = action === 'approuver'
         ? await d.approbation.approuver({ propositionId: id, corrections: objet(corps.corrections), porteursNouveaux: adressesDe(corps.porteursNouveaux), sansLogo: corps.sansLogo === true, approbateur, origine })
         : await d.approbation.refuser({ propositionId: id, commentaire, approbateur });
-      if (resultat.ok) return res.status(200).json({ ok: true, courriel: !!resultat.courriel });
+      if (resultat.ok) return res.status(200).json({ ok: true, courriel: !!resultat.courriel, historique: resultat.historique !== false });
       return res.status(CODES[resultat.code] || 502).json({ code: resultat.code, erreurs: resultat.erreurs });
     } catch (err) {
       d.journal(`[admin] ${action} impossible :`, err.message);

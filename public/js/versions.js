@@ -43,7 +43,9 @@ function avecDepart(versions) {
 function reconstituer(actuelle, versions, numero) {
   const valeurs = {};
   for (const { cle } of CHAMPS) valeurs[cle] = copie(cle, actuelle ? actuelle[cle] : null);
-  const plusRecentes = (versions || []).filter((v) => v.numero > numero).sort((a, b) => b.numero - a.numero);
+  // De la plus récente à la plus ancienne ; à numéro égal (deux écritures simultanées), la date départage.
+  const plusRecentes = (versions || []).filter((v) => v.numero > numero)
+    .sort((a, b) => b.numero - a.numero || String(b.le || '').localeCompare(String(a.le || '')));
   for (const version of plusRecentes) {
     const changements = changementsLisibles(version.changements);
     for (const cle of Object.keys(changements)) valeurs[cle] = copie(cle, changements[cle].avant);

@@ -201,7 +201,7 @@ test('approuver transmet les corrections au nom de la personne en session', asyn
   const b = banc();
   const res = await appeler(b, requete('POST', 'approuver', { body: { id: ID, corrections: { phrase: 'Corrigée.' }, porteursNouveaux: { X: '2 rue Y' }, sansLogo: true, approbateur: 'intrus@exemple.org' } }));
   assert.equal(res.code, 200);
-  assert.deepEqual(res.corps, { ok: true, courriel: true });
+  assert.deepEqual(res.corps, { ok: true, courriel: true, historique: true });
   assert.deepEqual(b.de('approuver'), [{ propositionId: ID, corrections: { phrase: 'Corrigée.' }, porteursNouveaux: { X: '2 rue Y' }, sansLogo: true, approbateur: TESS, origine: 'https://carto.exemple' }]);
 });
 

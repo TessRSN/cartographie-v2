@@ -176,3 +176,13 @@ test('une panne de Notion pendant l\'écriture remonte à qui appelle', async ()
 test('le verrou d\'une fiche porte un nom à part de celui des propositions', () => {
   assert.equal(cleVerrouFiche('abc'), 'fiche:abc');
 });
+
+test('deux versions du même numéro : la plus récente par la date est remontée la première', () => {
+  const { reconstituer } = require('../public/js/versions.js');
+  const versions = [
+    { numero: 2, le: '2026-11-25T10:00:00.000Z', changements: { phrase: { avant: 'a', apres: 'b' } } },
+    { numero: 2, le: '2026-11-25T11:00:00.000Z', changements: { phrase: { avant: 'b', apres: 'c' } } },
+  ];
+  assert.equal(reconstituer({ phrase: 'c' }, versions, 1).phrase, 'a');
+  assert.equal(reconstituer({ phrase: 'c' }, [...versions].reverse(), 1).phrase, 'a');
+});

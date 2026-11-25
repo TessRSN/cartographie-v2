@@ -758,7 +758,7 @@ async function trancher(action) {
   f.enCours = false;
   if (r.ok) {
     etat.f = null; dessinerFenetre();
-    message((action === 'refuser' ? T.refusee : T.approuvee)(r.donnees.courriel));
+    message((action === 'refuser' ? T.refusee : T.approuvee)(r.donnees.courriel, r.donnees.historique !== false));
     return charger();
   }
   echecDuGeste(r);
@@ -854,7 +854,7 @@ function corpsRessources() {
   const C = T.ressources.tableau;
   return `${alerte}<div class="scroll"><table><thead><tr><th>${e(C.ressource)}</th><th>${e(C.type)}</th><th>${e(C.porteurs)}</th><th>${e(C.statut)}</th><th>${e(C.verifiee)}</th><th>${e(C.versions)}</th><th>${e(C.dernier)}</th></tr></thead><tbody>${liste.map((r) => `
     <tr data-act="ouvrir-fiche" data-id="${e(r.id)}" tabindex="0"><td><span class="row" style="flex-wrap:nowrap"><span class="avatar tp t-${cleType(r.typePrincipal)}">${e(initiales(r.nom))}</span><span><b>${e(r.nom || T.sansNom)}</b>${r.enAttente ? `<br><span class="pill p-warn">${e(T.ressources.enAttente(Number(r.enAttente)))}</span>` : ''}</span></span></td>
-      <td>${pastilleType(r.typePrincipal)}</td><td>${e(r.porteurs.join(' ; ')) || `<span class="muted">${e(T.ressources.aucunPorteur)}</span>`}</td><td>${pastilleStatut(r.statut)}</td>
+      <td>${pastilleType(r.typePrincipal)}</td><td>${e(r.porteurs.join(' | ')) || `<span class="muted">${e(T.ressources.aucunPorteur)}</span>`}</td><td>${pastilleStatut(r.statut)}</td>
       <td class="num">${r.verifieeLe ? e(jour(r.verifieeLe)) + pastilleAncienne(r.verifieeLe) : `<span class="muted">${e(T.ressources.jamais)}</span>`}</td>
       <td class="num">${Number(r.versions)}</td>
       <td class="num">${r.dernier ? `${e(jour(r.dernier.le))}<br><span class="muted small">${e(r.dernier.par || T.inconnue)}</span>` : `<span class="muted">${e(T.ressources.aucunChangement)}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
@@ -1168,11 +1168,16 @@ async function enregistrerFiche() {
   const modifs = modificationsFiche();
   if (!Object.keys(modifs).length) return message(T.ressources.rienAEnregistrer);
   const corps = f.nouvelle
-    ? { valeurs: modifs }
+    ? { valeurs: modifs, malgreRessemblance: f.ressembleA === JSON.stringify(modifs) }
     : { fiche: f.id, valeurs: modifs, depart: Object.fromEntries(Object.keys(modifs).map((cle) => [cle, f.depart[cle]])) };
   f.enCours = true; f.erreurs = {}; f.conflits = {}; f.note = null; f.confirmation = null; dessinerFenetre();
   const r = await appel(f.nouvelle ? 'creer' : 'enregistrer', { corps });
   if (etat.r !== f) return;
+  if (!r.ok && f.nouvelle && r.donnees.code === 'ressemble') {
+    // La même saisie envoyée une seconde fois vaut confirmation.
+    f.enCours = false; f.ressembleA = JSON.stringify(modifs);
+    return noter('warn', T.ressources.ressemble(String(r.donnees.nom || '')));
+  }
   if (!r.ok) { f.enCours = false; return echecFiche(r); }
   if (f.nouvelle) {
     etat.r = null; dessinerFenetre();
@@ -1228,7 +1233,8 @@ async function retablirVersion(numero) {
     f.enCours = false; f.confirmation = null; dessinerFenetre();
     return message(H.identique);
   }
-  message(H.retablie(numero, r.donnees.numero ? Number(r.donnees.numero) : 0));
+  const laisses = Array.isArray(r.donnees.laisses) ? r.donnees.laisses.filter((cle) => PAR_CLE[cle]).map(libelle) : [];
+  message(H.retablie(numero, r.donnees.numero ? Number(r.donnees.numero) : 0) + (laisses.length ? ` ${H.laisses(laisses.join(', '))}` : ''));
   await rechargerFiche(r.donnees.id);
   charger();
 }
@@ -1283,7 +1289,7 @@ function lignesCsv(liste) {
     return /[",\n\r;]/.test(texte) ? `"${texte.replace(/"/g, '""')}"` : texte;
   };
   return [T.ressources.csv.colonnes, ...liste.map((r) => [r.nom, r.typePrincipal || '', r.porteurs.join(' ; '), T.ressources.statuts[r.statut] || '', r.lien || '', r.contact || '', r.verifieeLe || '', r.versions])]
-    .map((ligne) => ligne.map(enCsv).join(','));
+    .map((ligne) => ligne.map(enCsv).join(';'));
 }
 const fichesAExporter = () => fichesFiltrees(etat.csv.toutes);
 function contenuCsv() {

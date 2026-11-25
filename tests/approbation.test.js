@@ -591,7 +591,13 @@ test('l\'approbation réussit même si la version ne peut pas s\'écrire', async
     assert.equal(retour.courriel, true);
     assert.equal(b.de('marquerDecision')[0].statut, 'approuvee');
     assert.equal(b.de('courriel.approuvee').length, 1);
+    assert.equal(retour.historique, false, 'le geste dit que l\'historique n\'a pas pu être écrit');
   }
+});
+
+test('une approbation dont la version s\'écrit le dit aussi', async () => {
+  const b = banc({ proposition: MODIFICATION, avecVersions: true });
+  assert.equal((await approuver(b)).historique, true);
 });
 
 test('la décision échoue puis réussit : la fiche a changé une fois, une seule version', async () => {
