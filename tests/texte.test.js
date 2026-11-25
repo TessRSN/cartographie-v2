@@ -229,19 +229,19 @@ test('cleAcces : une teinte par mode d\'accès, neutre pour le reste', () => {
   assert.equal(TEXTES.acces('Non précisé par la ressource'), 'Accès : non précisé par la ressource');
 });
 
-test('htmlCarteFiche : l\'accès est précédé de son libellé et porte sa teinte ; trois sujets cliquables, puis « +n »', () => {
+test('htmlCarteFiche : l\'accès est précédé de son libellé et porte sa teinte ; deux sujets cliquables, puis « +n »', () => {
   const html = htmlCarteFiche(fiche('A', {
     modesAcces: ['Ouvert', 'Non précisé par la ressource'],
     motsCles: ['génomique', '<b>IA</b>', 'cohorte', 'oncologie', 'imagerie'],
   }));
   assert.ok(html.includes('<span class="axe-chip acces acces-ouvert">Accès : Ouvert</span>'));
   assert.ok(html.includes('<span class="axe-chip acces acces-neutre">Accès : non précisé par la ressource</span>'));
-  assert.equal((html.match(/data-mot-cle=/g) || []).length, 3);
+  assert.equal((html.match(/data-mot-cle=/g) || []).length, 2);
   assert.ok(html.includes('href="/?q=g%C3%A9nomique" data-mot-cle="génomique"'));
   assert.ok(html.includes('data-mot-cle="&lt;b&gt;IA&lt;/b&gt;"'));
   assert.ok(!html.includes('<b>'));
-  assert.ok(html.includes('title="oncologie · imagerie">+2'));
-  const sans = htmlCarteFiche(fiche('B', { motsCles: ['un', 'deux', 'trois'] }));
+  assert.ok(html.includes('title="cohorte · oncologie · imagerie">+3'));
+  const sans = htmlCarteFiche(fiche('B', { motsCles: ['un', 'deux'] }));
   assert.ok(!sans.includes('chip-more'));
   assert.ok(!sans.includes('Accès'));
   // Dans la fiche, la ligne s'appelle déjà « Mode d'accès » : la teinte, sans le libellé.
@@ -370,4 +370,20 @@ test('la mention du bas dit seulement d\'où vient la fiche', () => {
 test('la carte porte un bandeau de type, avec son icône', () => {
   const html = htmlCarteFiche(fiche('X', { typePrincipal: 'Logiciel ou application' }));
   assert.match(html, /<div class="card-bandeau type-logiciel" title="Logiciel ou application"><span class="puce-type"><svg class="icone-type"/);
+});
+
+// ─── Carte plus complète : site, portée ───
+
+test('la carte donne le lien vers le site de la ressource et sa portée', () => {
+  const html = htmlCarteFiche(fiche('CODA', { lien: 'https://www.coda-platform.com/', portee: 'Le Québec', motsCles: ['a1', 'b2', 'c3', 'd4'] }));
+  assert.ok(html.includes('<a class="card-site" href="https://www.coda-platform.com/" target="_blank" rel="noopener noreferrer">'));
+  assert.ok(html.includes(TEXTES.fiche.visiter));
+  assert.ok(html.includes('<span class="axe-chip portee">Portée : Le Québec</span>'));
+  // Deux sujets visibles, les autres comptés : la carte ne s'allonge pas.
+  assert.ok(html.includes('>a1<') && html.includes('>b2<') && !html.includes('>c3<') && html.includes('>+2<'));
+});
+
+test('sans lien sûr ni portée, la carte n\'affiche ni bouton ni étiquette vide', () => {
+  const html = htmlCarteFiche(fiche('X', { lien: 'javascript:alert(1)', portee: null }));
+  assert.ok(!html.includes('card-site') && !html.includes('alert(1)') && !html.includes('axe-chip portee'));
 });

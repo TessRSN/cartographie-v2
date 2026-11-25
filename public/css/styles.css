@@ -475,6 +475,15 @@ body {
 .chip-more { font-size: 0.72rem; line-height: 1.6; padding: 0.1rem 0.4rem; color: var(--muted-strong); cursor: default; }
 a.axe-chip.mot-cle { font-size: 0.76rem; padding: 0.3rem 0.6rem; }
 a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2px; }
+/* Bouton vers le site de la ressource, en bas de la carte, juste au-dessus des actions. */
+.card-liens { margin-top: auto; display: flex; }
+.card-site { display: inline-flex; align-items: center; min-height: 32px; padding: 0 0.85rem; border: 1px solid var(--rsn-border); border-radius: 999px; background: var(--rsn-card-bg); color: var(--rsn-secondary); font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: border-color 0.15s, background 0.15s; }
+.card-site:hover, .card-site:focus-visible { border-color: var(--rsn-accent); background: var(--rsn-light); }
+[data-theme="dark"] .card-site { color: var(--rsn-accent); }
+[data-theme="dark"] .card-site:hover, [data-theme="dark"] .card-site:focus-visible { background: rgba(144,205,244,0.12); }
+.card-liens + .card-foot { margin-top: 0; }
+/* Portée : une étiquette neutre, à côté du mode d'accès. */
+.axe-chip.portee, [data-theme="dark"] .axe-chip.portee { background: var(--acces-neutre-fond); color: var(--acces-neutre-texte); font-weight: 600; font-size: 0.7rem; padding: 0.15rem 0.5rem; }
 .card-foot { margin-top: auto; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0 0.75rem; padding-top: 0.3rem; border-top: 1px solid var(--rsn-border); }
 .card-action { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; padding: 0; border: 0; background: none; color: var(--rsn-secondary); text-decoration: none; font: inherit; font-size: 0.86rem; font-weight: 600; cursor: pointer; }
 [data-theme="dark"] .card-action { color: var(--rsn-accent); }
