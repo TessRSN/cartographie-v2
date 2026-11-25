@@ -56,7 +56,7 @@ function creerSource({
     return enCours;
   }
 
-  return async function source() {
+  async function source() {
     if (garde && maintenant() - garde.a < dureeMs) return garde.donnees;
     const enPause = dernierEchec !== null && maintenant() - dernierEchec < repriseMs;
     if (garde && enPause) return garde.donnees;
@@ -74,7 +74,10 @@ function creerSource({
     } finally {
       limite.annuler();
     }
-  };
+  }
+  // Oublie la lecture gardée : la prochaine demande relit Notion (après une approbation).
+  source.vider = () => { garde = null; dernierEchec = null; };
+  return source;
 }
 
 function creerGestionnaire({ source, journal = console.error } = {}) {
