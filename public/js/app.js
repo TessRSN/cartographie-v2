@@ -375,6 +375,9 @@ function afficherPortrait() {
   $('panneauTypes').classList.remove('hidden');
   const requetePliee = plier(etat.requete);
   $('sujetsPrincipaux').innerHTML = chiffres.sujets.map((s) => jeton('sujet', s.sujet, s.nombre, s.sujet, plier(s.sujet) === requetePliee)).join('');
+  // Un clic sur une norme coche le filtre « Normes et formats ». La ligne disparaît si aucune fiche n'en porte.
+  $('normesPrincipales').innerHTML = chiffres.normesPrincipales.map((n) => jeton('norme', n.norme, n.nombre, n.norme, etat.filtres.norme.includes(n.norme))).join('');
+  $('rangeeNormes').hidden = !chiffres.normesPrincipales.length;
   $('porteursPrincipaux').innerHTML = chiffres.porteursPrincipaux.map((p) => jeton('porteur', p.nom, p.nombre, nomCourt(p.nom), etat.filtres.porteur.includes(p.nom), p.nom)).join('');
   const ouvert = !bandeau.classList.contains('closed');
   $('libelleBascule').textContent = ouvert ? T.replier : T.deplier;
