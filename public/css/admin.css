@@ -309,3 +309,10 @@ del { background: var(--bad-bg); color: var(--bad); text-decoration: line-throug
 /* Saisie d'une liste : étiquettes et champ d'ajout sur la même rangée. */
 .ajout { display: flex; flex-wrap: wrap; gap: .4rem; align-self: stretch; }
 .ajout input { flex: 1 1 180px; width: auto; }
+/* Fenêtre d'une fiche : les champs du catalogue, les listes et leurs alertes. */
+.fields { align-items: start; }
+.fields .f > label { display: block; }
+.fields .f .liste { display: flex; flex-direction: column; gap: .5rem; }
+.fields .f .note, .fields .f .muted.small { font-weight: 400; }
+.fields .f .chips .muted { align-self: center; }
+.tl .confirm { align-self: stretch; }

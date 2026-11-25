@@ -1,5 +1,6 @@
 /**
  * Page /admin : le panneau d'administration de la cartographie. Lot 1 : accueil et propositions.
+ * Lot 2 : ressources (tableau des fiches, modification, historique des versions, export).
  * On y entre par un lien reçu par courriel (?jeton=…), qui ouvre une session de sept jours.
  * La structure, les classes et les fonctions de rendu viennent de la maquette validée ; les données
  * viennent de /api/admin. Le rôle est celui de la personne connectée : l'affichage masque ce qu'il
@@ -14,12 +15,13 @@ const TC = TEXTES.contribuer;
 const e = echapper;
 const { CHAMPS, estVide, egales, departPanneau, correctionsPanneau } = window.Champs;
 const { comparerTextes, comparerListes } = window.Comparaison;
+const { reconstituer } = window.Versions;
 const PAR_CLE = Object.fromEntries(CHAMPS.map((c) => [c.cle, c]));
 const $ = (selecteur, racine) => (racine || document).querySelector(selecteur);
 
 const ETATS = ['attente', 'verification', 'approuvee', 'refusee'];
 const OUVERTS = ['attente', 'verification'];
-const ROUTES = ['accueil', 'propositions'];
+const ROUTES = ['accueil', 'propositions', 'ressources'];
 const TYPES = ['jeu', 'catalogue', 'plateforme', 'logiciel', 'service'];
 const RELATIONS = ['faitPartieDe', 'reposeSur', 'donneAccesA', 'remplace'];
 // Ce qu'il faut compléter pour une fiche que la personne a laissée à l'équipe.
@@ -32,7 +34,14 @@ const etat = {
   nouvelles: null,      // compte pour la pastille de la barre latérale
   filtres: { q: '', genre: '', type: '', affichage: 'colonnes' },
   f: null,              // la fenêtre d'une proposition, quand elle est ouverte (voir fenetreNeuve)
+  fiches: null,         // dernière lecture du tableau des ressources
+  historique: true,     // faux si l'historique des versions n'a pas pu être lu
+  filtresR: { q: '', type: '', statut: '' },
+  r: null,              // la fenêtre d'une fiche, quand elle est ouverte (voir ficheNeuve)
+  csv: null,            // la fenêtre d'export, quand elle est ouverte : { toutes }
 };
+// Une seule fenêtre à la fois : celle d'une proposition, celle d'une fiche ou celle de l'export.
+const fenetreOuverte = () => !!(etat.f || etat.r || etat.csv);
 
 // ─── Appels au serveur ───
 async function appel(action, { query = {}, corps } = {}) {
@@ -91,6 +100,7 @@ function message(texte) {
 const ICONES = {
   accueil: '<path d="M3 11 12 4l9 7v9H3z"/><path d="M9 20v-6h6v6"/>',
   propositions: '<path d="M4 13 6.5 5h11L20 13v6H4z"/><path d="M4 13h4.5l1 2.5h5l1-2.5H20"/>',
+  ressources: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
   favorable: '<path d="M7 10v11"/><path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9z"/>',
   defavorable: '<path d="M17 14V3"/><path d="M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H20a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/>',
 };
@@ -130,6 +140,7 @@ function montrerCoque(avecNav) {
 // ─── Entrée ───
 function afficherEntree(avertissement) {
   etat.moi = null; etat.accueil = null; etat.liste = null; etat.nouvelles = null; etat.f = null;
+  etat.fiches = null; etat.r = null; etat.csv = null;
   dessinerBandeau(); montrerCoque(false); dessinerFenetre();
   $('#main').innerHTML = `<div class="card entree">
     <h1>${e(T.titre)}</h1>
@@ -261,17 +272,22 @@ let demande = 0; // numéro de la dernière lecture d'écran : une réponse plus
 
 function rendre() {
   dessinerBandeau(); montrerCoque(true); dessinerNav();
-  $('#main').innerHTML = route() === 'accueil' ? ecranAccueil() : ecranPropositions();
+  $('#main').innerHTML = { accueil: ecranAccueil, propositions: ecranPropositions, ressources: ecranRessources }[route()]();
 }
 // Redessine ce qui dépend des données sans toucher à la recherche en cours de frappe.
 function rafraichir() {
-  const corps = $('#mbody');
-  if (route() === 'propositions' && corps) { corps.innerHTML = corpsPropositions(); dessinerNav(); } else rendre();
+  const ici = route();
+  const corps = ici === 'propositions' ? $('#mbody') : ici === 'ressources' ? $('#rbody') : null;
+  if (!corps) return rendre();
+  corps.innerHTML = ici === 'propositions' ? corpsPropositions() : corpsRessources();
+  if (ici === 'ressources') $('#rintro').textContent = introRessources();
+  dessinerNav();
 }
+const ACTION_DE_ROUTE = { accueil: 'accueil', propositions: 'file', ressources: 'ressources' };
 async function charger() {
   const moi = ++demande;
   const ici = route();
-  const r = await appel(ici === 'accueil' ? 'accueil' : 'file');
+  const r = await appel(ACTION_DE_ROUTE[ici]);
   if (moi !== demande) return;
   if (r.code === 401) {
     // Session échue pendant une saisie : la fenêtre et ce qui y est écrit restent à l'écran.
@@ -279,10 +295,11 @@ async function charger() {
     return afficherEntree(null);
   }
   if (!r.ok) {
-    if (ici === 'accueil' ? etat.accueil : etat.liste) message(T.indisponible); else afficherPanne();
+    if ({ accueil: etat.accueil, propositions: etat.liste, ressources: etat.fiches }[ici]) message(T.indisponible); else afficherPanne();
     return;
   }
   if (ici === 'accueil') { etat.accueil = r.donnees; etat.nouvelles = r.donnees.compteurs.nouvelles; }
+  else if (ici === 'ressources') { etat.fiches = r.donnees.ressources || []; etat.historique = r.donnees.historique !== false; }
   else { etat.liste = r.donnees.propositions || []; etat.nouvelles = etat.liste.filter((p) => p.statut === 'attente').length; }
   rafraichir();
 }
@@ -302,7 +319,8 @@ function fenetreNeuve(id) {
     erreurs: {}, note: null, enCours: false,
   };
 }
-const existantes = (cle) => (etat.f && etat.f.d && etat.f.d.existantes && etat.f.d.existantes[cle]) || [];
+// Les valeurs déjà connues d'une liste, d'après la fenêtre ouverte (proposition ou fiche).
+const existantes = (cle) => { const d = (etat.f && etat.f.d) || (etat.r && etat.r.d); return (d && d.existantes && d.existantes[cle]) || []; };
 const nomDeFiche = (adresse) => { const fiche = existantes('fiches').find((x) => x.adresse === adresse); return fiche ? fiche.nom : adresse; };
 const estNouveauPorteur = (nom) => !existantes('porteurs').some((p) => p.trim().toLowerCase() === String(nom).trim().toLowerCase());
 // Ce qu'on choisit dans la liste des fiches : le nom, suivi de l'adresse quand deux fiches portent le même nom.
@@ -314,8 +332,9 @@ const nomValeur = (cle, v) => (PAR_CLE[cle].saisie === 'fiches' ? nomDeFiche(v) 
 
 // Les corrections : tout champ dont la valeur diffère de son point de départ.
 function corrections() { return etat.f && etat.f.d ? correctionsPanneau(etat.f.valeurs, etat.f.depart) : {}; }
-// Vrai s'il y a une saisie qui serait perdue en fermant la fenêtre.
-function saisieEnCours() {
+// Vrai s'il y a une saisie qui serait perdue en fermant la fenêtre (proposition ou fiche).
+function saisieEnCours() { return saisieProposition() || saisieFiche(); }
+function saisieProposition() {
   const f = etat.f;
   if (!f || !f.d || !ouverte(f.d.proposition) || !peut()) return false;
   const adressesChangees = JSON.stringify(f.porteursNouveaux) !== JSON.stringify({ ...f.d.proposition.porteursNouveaux });
@@ -492,11 +511,15 @@ function logoPropose() {
   if (p.aLogo && !f.sansLogo) return true;
   return champsMontres().includes('logo') && !egales(valeurFinale('logo'), actuelle ? actuelle.logo : null);
 }
+// Le cadre qui montre une fiche comme sur le site, avec la feuille de styles du site.
+function cadreApercu(fiche) {
+  const page = `<!doctype html><html lang="fr" data-theme="${theme() === 'dark' ? 'dark' : 'light'}"><head><meta charset="utf-8"><base target="_blank"><link rel="stylesheet" href="/css/styles.css"><style>body{margin:0;padding:12px;background:transparent}.fiche-statique{margin:0 auto}</style></head><body><main class="fiche-statique">${htmlFiche(fiche)}</main></body></html>`;
+  return `<iframe class="apercu-cadre" id="cadreApercu" title="${e(T.apercu.titre)}" sandbox="allow-same-origin" srcdoc="${e(page)}"></iframe>`;
+}
 function apercuSurLeSite() {
   const { proposition: p } = etat.f.d;
-  const page = `<!doctype html><html lang="fr" data-theme="${theme() === 'dark' ? 'dark' : 'light'}"><head><meta charset="utf-8"><base target="_blank"><link rel="stylesheet" href="/css/styles.css"><style>body{margin:0;padding:12px;background:transparent}.fiche-statique{margin:0 auto}</style></head><body><main class="fiche-statique">${htmlFiche(ficheApercue())}</main></body></html>`;
   return `<p class="muted small">${e(p.genre === 'modification' ? T.apercu.modification : T.apercu.nouvelle)}${logoPropose() ? ` ${e(T.apercu.logoPropose)}` : ''}</p>
-    <iframe class="apercu-cadre" id="cadreApercu" title="${e(T.apercu.titre)}" sandbox="allow-same-origin" srcdoc="${e(page)}"></iframe>`;
+    ${cadreApercu(ficheApercue())}`;
 }
 
 function listeAvis(avis) {
@@ -575,10 +598,13 @@ function dessinerFenetre() {
   // L'élément qui a le focus dans la fenêtre, pour le retrouver après le redessin.
   const actif = ancienne && ancienne.contains(document.activeElement) ? document.activeElement : null;
   const repere = actif ? { id: actif.id, act: actif.dataset.act, k: actif.dataset.k, v: actif.dataset.v } : null;
-  $('#coque').inert = !!etat.f;
-  if (!etat.f) { calque.innerHTML = ''; return; }
-  const nom = etat.f.d ? etat.f.d.proposition.nom : '';
-  calque.innerHTML = `<div class="veil" data-act="fermer"></div><div class="modal wide" role="dialog" aria-modal="true" tabindex="-1" aria-label="${e(T.fenetre(nom))}">${contenuFenetre()}</div>`;
+  $('#coque').inert = fenetreOuverte();
+  if (!fenetreOuverte()) { calque.innerHTML = ''; return; }
+  let titre; let contenu;
+  if (etat.f) { titre = T.fenetre(etat.f.d ? etat.f.d.proposition.nom : ''); contenu = contenuFenetre(); }
+  else if (etat.r) { titre = etat.r.nouvelle ? T.ressources.ajouterTitre : T.ressources.fenetre(etat.r.d ? etat.r.d.fiche.nom : ''); contenu = contenuFiche(); }
+  else { titre = T.ressources.csv.titre; contenu = contenuCsv(); }
+  calque.innerHTML = `<div class="veil" data-act="fermer"></div><div class="modal${etat.csv ? '' : ' wide'}" role="dialog" aria-modal="true" tabindex="-1" aria-label="${e(titre)}">${contenu}</div>`;
   const neuve = $('.modal', calque);
   if (ancienne) neuve.scrollTop = haut;
   if (repere) {
@@ -591,8 +617,9 @@ function dessinerFenetre() {
   if (cadre) cadre.addEventListener('load', () => { try { cadre.style.height = `${cadre.contentDocument.documentElement.scrollHeight + 2}px`; } catch (err) { /* hauteur par défaut */ } });
 }
 function noter(sorte, texte) {
-  if (etat.f && !etat.f.chargement) {
-    etat.f.note = { sorte, texte };
+  const f = etat.f || etat.r;
+  if (f && !f.chargement) {
+    f.note = { sorte, texte };
     dessinerFenetre();
     const zone = $('#noteFenetre');
     if (zone) { zone.scrollIntoView({ block: 'nearest' }); zone.focus(); }
@@ -601,21 +628,22 @@ function noter(sorte, texte) {
 
 // Fermer la fenêtre ; avec une saisie en cours, seulement après confirmation.
 function fermerFenetre({ force = false } = {}) {
-  if (!etat.f) return true;
-  if (etat.f.enCours) return false;
+  if (!fenetreOuverte()) return true;
+  const f = etat.f || etat.r;
+  if (f && f.enCours) return false;
   if (!force && saisieEnCours() && !window.confirm(T.quitter)) return false;
-  const id = etat.f.id;
-  etat.f = null;
+  // Le focus revient à la carte, à la ligne ou au bouton d'où l'on venait.
+  const retour = etat.f ? { act: 'ouvrir', id: etat.f.id } : etat.r ? (etat.r.nouvelle ? { act: 'nouvelle-fiche' } : { act: 'ouvrir-fiche', id: etat.r.id }) : { act: 'csv' };
+  etat.f = null; etat.r = null; etat.csv = null;
   dessinerFenetre();
-  // Le focus revient à la carte ou à la ligne d'où l'on venait.
-  const origine = [...document.querySelectorAll('[data-act="ouvrir"]')].find((x) => x.dataset.id === id);
+  const origine = [...document.querySelectorAll(`#main [data-act="${retour.act}"]`)].find((x) => !retour.id || x.dataset.id === retour.id);
   if (origine) origine.focus({ preventScroll: true });
   return true;
 }
 
 let ouverture = 0;
 async function ouvrir(id, { confirmation = null } = {}) {
-  if (etat.f && !fermerFenetre()) return;
+  if (fenetreOuverte() && !fermerFenetre()) return;
   const moi = ++ouverture;
   etat.f = fenetreNeuve(id);
   dessinerFenetre();
@@ -646,23 +674,27 @@ function corriger(cle) {
   const entree = $('#corrIn') || $('#ajoutIn');
   if (entree) entree.focus();
 }
+// Ce qu'un mot tapé devient dans une liste : { valeur } (vide si rien n'est écrit) ou { erreur }.
+// Pour un lien entre fiches, c'est l'adresse de la fiche choisie, qui ne peut pas être la fiche elle-même.
+function valeurAAjouter(cle, texte, adresseExclue) {
+  const valeur = String(texte || '').replace(/\s+/g, ' ').trim();
+  if (!valeur) return { valeur: '' };
+  if (PAR_CLE[cle].saisie === 'fiches') {
+    const fiche = existantes('fiches').find((x) => etiquetteFiche(x).toLowerCase() === valeur.toLowerCase() && x.adresse !== adresseExclue);
+    return fiche ? { valeur: fiche.adresse } : { erreur: T.ficheInconnue };
+  }
+  // Une valeur déjà connue reprend son écriture exacte (« fhir » ne crée pas un doublon de « FHIR »).
+  const connue = existantes(cle).find((o) => o.toLowerCase() === valeur.toLowerCase());
+  return { valeur: connue || valeur };
+}
 // Ajoute au brouillon ce qui est écrit dans le champ d'ajout. Renvoie false si la valeur est refusée.
 function ajouterAuBrouillon({ focus = true } = {}) {
-  const f = etat.f; const cle = f.edition; const champ = PAR_CLE[cle];
+  const f = etat.f; const cle = f.edition;
   const entree = $('#ajoutIn'); const erreur = $('#erreurSaisie');
-  let valeur = entree.value.replace(/\s+/g, ' ').trim();
   if (erreur) erreur.textContent = '';
+  const { valeur, erreur: refus } = valeurAAjouter(cle, entree.value, f.d.proposition.fiche ? f.d.proposition.fiche.adresse : null);
+  if (refus) { if (erreur) erreur.textContent = refus; return false; }
   if (!valeur) return true;
-  if (champ.saisie === 'fiches') {
-    const visee = f.d.proposition.fiche ? f.d.proposition.fiche.adresse : null;
-    const fiche = existantes('fiches').find((x) => etiquetteFiche(x).toLowerCase() === valeur.toLowerCase() && x.adresse !== visee);
-    if (!fiche) { if (erreur) erreur.textContent = T.ficheInconnue; return false; }
-    valeur = fiche.adresse;
-  } else {
-    // Une valeur déjà connue reprend son écriture exacte (« fhir » ne crée pas un doublon de « FHIR »).
-    const connue = existantes(cle).find((o) => o.toLowerCase() === valeur.toLowerCase());
-    if (connue) valeur = connue;
-  }
   if (!f.brouillon.some((v) => String(v).toLowerCase() === valeur.toLowerCase())) f.brouillon.push(valeur);
   entree.value = ''; f.ajout = '';
   $('#etiquettes').innerHTML = etiquettesBrouillon(cle);
@@ -793,6 +825,495 @@ function deplacer(id, vers) {
   return message(T.pasDeRetour);
 }
 
+// ─── Ressources : le tableau des fiches ───
+const pastilleStatut = (statut) => `<span class="pill ${statut === 'publiee' ? 'p-ok' : 'p-mute'}">${e(T.ressources.statuts[statut] || '')}</span>`;
+const plusDUnAn = (iso) => !!iso && Date.now() - Date.parse(iso) > 365 * 86400000;
+const pastilleAncienne = (iso) => (plusDUnAn(iso) ? ` <span class="pill p-warn">${e(T.ressources.plusDUnAn)}</span>` : '');
+// Les fiches que la recherche et les filtres laissent voir ; toutes : sans recherche ni filtre.
+function fichesFiltrees(toutes) {
+  const { q, type, statut } = etat.filtresR;
+  const cherche = plier(q.trim());
+  return (etat.fiches || []).filter((r) => {
+    if (toutes) return true;
+    if (type && cleType(r.typePrincipal) !== type && cleType(r.secondType) !== type) return false;
+    if (statut && r.statut !== statut) return false;
+    if (cherche && !plier(`${r.nom} ${r.autresNoms} ${r.porteurs.join(' ')} ${r.motsCles.join(' ')} ${r.contact || ''}`).includes(cherche)) return false;
+    return true;
+  });
+}
+function introRessources() {
+  if (!etat.fiches) return T.ressources.introCourte;
+  const publiees = etat.fiches.filter((r) => r.statut === 'publiee').length;
+  return T.ressources.intro(publiees, etat.fiches.length - publiees);
+}
+function corpsRessources() {
+  if (!etat.fiches) return `<p class="muted" role="status">${e(T.chargement)}</p>`;
+  const alerte = etat.historique ? '' : `<div class="note warn">${e(T.ressources.sansHistorique)}</div>`;
+  const liste = fichesFiltrees();
+  if (!liste.length) return `${alerte}<div class="card"><p class="muted">${e(etat.fiches.length ? T.ressources.aucunResultat : T.ressources.aucune)}</p></div>`;
+  const C = T.ressources.tableau;
+  return `${alerte}<div class="scroll"><table><thead><tr><th>${e(C.ressource)}</th><th>${e(C.type)}</th><th>${e(C.porteurs)}</th><th>${e(C.statut)}</th><th>${e(C.verifiee)}</th><th>${e(C.versions)}</th><th>${e(C.dernier)}</th></tr></thead><tbody>${liste.map((r) => `
+    <tr data-act="ouvrir-fiche" data-id="${e(r.id)}" tabindex="0"><td><span class="row" style="flex-wrap:nowrap"><span class="avatar tp t-${cleType(r.typePrincipal)}">${e(initiales(r.nom))}</span><span><b>${e(r.nom || T.sansNom)}</b>${r.enAttente ? `<br><span class="pill p-warn">${e(T.ressources.enAttente(Number(r.enAttente)))}</span>` : ''}</span></span></td>
+      <td>${pastilleType(r.typePrincipal)}</td><td>${e(r.porteurs.join(' ; ')) || `<span class="muted">${e(T.ressources.aucunPorteur)}</span>`}</td><td>${pastilleStatut(r.statut)}</td>
+      <td class="num">${r.verifieeLe ? e(jour(r.verifieeLe)) + pastilleAncienne(r.verifieeLe) : `<span class="muted">${e(T.ressources.jamais)}</span>`}</td>
+      <td class="num">${Number(r.versions)}</td>
+      <td class="num">${r.dernier ? `${e(jour(r.dernier.le))}<br><span class="muted small">${e(r.dernier.par || T.inconnue)}</span>` : `<span class="muted">${e(T.ressources.aucunChangement)}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function ecranRessources() {
+  const f = etat.filtresR;
+  return `<div class="head"><div><h1>${e(T.routes.ressources)}</h1><p id="rintro">${e(introRessources())}</p></div>
+      <div class="row"><button type="button" class="btn" data-act="csv">${e(T.ressources.exporter)}</button>${peut() ? `<button type="button" class="btn primary" data-act="nouvelle-fiche">${e(T.ressources.ajouter)}</button>` : ''}</div></div>
+    <div class="tools"><input type="search" id="rq" placeholder="${e(T.ressources.chercher)}" value="${e(f.q)}" aria-label="${e(T.ressources.chercherNom)}">
+      <select id="rType" aria-label="${e(T.typeDeRessource)}">${option('', f.type, T.tousTypes)}${TYPES.map((t) => option(t, f.type, TEXTES.typesCourts[t])).join('')}</select>
+      <select id="rStatut" aria-label="${e(T.ressources.statut)}">${option('', f.statut, T.ressources.tousStatuts)}${Object.keys(T.ressources.statuts).map((x) => option(x, f.statut, T.ressources.statuts[x])).join('')}</select></div>
+    <div id="rbody">${corpsRessources()}</div>`;
+}
+
+// ─── Fenêtre d'une fiche : modifier, voir l'historique, rétablir ───
+// L'ordre des champs dans la fenêtre : celui de la maquette, complété de tout le catalogue.
+const ORDRE_FICHE = ['nom', 'autresNoms', 'typePrincipal', 'secondType', 'phrase', 'description', 'lien', 'contact', 'responsable', 'profilResponsable', 'etat', 'autresLiens',
+  'porteurs', 'modesAcces', 'commentAcceder', 'reserveA', 'frais', 'portee', 'environnementSecurise', 'langues', 'motsCles', 'normes', 'outils', 'financePar',
+  'population', 'periode', 'typesDonnees', 'collecte', 'dictionnaire', 'jumelage', 'depotCode', 'licence', 'doi', 'logo', 'faitPartieDe', 'reposeSur', 'donneAccesA', 'remplace']
+  .filter((cle) => PAR_CLE[cle]);
+for (const { cle } of CHAMPS) if (!ORDRE_FICHE.includes(cle)) ORDRE_FICHE.push(cle);
+const copieProfonde = (v) => JSON.parse(JSON.stringify(v));
+
+function ficheNeuve(id) {
+  return {
+    id, nouvelle: id === null, d: null, chargement: true,
+    valeurs: {}, depart: {}, ajouts: {},   // ajouts : ce qui est écrit dans un champ d'ajout, sans « Ajouter »
+    onglet: 'fiche', vA: 1, vB: 1,
+    confirmation: null,                    // 'ecarter' ou 'retablir:N'
+    erreurs: {}, conflits: {}, note: null, enCours: false,
+  };
+}
+// Pose dans la fenêtre ce que le serveur vient de donner : la saisie repart de la fiche.
+function poserFiche(d) {
+  const f = etat.r;
+  f.d = d; f.chargement = false;
+  f.depart = departPanneau(null, d.valeurs);
+  f.valeurs = copieProfonde(f.depart);
+  f.ajouts = {}; f.erreurs = {}; f.conflits = {}; f.confirmation = null;
+  if (d.fiche) f.id = d.fiche.id;
+  const numeros = (d.versions || []).map((v) => v.numero);
+  f.vB = numeros.length ? numeros[numeros.length - 1] : 1;
+  f.vA = numeros.length > 1 ? numeros[numeros.length - 2] : f.vB;
+}
+// Les champs dont la valeur n'est plus celle de la fiche.
+function modificationsFiche() { return etat.r && etat.r.d ? correctionsPanneau(etat.r.valeurs, etat.r.depart) : {}; }
+// Vrai s'il y a, dans la fenêtre d'une fiche, une saisie qui serait perdue.
+function saisieFiche() {
+  const f = etat.r;
+  if (!f || !f.d || !peut()) return false;
+  return Object.keys(modificationsFiche()).length > 0 || Object.values(f.ajouts).some((texte) => String(texte).trim() !== '');
+}
+
+let ouvertureFiche = 0;
+// id : le repère de la fiche, ou null pour une nouvelle ressource.
+async function ouvrirFiche(id) {
+  if (fenetreOuverte() && !fermerFenetre()) return;
+  const moi = ++ouvertureFiche;
+  const f = ficheNeuve(id);
+  etat.r = f;
+  dessinerFenetre();
+  const bouton = $('#layer .x'); if (bouton) bouton.focus();
+  const r = await appel('ressource', { query: id === null ? { neuve: '1' } : { fiche: id } });
+  if (moi !== ouvertureFiche || etat.r !== f) return;
+  if (r.code === 401) return afficherEntree(null);
+  if (!r.ok) {
+    etat.r = null; dessinerFenetre();
+    message(r.code === 404 ? T.ressources.introuvable : T.indisponible);
+    if (r.code === 404) charger();
+    return;
+  }
+  poserFiche(r.donnees);
+  dessinerFenetre();
+  const cible = id === null ? document.getElementById('f-nom') : $('#layer .x');
+  if (cible) cible.focus();
+}
+// Relit la fiche après un changement : la fenêtre reste ouverte, sur le même onglet.
+async function rechargerFiche(id) {
+  const f = etat.r;
+  f.id = id;
+  const r = await appel('ressource', { query: { fiche: id } });
+  if (etat.r !== f) return;
+  f.enCours = false;
+  if (r.ok) poserFiche(r.donnees);
+  else {
+    // Le changement est fait ; faute de relecture, la saisie devient le nouveau point de départ.
+    f.depart = copieProfonde(f.valeurs); f.conflits = {}; f.confirmation = null;
+    message(T.indisponible);
+  }
+  dessinerFenetre();
+}
+
+// Les étiquettes d'une liste et son champ d'ajout.
+function pucesListe(cle) {
+  const f = etat.r; const champ = PAR_CLE[cle];
+  const fige = f.enCours ? ' disabled' : '';
+  const connues = existantes(cle).map((x) => String(x).toLowerCase());
+  const puces = (f.valeurs[cle] || []).map((x, i) => {
+    const nom = nomValeur(cle, x);
+    const nouvelle = champ.saisie !== 'fiches' && !connues.includes(String(x).toLowerCase());
+    return `<span class="tagx">${e(nom)}${nouvelle ? ` <span class="small">${e(T.nouvelleValeur)}</span>` : ''}${peut() ? `<button type="button" data-act="f-retirer" data-k="${cle}" data-i="${i}" data-v="${i}" aria-label="${e(TC.retirer(nom))}"${fige}>×</button>` : ''}</span>`;
+  }).join('');
+  const liste = `<div class="chips">${puces || `<span class="muted small">${e(T.ressources.listeVide)}</span>`}</div>`;
+  if (!peut()) return liste;
+  const soi = f.d.fiche ? f.d.fiche.adresse : null;
+  const choix = champ.saisie === 'fiches' ? existantes('fiches').filter((x) => x.adresse !== soi).map(etiquetteFiche) : existantes(cle);
+  return `${liste}<div class="ajout"><input type="text" id="fa-${cle}" data-ajout="${cle}" list="fc-${cle}" maxlength="${Number(champ.max) || 200}" value="${e(f.ajouts[cle] || '')}" placeholder="${e(TC.indiceListe)}" autocomplete="off" aria-label="${e(T.ressources.ajouterA(libelle(cle)))}"${fige}>
+      <button type="button" class="btn sm" data-act="f-ajouter" data-k="${cle}"${fige}>${e(TC.ajouter)}</button></div>
+    <datalist id="fc-${cle}">${choix.map((o) => `<option value="${e(o)}"></option>`).join('')}</datalist>
+    <span class="err" id="fe-${cle}" role="alert"></span>`;
+}
+// Les porteurs rattachés : on choisit parmi ceux du catalogue, on n'en crée pas ici.
+function pucesPorteurs() {
+  const f = etat.r; const fige = f.enCours ? ' disabled' : '';
+  const rattaches = f.valeurs.porteurs || [];
+  const puces = rattaches.map((nom, i) => `<span class="tagx">${e(nom)}${peut() ? `<button type="button" data-act="f-retirer" data-k="porteurs" data-i="${i}" data-v="${i}" aria-label="${e(TC.retirer(nom))}"${fige}>×</button>` : ''}</span>`).join('');
+  const liste = `<div class="chips">${puces || `<span class="muted small">${e(T.ressources.aucunPorteurRattache)}</span>`}</div>`;
+  if (!peut()) return liste;
+  const restants = existantes('porteurs').filter((nom) => !rattaches.includes(nom));
+  return `${liste}<select id="fportAdd" aria-label="${e(T.ressources.rattacher)}"${fige}><option value="">${e(T.ressources.rattacher)}…</option>${restants.map((nom) => option(nom, '')).join('')}</select>`;
+}
+function redessinerListe(cle, { focus = true } = {}) {
+  const zone = document.getElementById(`fl-${cle}`);
+  if (!zone) return;
+  zone.innerHTML = cle === 'porteurs' ? pucesPorteurs() : pucesListe(cle);
+  const entree = document.getElementById(cle === 'porteurs' ? 'fportAdd' : `fa-${cle}`);
+  if (focus && entree) entree.focus();
+}
+// Ajoute à une liste ce qui est écrit dans son champ d'ajout. Renvoie false si la valeur est refusée.
+function ajouterALaListe(cle, { focus = true } = {}) {
+  const f = etat.r;
+  const { valeur, erreur } = valeurAAjouter(cle, f.ajouts[cle], f.d.fiche ? f.d.fiche.adresse : null);
+  if (erreur) { const zone = document.getElementById(`fe-${cle}`); if (zone) zone.textContent = erreur; return false; }
+  f.ajouts[cle] = '';
+  if (valeur && !f.valeurs[cle].some((v) => String(v).toLowerCase() === valeur.toLowerCase())) f.valeurs[cle].push(valeur);
+  redessinerListe(cle, { focus });
+  return true;
+}
+
+// Un champ a changé sur la fiche pendant la saisie : les trois valeurs, et le choix.
+function conflitFiche(cle) {
+  const f = etat.r;
+  if (!Object.hasOwn(f.conflits, cle)) return '';
+  const c = f.conflits[cle];
+  return `<div class="note warn"><b>${e(T.ressources.conflit.titre)}</b><dl class="kv"><dt>${e(T.ressources.conflit.depart)}</dt><dd>${valeurSeule(cle, f.depart[cle])}</dd><dt>${e(T.bouscule.maintenant)}</dt><dd>${valeurSeule(cle, c.fiche)}</dd><dt>${e(T.ressources.conflit.vous)}</dt><dd>${valeurSeule(cle, c.vous)}</dd></dl>
+    <span class="row"><button type="button" class="btn sm" data-act="f-conflit" data-k="${cle}" data-v="saisie"${f.enCours ? ' disabled' : ''}>${e(T.ressources.conflit.garder)}</button><button type="button" class="btn sm" data-act="f-conflit" data-k="${cle}" data-v="fiche"${f.enCours ? ' disabled' : ''}>${e(T.ressources.conflit.prendre)}</button></span></div>`;
+}
+// Un champ du catalogue dans la fenêtre d'une fiche, avec son contrôle de saisie.
+function champFiche(cle) {
+  const f = etat.r; const champ = PAR_CLE[cle]; const v = f.valeurs[cle];
+  const fige = !peut() || f.enCours ? ' disabled' : '';
+  const id = `f-${cle}`; const nom = e(libelle(cle));
+  const aide = T.ressources.aides[cle] ? ` <small>${e(T.ressources.aides[cle])}</small>` : '';
+  const suite = `${f.erreurs[cle] ? `<span class="err" role="alert">${e(f.erreurs[cle])}</span>` : ''}${conflitFiche(cle)}`;
+  const options = (f.d.options && f.d.options[cle]) || [];
+  if (champ.saisie === 'coche') {
+    return `<div class="f wide"><label class="switch mini"><input type="checkbox" role="switch" id="${id}" data-f="${cle}"${v ? ' checked' : ''}${fige}>${nom}</label>${suite}</div>`;
+  }
+  if (champ.saisie === 'choixMultiples') {
+    const toutes = [...options, ...(v || []).filter((o) => !options.includes(o))];
+    return `<div class="f wide"><span>${nom}</span><div class="opts" role="group" aria-label="${nom}">${toutes.map((o) => `<button type="button" class="opt" data-act="f-option" data-k="${cle}" data-v="${e(o)}" aria-pressed="${(v || []).includes(o)}"${fige}>${e(o)}</button>`).join('')}</div>${suite}</div>`;
+  }
+  if (champ.saisie === 'listeOuverte' || champ.saisie === 'fiches') {
+    return `<div class="f wide"><span>${nom}${aide}</span><div class="liste" id="fl-${cle}">${cle === 'porteurs' ? pucesPorteurs() : pucesListe(cle)}</div>${suite}</div>`;
+  }
+  let saisie;
+  if (champ.saisie === 'choix') {
+    const choix = !v || options.includes(v) ? options : [v, ...options];
+    saisie = `<select id="${id}" data-f="${cle}"${fige}>${option('', v || '', T.aucun)}${choix.map((o) => option(o, v, o)).join('')}</select>`;
+  } else if (champ.saisie === 'long' || (champ.saisie === 'texte' && champ.max >= 300)) {
+    saisie = `<textarea class="notes" id="${id}" data-f="${cle}" maxlength="${Number(champ.max)}"${champ.saisie === 'long' ? ' style="min-height:130px"' : ''}${fige}>${e(v || '')}</textarea>`;
+  } else {
+    const type = champ.saisie === 'url' ? 'url' : champ.saisie === 'courriel' ? 'email' : 'text';
+    saisie = `<input type="${type}" id="${id}" data-f="${cle}" maxlength="${Number(champ.max)}" value="${e(v || '')}"${champ.saisie === 'url' ? ' placeholder="https://" inputmode="url"' : ''} autocomplete="off"${fige}>`;
+  }
+  const large = champ.saisie === 'long' || cle === 'phrase' || cle === 'logo';
+  const depose = cle === 'logo' && f.d.fiche && f.d.fiche.logoDepose ? `<span class="muted small">${e(T.ressources.logoDepose)}</span>` : '';
+  return `<div class="f${large ? ' wide' : ''}"><label for="${id}">${nom}${aide}</label>${saisie}${depose}${suite}</div>`;
+}
+
+function ongletFiche() {
+  const f = etat.r; const fige = f.enCours ? ' disabled' : '';
+  const champs = `<div class="fields">${ORDRE_FICHE.map(champFiche).join('')}</div>`;
+  const fiche = f.d.fiche;
+  const publique = fiche && fiche.statut === 'publiee' && fiche.adresse
+    ? `<a class="btn" href="/ressource/${e(encodeURIComponent(fiche.adresse))}" target="_blank" rel="noopener">${e(T.ressources.voirPublique)}</a>` : '';
+  if (!peut()) return `<p class="muted small">${e(T.ressources.lectureSeule)}</p>${champs}${publique ? `<div class="row sep">${publique}</div>` : ''}`;
+  const enregistrer = `<div class="row"><button type="button" class="btn primary" data-act="f-enregistrer"${fige}>${e(f.enCours ? T.enCours : (f.nouvelle ? T.ressources.creer : T.ressources.enregistrer))}</button>${f.nouvelle ? '' : `<span class="muted small">${e(T.ressources.enregistrerAide)}</span>`}</div>`;
+  if (f.nouvelle) return champs + enregistrer;
+  const gestes = fiche.statut === 'publiee'
+    ? `<button type="button" class="btn" data-act="f-verifier"${fige}>${e(T.ressources.verifier)}</button>${publique}<button type="button" class="btn danger" data-act="f-demander" data-v="ecarter"${fige}>${e(T.ressources.ecarter.bouton)}</button>`
+    : `<button type="button" class="btn primary" data-act="f-republier"${fige}>${e(T.ressources.republier)}</button>`;
+  const confirmation = f.confirmation === 'ecarter'
+    ? `<div class="confirm" id="confirmationFiche"><span>${e(T.ressources.ecarter.question(fiche.nom || T.sansNom))}</span><button type="button" class="btn sm" data-act="f-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="f-ecarter"${fige}>${e(f.enCours ? T.enCours : T.ressources.ecarter.confirmer)}</button></div>` : '';
+  return `${champs}${enregistrer}<div class="row sep">${gestes}</div>${confirmation}`;
+}
+
+// Ce qu'une version raconte : qui, et d'où vient le changement.
+function titreVersion(v) {
+  const H = T.ressources.historique;
+  const qui = v.par || T.inconnue;
+  const p = v.proposition;
+  if (v.source === 'depart') return H.depart;
+  if (v.source === 'creation') return p ? H.creationProposee(p.nomProposant || T.anonyme, qui) : H.creation(qui);
+  if (v.source === 'proposition') return p ? H.proposition(p.nomProposant || T.anonyme, (T.liens[p.lien] || T.liens.aucun).toLowerCase(), qui) : H.propositionSans(qui);
+  if (v.source === 'retablissement') return H.retablissement(v.note || H.retour, qui);
+  return H.panneau(qui);
+}
+function ongletHistorique() {
+  const f = etat.r; const H = T.ressources.historique;
+  const { versions, valeurs } = f.d;
+  if (!versions.length) return `<div class="note warn">${e(T.ressources.sansHistorique)}</div>`;
+  const fige = f.enCours ? ' disabled' : '';
+  const derniere = versions[versions.length - 1].numero;
+  const dateDe = (numero) => { const v = versions.find((x) => x.numero === numero); return v && v.le ? jour(v.le) : ''; };
+  const lignes = versions.map((v, i) => {
+    const actuelle = v.numero === derniere;
+    const cles = CHAMPS.map((c) => c.cle).filter((cle) => Object.hasOwn(v.changements, cle));
+    const n = Number(v.numero);
+    const precedente = i > 0 ? Number(versions[i - 1].numero) : null;
+    return `<div class="${actuelle ? 'cur' : ''}"><span class="row"><b>${e(H.version(n))}</b>${actuelle ? `<span class="pill p-ok">${e(H.actuelle)}</span>` : ''}<span class="muted small num">${e(v.le ? jourEtHeure(v.le) : '')}</span></span>
+      <span class="small">${e(titreVersion(v))}</span>
+      ${cles.length ? `<span class="tgs">${cles.map((cle) => `<span class="tg">${e(libelle(cle))}</span>`).join('')}</span>` : (v.illisible ? `<span class="muted small">${e(H.illisible)}</span>` : '')}
+      <span class="row">${precedente !== null ? `<button type="button" class="btn sm" data-act="v-comparer" data-a="${precedente}" data-b="${n}" data-v="${precedente}-${n}">${e(H.avecPrecedente)}</button>` : ''}${actuelle ? '' : `<button type="button" class="btn sm" data-act="v-comparer" data-a="${n}" data-b="${Number(derniere)}" data-v="${n}-${Number(derniere)}">${e(H.avecActuelle)}</button>${peut() && f.d.historique ? `<button type="button" class="btn sm" data-act="v-demander" data-v="${n}"${fige}>${e(H.retablir)}</button>` : ''}`}</span>
+      ${f.confirmation === `retablir:${n}` ? `<div class="confirm" id="confirmationFiche"><span>${e(H.confirmer(n, v.le ? jour(v.le) : ''))}</span><button type="button" class="btn sm" data-act="f-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="v-retablir" data-v="${n}"${fige}>${e(f.enCours ? T.enCours : H.retablirCourt)}</button></div>` : ''}</div>`;
+  }).reverse().join('');
+  // Deux versions côte à côte : chacune est retrouvée à partir de la fiche d'aujourd'hui.
+  const a = reconstituer(valeurs, versions, f.vA); const b = reconstituer(valeurs, versions, f.vB);
+  const cles = CHAMPS.map((c) => c.cle).filter((cle) => !egales(a[cle], b[cle]));
+  const choix = (courante) => versions.map((v) => option(String(v.numero), String(courante), H.choix(Number(v.numero), v.le ? jour(v.le) : '', v.numero === derniere))).join('');
+  return `<p class="muted small">${e(H.intro)}</p>
+    ${f.d.historique ? '' : `<div class="note warn">${e(T.ressources.sansHistorique)}</div>`}
+    <div class="tl">${lignes}</div>
+    <div class="sep" id="comparerVersions" style="display:flex;flex-direction:column;gap:.7rem"><h3>${e(H.comparer)}</h3>
+      <div class="row"><select id="vA" aria-label="${e(H.premiere)}" style="width:auto;flex:1 1 240px">${choix(f.vA)}</select><span class="muted">${e(H.avec)}</span><select id="vB" aria-label="${e(H.seconde)}" style="width:auto;flex:1 1 240px">${choix(f.vB)}</select></div>
+      ${cles.length ? `${legende()}<div class="cmp"><div class="hd">${e(T.colonnesComparaison.champ)}</div><div class="hd b">${e(H.entete(Number(f.vA), dateDe(f.vA)))}</div><div class="hd b">${e(H.entete(Number(f.vB), dateDe(f.vB)))}</div>${cles.map((cle) => `<div class="k">${e(libelle(cle))}</div><div class="b">${cellule(cle, a[cle], b[cle], -1)}</div><div class="b">${cellule(cle, a[cle], b[cle], 1)}</div>`).join('')}</div>`
+    : `<p class="muted">${e(f.vA === f.vB ? H.memeVersion : H.identiques)}</p>`}</div>`;
+}
+
+// La fiche telle qu'elle serait sur le site avec ce qui est écrit dans l'onglet « Fiche ».
+function ongletApercu() {
+  const f = etat.r; const v = f.valeurs; const fiche = f.d.fiche;
+  const liens = [];
+  for (const cle of RELATIONS) for (const adresse of (v[cle] || [])) liens.push({ nature: T.natures[cle], adresse, nom: nomDeFiche(adresse) });
+  // Seul le logo déjà public est montré : une nouvelle adresse n'est chargée qu'une fois enregistrée.
+  const logoChange = !egales(v.logo, f.depart.logo);
+  const apercue = {
+    ...v, nom: v.nom || T.sansNom, adresse: fiche.adresse || '', porteurs: (v.porteurs || []).map((nom) => ({ nom })), liens,
+    logo: logoChange ? null : fiche.logo || null, verifieeLe: fiche.verifieeLe || null,
+  };
+  return `<p class="muted small">${e(T.ressources.apercu)}${logoChange ? ` ${e(T.ressources.apercuLogo)}` : ''}</p>${cadreApercu(apercue)}`;
+}
+
+function contenuFiche() {
+  const f = etat.r;
+  const fermer = `<button type="button" class="btn sm x" style="margin-left:auto" data-act="fermer">${e(T.fermer)}</button>`;
+  if (f.chargement) return `<p class="muted" role="status">${e(T.chargement)}</p><div class="row">${fermer}</div>`;
+  const note = f.note ? `<div class="note ${f.note.sorte}" id="noteFenetre" role="alert" tabindex="-1">${e(f.note.texte)}</div>` : '';
+  if (f.nouvelle) {
+    return `<div class="row" style="flex-wrap:nowrap;align-items:flex-start"><h2 id="titreFenetre">${e(T.ressources.ajouterTitre)}</h2>${fermer}</div>
+      ${note}<p class="muted small">${e(T.ressources.ajouterAide)}</p>${ongletFiche()}`;
+  }
+  const { fiche, valeurs, versions, enAttente } = f.d;
+  const type = valeurs.typePrincipal;
+  const verifiee = fiche.verifieeLe
+    ? e(T.ressources.verifieeLe(jour(fiche.verifieeLe), T.ressources.verifieePar[fiche.verifieePar] || fiche.verifieePar || '')) + pastilleAncienne(fiche.verifieeLe)
+    : e(T.ressources.jamaisVerifiee);
+  const attente = enAttente.length ? `<dt>${e(T.ressources.enAttenteTitre)}</dt><dd>${enAttente.map((p) => `<button type="button" class="linkish" data-act="ouvrir" data-id="${e(p.id)}">${e(T.ressources.propositionDe(T.genres[p.genre] || T.genres.modification, p.nomProposant || T.anonyme))}</button>`).join(' · ')}</dd>` : '';
+  const onglet = (cle, nom) => `<button type="button" data-act="f-onglet" data-v="${cle}" aria-pressed="${f.onglet === cle}">${e(nom)}</button>`;
+  return `<div class="row" style="flex-wrap:nowrap;align-items:flex-start"><span class="logoimg t-${type ? cleType(type) : ''}">${e(initiales(fiche.nom))}</span>
+      <div style="min-width:0"><h2 id="titreFenetre">${e(fiche.nom || T.sansNom)}</h2><span class="row" style="margin-top:.25rem">${pastilleStatut(fiche.statut)}${pastilleType(type)}${valeurs.secondType ? pastilleType(valeurs.secondType) : ''}</span></div>${fermer}</div>
+    ${note}
+    <dl class="kv"><dt>${e(T.ressources.verifiee)}</dt><dd>${verifiee}</dd>${attente}</dl>
+    <div class="row"><span class="seg" role="group" aria-label="${e(T.vue)}">${onglet('fiche', T.ressources.onglets.fiche)}${onglet('hist', T.ressources.onglets.hist(versions.length))}${onglet('apercu', T.ressources.onglets.apercu)}</span></div>
+    ${f.onglet === 'hist' ? ongletHistorique() : f.onglet === 'apercu' ? ongletApercu() : ongletFiche()}`;
+}
+
+// ─── Gestes sur une fiche ───
+// Ce que le serveur a répondu à un geste qui n'a pas réussi : la fenêtre et la saisie restent à l'écran.
+function echecFiche(r) {
+  const f = etat.r; const code = r.donnees.code;
+  if (r.code === 401) return noter('warn', T.sessionExpiree);
+  if (r.code === 403) { noter('warn', T.roleInsuffisant); return relireMoi(); }
+  if (code === 'conflit' && r.donnees.conflits) {
+    f.conflits = {};
+    for (const cle of Object.keys(r.donnees.conflits)) if (PAR_CLE[cle]) f.conflits[cle] = { fiche: r.donnees.conflits[cle], vous: cloner(f.valeurs[cle]) };
+    f.onglet = 'fiche';
+    return noter('warn', T.ressources.conflit.note);
+  }
+  if (code === 'invalide' && r.donnees.erreurs) {
+    f.erreurs = { ...r.donnees.erreurs }; f.onglet = 'fiche';
+    return noter('bad', r.donnees.erreurs._ || T.erreursEnHaut);
+  }
+  if (code === 'introuvable') return noter('bad', T.ressources.introuvableSaisie);
+  if (code === 'occupee') return noter('warn', T.ressources.occupee);
+  if (code === 'sans-historique') return noter('warn', T.ressources.sansHistorique);
+  return noter('bad', code === 'doublon' ? T.doublon : T.indisponible);
+}
+
+async function enregistrerFiche() {
+  const f = etat.r;
+  if (!f || !f.d || f.enCours || !peut()) return;
+  // Un mot tapé dans un champ d'ajout sans « Ajouter » compte quand même.
+  for (const cle of Object.keys(f.ajouts)) {
+    if (String(f.ajouts[cle]).trim() && !ajouterALaListe(cle, { focus: false })) {
+      const entree = document.getElementById(`fa-${cle}`);
+      if (entree) { entree.scrollIntoView({ block: 'center' }); entree.focus(); }
+      return;
+    }
+  }
+  const modifs = modificationsFiche();
+  if (!Object.keys(modifs).length) return message(T.ressources.rienAEnregistrer);
+  const corps = f.nouvelle
+    ? { valeurs: modifs }
+    : { fiche: f.id, valeurs: modifs, depart: Object.fromEntries(Object.keys(modifs).map((cle) => [cle, f.depart[cle]])) };
+  f.enCours = true; f.erreurs = {}; f.conflits = {}; f.note = null; f.confirmation = null; dessinerFenetre();
+  const r = await appel(f.nouvelle ? 'creer' : 'enregistrer', { corps });
+  if (etat.r !== f) return;
+  if (!r.ok) { f.enCours = false; return echecFiche(r); }
+  if (f.nouvelle) {
+    etat.r = null; dessinerFenetre();
+    message(T.ressources.creee(!!r.donnees.historique));
+    return charger();
+  }
+  if (r.donnees.inchangee) {
+    f.enCours = false; f.depart = copieProfonde(f.valeurs); dessinerFenetre();
+    return message(T.ressources.inchangee);
+  }
+  message(T.ressources.enregistree(Number(r.donnees.champs), r.donnees.numero ? Number(r.donnees.numero) : 0));
+  await rechargerFiche(r.donnees.id);
+  charger();
+}
+
+// Marquer vérifiée, écarter, republier : la saisie en cours dans la fenêtre n'est pas touchée.
+async function gesteFiche(action) {
+  const f = etat.r;
+  if (!f || !f.d || f.nouvelle || f.enCours || !peut()) return;
+  f.enCours = true; f.note = null; f.confirmation = null; dessinerFenetre();
+  const r = await appel(action, { corps: { fiche: f.id } });
+  if (etat.r !== f) return;
+  f.enCours = false;
+  if (!r.ok) return echecFiche(r);
+  const fiche = f.d.fiche;
+  f.id = r.donnees.id; fiche.id = r.donnees.id;
+  if (action === 'verifier') { fiche.verifieeLe = r.donnees.verifieeLe; fiche.verifieePar = r.donnees.verifieePar; }
+  else {
+    fiche.statut = action === 'ecarter' ? 'ecartee' : 'publiee';
+    // Une fiche écartée n'a plus d'adresse publique ; republiée, elle en retrouve une.
+    fiche.adresse = String(r.donnees.id).startsWith('~') ? null : r.donnees.id;
+  }
+  dessinerFenetre();
+  message(T.ressources.messages[action]);
+  charger();
+}
+
+async function retablirVersion(numero) {
+  const f = etat.r; const H = T.ressources.historique;
+  if (!f || !f.d || f.nouvelle || f.enCours || !peut()) return;
+  // Rétablir relit la fiche : ce qui est écrit dans l'onglet « Fiche » sans être enregistré serait remplacé.
+  if (saisieFiche() && !window.confirm(H.perdreSaisie)) return;
+  f.enCours = true; f.note = null; dessinerFenetre();
+  const r = await appel('retablir', { corps: { fiche: f.id, numero } });
+  if (etat.r !== f) return;
+  if (!r.ok) {
+    f.enCours = false; f.confirmation = null;
+    const erreurs = r.donnees.erreurs;
+    if (r.donnees.code === 'invalide' && erreurs && !erreurs._) return noter('bad', H.impossible(Object.keys(erreurs).filter((cle) => PAR_CLE[cle]).map(libelle).join(', ')));
+    return echecFiche(r);
+  }
+  if (r.donnees.inchangee) {
+    f.enCours = false; f.confirmation = null; dessinerFenetre();
+    return message(H.identique);
+  }
+  message(H.retablie(numero, r.donnees.numero ? Number(r.donnees.numero) : 0));
+  await rechargerFiche(r.donnees.id);
+  charger();
+}
+
+// Les gestes de la fenêtre d'une fiche. Pendant un envoi, rien d'autre ne bouge.
+function gesteFenetreFiche(act, cible) {
+  const f = etat.r; const { k, v } = cible.dataset;
+  if (!f.d || f.enCours) return;
+  if (act === 'f-onglet') { f.onglet = v; f.confirmation = null; return dessinerFenetre(); }
+  if (act === 'v-comparer') {
+    f.vA = Number(cible.dataset.a); f.vB = Number(cible.dataset.b); f.confirmation = null; dessinerFenetre();
+    const zone = $('#comparerVersions'); if (zone) zone.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return;
+  }
+  if (!peut()) return;
+  if (act === 'f-option' && PAR_CLE[k]) {
+    const choisies = new Set(f.valeurs[k] || []);
+    if (choisies.has(v)) choisies.delete(v); else choisies.add(v);
+    f.valeurs[k] = [...choisies];
+    return cible.setAttribute('aria-pressed', String(choisies.has(v)));
+  }
+  if (act === 'f-retirer' && PAR_CLE[k]) { f.valeurs[k].splice(Number(cible.dataset.i), 1); return redessinerListe(k); }
+  if (act === 'f-ajouter' && PAR_CLE[k]) return ajouterALaListe(k);
+  if (act === 'f-conflit' && Object.hasOwn(f.conflits, k)) {
+    // Dans les deux cas, la valeur de la fiche devient le point de départ : le prochain enregistrement passe.
+    const surLaFiche = f.conflits[k].fiche;
+    f.depart[k] = estListe(k) ? (Array.isArray(surLaFiche) ? surLaFiche.slice() : []) : (surLaFiche === undefined ? null : surLaFiche);
+    if (v === 'fiche') f.valeurs[k] = cloner(f.depart[k]);
+    delete f.conflits[k];
+    return dessinerFenetre();
+  }
+  if (act === 'f-enregistrer') return enregistrerFiche();
+  if (act === 'f-verifier') return gesteFiche('verifier');
+  if (act === 'f-republier') return gesteFiche('republier');
+  if (act === 'f-ecarter') return gesteFiche('ecarter');
+  if (act === 'v-retablir') return retablirVersion(Number(v));
+  if (act === 'f-annuler') { f.confirmation = null; return dessinerFenetre(); }
+  if (act === 'f-demander' || act === 'v-demander') {
+    f.confirmation = act === 'f-demander' ? 'ecarter' : `retablir:${Number(v)}`;
+    dessinerFenetre();
+    const zone = $('#confirmationFiche');
+    if (zone) { zone.scrollIntoView({ block: 'center' }); const oui = zone.querySelector('.danger'); if (oui) oui.focus(); }
+  }
+}
+
+// ─── Export en CSV, à partir des fiches lues par le tableau ───
+function lignesCsv(liste) {
+  // Une cellule qui commencerait par un signe de formule est neutralisée pour les tableurs.
+  const enCsv = (v) => {
+    let texte = String(v === null || v === undefined ? '' : v);
+    if (/^[=+\-@\t\r]/.test(texte)) texte = `'${texte}`;
+    return /[",\n\r;]/.test(texte) ? `"${texte.replace(/"/g, '""')}"` : texte;
+  };
+  return [T.ressources.csv.colonnes, ...liste.map((r) => [r.nom, r.typePrincipal || '', r.porteurs.join(' ; '), T.ressources.statuts[r.statut] || '', r.lien || '', r.contact || '', r.verifieeLe || '', r.versions])]
+    .map((ligne) => ligne.map(enCsv).join(','));
+}
+const fichesAExporter = () => fichesFiltrees(etat.csv.toutes);
+function contenuCsv() {
+  const C = T.ressources.csv;
+  const lignes = lignesCsv(fichesAExporter());
+  const portee = (cle, nom) => `<button type="button" data-act="csv-portee" data-v="${cle}" aria-pressed="${etat.csv.toutes === (cle === 'toutes')}">${e(nom)}</button>`;
+  return `<div class="row"><h2 id="titreFenetre">${e(C.titre)}</h2><button type="button" class="btn sm x" style="margin-left:auto" data-act="fermer">${e(T.fermer)}</button></div>
+    <div class="row"><span class="seg" role="group" aria-label="${e(C.portee)}">${portee('affichees', C.affichees(fichesFiltrees().length))}${portee('toutes', C.toutes((etat.fiches || []).length))}</span></div>
+    <pre class="csv" id="csvApercu" tabindex="0">${e(lignes.slice(0, 7).join('\n'))}${lignes.length > 7 ? `\n${e(C.autres(lignes.length - 7))}` : ''}</pre>
+    <p class="muted small">${e(C.resume(lignes.length - 1, C.colonnes.length))}</p>
+    <div class="row"><button type="button" class="btn primary" data-act="csv-telecharger">${e(C.telecharger)}</button><button type="button" class="btn" data-act="csv-copier">${e(C.copier)}</button></div>`;
+}
+async function gesteCsv(act, v) {
+  const C = T.ressources.csv;
+  if (act === 'csv-portee') { etat.csv.toutes = v === 'toutes'; return dessinerFenetre(); }
+  if (act !== 'csv-telecharger' && act !== 'csv-copier') return;
+  const texte = lignesCsv(fichesAExporter()).join('\r\n');
+  if (act === 'csv-copier') {
+    try { await navigator.clipboard.writeText(texte); message(C.copie); } catch (err) { message(C.copieImpossible); }
+    return;
+  }
+  // Le fichier est fabriqué dans le navigateur ; la marque d'ordre des octets fait lire les accents aux tableurs.
+  const aujourdhui = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const lien = document.createElement('a');
+  lien.href = URL.createObjectURL(new Blob([`﻿${texte}`], { type: 'text/csv;charset=utf-8' }));
+  lien.download = C.fichier(aujourdhui);
+  document.body.appendChild(lien); lien.click(); lien.remove();
+  setTimeout(() => URL.revokeObjectURL(lien.href), 1000);
+}
+
 // ─── Événements ───
 document.addEventListener('click', async (evenement) => {
   const cible = evenement.target.closest('[data-act], #deconnexion, #boutonTheme');
@@ -815,6 +1336,18 @@ document.addEventListener('click', async (evenement) => {
   if (act === 'approuver-carte') { evenement.stopPropagation(); return deplacer(id, 'approuvee'); }
   if (act === 'refuser-carte') { evenement.stopPropagation(); return deplacer(id, 'refusee'); }
   if (act === 'ouvrir') return ouvrir(id);
+
+  // Ressources : le tableau, puis les fenêtres de l'export et d'une fiche.
+  if (act === 'ouvrir-fiche') return ouvrirFiche(id);
+  if (act === 'nouvelle-fiche') return peut() ? ouvrirFiche(null) : undefined;
+  if (act === 'csv') {
+    if (fenetreOuverte() && !fermerFenetre()) return;
+    etat.csv = { toutes: false }; dessinerFenetre();
+    const bouton = $('#layer .x'); if (bouton) bouton.focus();
+    return;
+  }
+  if (etat.csv) return gesteCsv(act, v);
+  if (etat.r) return gesteFenetreFiche(act, cible);
 
   // Fenêtre : pendant un envoi, rien d'autre ne bouge.
   if (!f || !f.d || f.enCours) return;
@@ -850,9 +1383,9 @@ document.addEventListener('click', async (evenement) => {
 
 document.addEventListener('keydown', (evenement) => {
   const cible = evenement.target;
-  if (evenement.key === 'Escape' && etat.f) return void fermerFenetre();
+  if (evenement.key === 'Escape' && fenetreOuverte()) return void fermerFenetre();
   // Tab tourne dans la fenêtre ouverte, sans sortir vers la page derrière.
-  if (evenement.key === 'Tab' && etat.f) {
+  if (evenement.key === 'Tab' && fenetreOuverte()) {
     const fenetre = $('#layer .modal');
     const atteignables = fenetre ? [...fenetre.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"]')].filter((x) => !x.disabled && x.offsetParent !== null) : [];
     if (!atteignables.length) return;
@@ -863,12 +1396,21 @@ document.addEventListener('keydown', (evenement) => {
     return;
   }
   if (evenement.key === 'Enter' && cible.id === 'ajoutIn') { evenement.preventDefault(); return void ajouterAuBrouillon(); }
+  if (evenement.key === 'Enter' && cible.dataset && cible.dataset.ajout && etat.r && etat.r.d && !etat.r.enCours) { evenement.preventDefault(); return void ajouterALaListe(cible.dataset.ajout); }
   if ((evenement.key === 'Enter' || evenement.key === ' ') && cible.matches && cible.matches('.mcard, tbody tr')) { evenement.preventDefault(); cible.click(); }
 });
 
 document.addEventListener('input', (evenement) => {
   const cible = evenement.target; const f = etat.f;
   if (cible.id === 'q') { etat.filtres.q = cible.value; return rafraichir(); }
+  if (cible.id === 'rq') { etat.filtresR.q = cible.value; return rafraichir(); }
+  // Fenêtre d'une fiche : chaque frappe est gardée, sans redessiner.
+  const r = etat.r;
+  if (r && r.d) {
+    if (cible.dataset.ajout && PAR_CLE[cible.dataset.ajout]) { r.ajouts[cible.dataset.ajout] = cible.value; return; }
+    if (PAR_CLE[cible.dataset.f] && cible.type !== 'checkbox' && cible.tagName !== 'SELECT') r.valeurs[cible.dataset.f] = cible.value;
+    return;
+  }
   if (!f) return;
   if (cible.id === 'refusTxt') { f.commentaire = cible.value; return; }
   if (cible.id === 'avisNote') { f.avisNote = cible.value; return; }
@@ -881,6 +1423,23 @@ document.addEventListener('change', (evenement) => {
   const cible = evenement.target; const f = etat.f;
   if (cible.id === 'fGenre') { etat.filtres.genre = cible.value; return rafraichir(); }
   if (cible.id === 'fType') { etat.filtres.type = cible.value; return rafraichir(); }
+  if (cible.id === 'rType') { etat.filtresR.type = cible.value; return rafraichir(); }
+  if (cible.id === 'rStatut') { etat.filtresR.statut = cible.value; return rafraichir(); }
+  const r = etat.r;
+  if (r && r.d) {
+    if (r.enCours) return;
+    if (cible.id === 'vA' || cible.id === 'vB') { r[cible.id] = Number(cible.value); return dessinerFenetre(); }
+    if (!peut()) return;
+    if (cible.id === 'fportAdd' && cible.value) {
+      if (!r.valeurs.porteurs.includes(cible.value)) r.valeurs.porteurs.push(cible.value);
+      return redessinerListe('porteurs');
+    }
+    if (PAR_CLE[cible.dataset.f]) {
+      if (cible.type === 'checkbox') r.valeurs[cible.dataset.f] = cible.checked;
+      else if (cible.tagName === 'SELECT') r.valeurs[cible.dataset.f] = cible.value || null;
+    }
+    return;
+  }
   if (!f || !f.d) return;
   if (cible.id === 'corrIn') { f.brouillon = cible.type === 'checkbox' ? cible.checked : cible.value; return; }
   if (cible.id === 'autreChamp' && cible.value) {
@@ -923,7 +1482,7 @@ window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours()) { 
 // Changer d'écran. Une fenêtre avec une saisie en cours reste ouverte.
 window.addEventListener('hashchange', () => {
   if (!etat.moi) return;
-  if (etat.f && !saisieEnCours()) { etat.f = null; dessinerFenetre(); }
+  if (fenetreOuverte() && !saisieEnCours()) { etat.f = null; etat.r = null; etat.csv = null; dessinerFenetre(); }
   rendre(); window.scrollTo(0, 0);
   charger();
 });
@@ -948,7 +1507,7 @@ function changerTheme() {
   try { localStorage.setItem('rsn-theme', nouveau); } catch (err) { /* sans mémoire */ }
   libelleTheme();
   // L'aperçu de la fiche suit le mode choisi.
-  if (etat.f && etat.f.d && etat.f.onglet === 'apercu') dessinerFenetre();
+  if ((etat.f && etat.f.d && etat.f.onglet === 'apercu') || (etat.r && etat.r.d && etat.r.onglet === 'apercu')) dessinerFenetre();
 }
 
 // ─── Départ ───
