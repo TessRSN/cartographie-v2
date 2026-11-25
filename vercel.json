@@ -15,6 +15,9 @@
     },
     "api/logo.js": {
       "maxDuration": 15
+    },
+    "api/admin.js": {
+      "maxDuration": 30
     }
   },
   "rewrites": [
@@ -37,11 +40,15 @@
     {
       "source": "/proposer",
       "destination": "/proposer.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
     }
   ],
   "headers": [
     {
-      "source": "/(proposer|proposer.html|api/lien|api/proposition)",
+      "source": "/(proposer|proposer.html|admin|admin.html|api/lien|api/proposition|api/admin)",
       "headers": [
         {
           "key": "X-Robots-Tag",
