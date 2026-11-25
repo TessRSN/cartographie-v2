@@ -490,6 +490,17 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
 .card-action { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; padding: 0; border: 0; background: none; color: var(--rsn-secondary); text-decoration: none; font: inherit; font-size: 0.86rem; font-weight: 600; cursor: pointer; }
 [data-theme="dark"] .card-action { color: var(--rsn-accent); }
 .card-action:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* « Voir la fiche » : le bouton principal de la carte, plein, avec un « + » qui dit qu'on en verra plus. */
+.card-action.principale { min-height: 34px; align-self: center; padding: 0 0.95rem 0 0.7rem; border-radius: 999px; background: #1a365d; color: #fff; gap: 0.35rem; transition: background 0.15s; }
+.card-action.principale:hover, .card-action.principale:focus-visible { background: #24487c; text-decoration: none; }
+[data-theme="dark"] .card-action.principale { background: var(--rsn-accent); color: #0f1724; }
+[data-theme="dark"] .card-action.principale:hover, [data-theme="dark"] .card-action.principale:focus-visible { background: #63b3ed; }
+.card-action.principale .plus { font-size: 1.05rem; font-weight: 700; line-height: 1; }
+.card-foot { align-items: center; }
+/* Les sujets tiennent sur une seule ligne : un sujet trop long est coupé, le compte « +n » reste visible. */
+.card-sujets { flex-wrap: nowrap; }
+.card-sujets .axe-chip { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.card-sujets .chip-more { flex: none; }
 .card-action svg { width: 15px; height: 15px; }
 
 /* ─── Pagination ─── */

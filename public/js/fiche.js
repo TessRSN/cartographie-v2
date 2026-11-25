@@ -78,9 +78,9 @@ function htmlCarteFiche(r) {
     ? `<span class="card-porteur">${e(porteurs[0])}</span>`
       + (porteurs.length > 1 ? `<span class="card-plus">+${porteurs.length - 1}<span class="visually-hidden"> (${e(o.TEXTES.autresPorteurs(porteurs.length - 1))})</span></span>` : '')
     : '';
-  // Accès et portée sur une même rangée : ce qu'on veut savoir avant d'ouvrir la fiche.
-  const acces = pucesAcces(r.modesAcces, true)
-    + (r.portee ? `<span class="axe-chip portee">${e(o.TEXTES.filtres.portee)} : ${e(r.portee)}</span>` : '');
+  // Une information par rangée : l'accès, puis la portée, puis les sujets, puis les normes et outils.
+  const acces = pucesAcces(r.modesAcces, true);
+  const portee = r.portee ? `<span class="axe-chip portee">${e(o.TEXTES.filtres.portee)} : ${e(r.portee)}</span>` : '';
   // Bouton vers le site de la ressource, quand son adresse est sûre.
   const site = lienExterne(r.lien, `${o.TEXTES.fiche.visiter} ↗`, 'card-site');
   // Deux sujets au plus, cliquables comme dans la fiche ; les autres sont comptés.
@@ -99,12 +99,13 @@ function htmlCarteFiche(r) {
     ${bandeau}
     <div class="card-top">${htmlLogo(r)}<div class="card-id"><h3 class="card-name" title="${e(r.nom)}">${e(r.nom)}</h3>${porteursHtml ? `<div class="card-institution" title="${e(porteurs.join(' · '))}">${porteursHtml}</div>` : ''}</div></div>
     ${r.phrase ? `<p class="card-themes">${e(r.phrase)}</p>` : ''}
-    ${acces ? `<div class="card-chips-row">${acces}</div>` : ''}
+    ${acces ? `<div class="card-chips-row card-acces">${acces}</div>` : ''}
+    ${portee ? `<div class="card-chips-row card-portee">${portee}</div>` : ''}
     ${sujets ? `<div class="card-chips-row card-sujets">${sujets}</div>` : ''}
     ${reperes ? `<div class="card-chips-row card-reperes">${reperes}</div>` : ''}
     ${site ? `<div class="card-liens">${site}</div>` : ''}
     <div class="card-foot">
-      <a class="card-action" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}">${e(T.voirFiche)}<span class="visually-hidden"> : ${e(r.nom)}</span></a>
+      <a class="card-action principale" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}"><span class="plus" aria-hidden="true">+</span>${e(T.voirFiche)}<span class="visually-hidden"> : ${e(r.nom)}</span></a>
       <button type="button" class="card-action" data-graphe="${e(r.adresse)}">${ICONE_GRAPHE}${e(T.voirConnexions)}<span class="visually-hidden"> : ${e(r.nom)}</span></button>
     </div>
   </article>`;
