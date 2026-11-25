@@ -381,6 +381,7 @@ function afficherPortrait() {
   $('porteursPrincipaux').innerHTML = chiffres.porteursPrincipaux.map((p) => jeton('porteur', p.nom, p.nombre, nomCourt(p.nom), etat.filtres.porteur.includes(p.nom), p.nom)).join('');
   const ouvert = !bandeau.classList.contains('closed');
   $('libelleBascule').textContent = ouvert ? T.replier : T.deplier;
+  $('titrePortrait').textContent = ouvert ? T.titre : T.voir;
   $('basculePortrait').setAttribute('aria-expanded', ouvert ? 'true' : 'false');
 }
 
@@ -719,10 +720,9 @@ function brancherFenetres() {
 
 function brancherPortrait() {
   const bandeau = $('portrait');
-  try { if (localStorage.getItem('rsn-carto-portrait-replie') === '1') bandeau.classList.add('closed'); } catch (err) { /* sans mémoire : déplié */ }
+  // Le bandeau arrive toujours replié (classe « closed » dans le gabarit) : il s'ouvre à la demande.
   $('basculePortrait').addEventListener('click', () => {
     bandeau.classList.toggle('closed');
-    try { localStorage.setItem('rsn-carto-portrait-replie', bandeau.classList.contains('closed') ? '1' : '0'); } catch (err) { /* idem */ }
     afficherPortrait();
   });
   $('triListe').addEventListener('change', () => { etat.tri = $('triListe').value; rafraichir(); });
