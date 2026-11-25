@@ -4,6 +4,7 @@
  * Lot 3 : porteurs (colonnes, volet avec la carte du site, fusion) et qualité des données.
  * Lot 4a : équipe (accès, rôles, résumé hebdomadaire, journal) ; une personne en Approbation propose
  * ses modifications de fiches, que l'Administration approuve.
+ * Lot 4b : courriels (mode d'essai, texte des six courriels, aperçu, essai à soi-même).
  * On y entre par un lien reçu par courriel (?jeton=…), qui ouvre une session de sept jours.
  * La structure, les classes et les fonctions de rendu viennent de la maquette validée ; les données
  * viennent de /api/admin. Le rôle est celui de la personne connectée : l'affichage masque ce qu'il
@@ -24,7 +25,7 @@ const $ = (selecteur, racine) => (racine || document).querySelector(selecteur);
 
 const ETATS = ['attente', 'verification', 'approuvee', 'refusee'];
 const OUVERTS = ['attente', 'verification'];
-const ROUTES = ['accueil', 'propositions', 'ressources', 'porteurs', 'qualite', 'equipe'];
+const ROUTES = ['accueil', 'propositions', 'ressources', 'porteurs', 'qualite', 'equipe', 'courriels'];
 const TYPES = ['jeu', 'catalogue', 'plateforme', 'logiciel', 'service'];
 const RELATIONS = ['faitPartieDe', 'reposeSur', 'donneAccesA', 'remplace'];
 // Ce qu'il faut compléter pour une fiche que la personne a laissée à l'équipe.
@@ -52,8 +53,12 @@ const etat = {
   q: { confirmation: null, enCours: null, filtre: '', rech: '' }, // écran Qualité : la fusion à confirmer, le geste en cours, le filtre, la recherche
   equipe: null,         // dernière lecture de l'équipe : { personnes, resume, journal }
   eq: equipeNeuve(),    // écran Équipe : le geste en cours, la personne à retirer, l'invitation en cours d'écriture
+  courriels: null,      // dernière lecture de l'écran Courriels : { reglages, essai, service, courriels }
+  co: courrielsNeufs(), // écran Courriels : le courriel choisi, les textes en cours d'écriture, le geste en cours, la confirmation
 };
 function equipeNeuve() { return { enCours: null, confirmation: null, invitation: { courriel: '', nom: '', role: 'approbation' }, erreurs: {} }; }
+// champ : le dernier champ de l'éditeur où était le curseur, pour y insérer un repère.
+function courrielsNeufs() { return { choisi: 'lien', brouillons: {}, erreurs: {}, enCours: null, confirmation: null, champ: 'mBody' }; }
 // Une seule fenêtre à la fois : une proposition, une fiche, l'export ou le volet d'un porteur.
 const fenetreOuverte = () => !!(etat.f || etat.r || etat.csv || etat.o);
 
@@ -124,6 +129,7 @@ const ICONES = {
   porteurs: '<path d="M3 20h18M5 20V9l7-5 7 5v11M9 20v-6h6v6"/>',
   qualite: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
   equipe: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 14.3c2.1.8 3.5 2.9 3.5 5.7"/>',
+  courriels: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7.5 8.5 6 8.5-6"/>',
   favorable: '<path d="M7 10v11"/><path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9z"/>',
   defavorable: '<path d="M17 14V3"/><path d="M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H20a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/>',
 };
@@ -167,7 +173,7 @@ function afficherEntree(avertissement) {
   etat.moi = null; etat.accueil = null; etat.liste = null; etat.nouvelles = null; etat.f = null;
   etat.fiches = null; etat.r = null; etat.csv = null;
   etat.porteurs = null; etat.o = null; etat.points = null; etat.compteurs = null; etat.q = { confirmation: null, enCours: null, filtre: '', rech: '' };
-  etat.equipe = null; etat.eq = equipeNeuve();
+  etat.equipe = null; etat.eq = equipeNeuve(); etat.courriels = null; etat.co = courrielsNeufs();
   dessinerBandeau(); montrerCoque(false); dessinerFenetre();
   $('#main').innerHTML = `<div class="card entree">
     <h1>${e(T.titre)}</h1>
@@ -311,19 +317,20 @@ let demande = 0; // numéro de la dernière lecture d'écran : une réponse plus
 
 function rendre() {
   dessinerBandeau(); montrerCoque(true); dessinerNav();
-  $('#main').innerHTML = { accueil: ecranAccueil, propositions: ecranPropositions, ressources: ecranRessources, porteurs: ecranPorteurs, qualite: ecranQualite, equipe: ecranEquipe }[route()]();
+  $('#main').innerHTML = { accueil: ecranAccueil, propositions: ecranPropositions, ressources: ecranRessources, porteurs: ecranPorteurs, qualite: ecranQualite, equipe: ecranEquipe, courriels: ecranCourriels }[route()]();
 }
 // Redessine ce qui dépend des données sans toucher à la recherche en cours de frappe.
 function rafraichir() {
   const ici = route();
   if (ici === 'equipe' && $('#ebody')) { redessinerEquipe(); return dessinerNav(); }
+  if (ici === 'courriels' && $('#cbody')) { redessinerCourriels(); return dessinerNav(); }
   const corps = { propositions: $('#mbody'), ressources: $('#rbody'), porteurs: $('#pbody'), qualite: $('#qbody') }[ici];
   if (!corps) return rendre();
   corps.innerHTML = { propositions: corpsPropositions, ressources: corpsRessources, porteurs: corpsPorteurs, qualite: corpsQualite }[ici]();
   if (ici === 'ressources') $('#rintro').textContent = introRessources();
   dessinerNav();
 }
-const ACTION_DE_ROUTE = { accueil: 'accueil', propositions: 'file', ressources: 'ressources', porteurs: 'porteurs', qualite: 'qualite', equipe: 'equipe' };
+const ACTION_DE_ROUTE = { accueil: 'accueil', propositions: 'file', ressources: 'ressources', porteurs: 'porteurs', qualite: 'qualite', equipe: 'equipe', courriels: 'courriels' };
 async function charger() {
   const moi = ++demande;
   const ici = route();
@@ -334,14 +341,21 @@ async function charger() {
     if (saisieEnCours()) { noter('warn', T.sessionExpiree); return; }
     // Une invitation en cours d'écriture reste à l'écran elle aussi.
     if (saisieEquipe()) { message(EQ.sessionExpiree); return; }
+    // Un texte de courriel en cours d'écriture aussi.
+    if (saisieCourriels()) { message(CO.sessionExpiree); return; }
     return afficherEntree(null);
   }
   if (!r.ok) {
-    if ({ accueil: etat.accueil, propositions: etat.liste, ressources: etat.fiches, porteurs: etat.porteurs, qualite: etat.points, equipe: etat.equipe }[ici]) message(T.indisponible); else afficherPanne();
+    if ({ accueil: etat.accueil, propositions: etat.liste, ressources: etat.fiches, porteurs: etat.porteurs, qualite: etat.points, equipe: etat.equipe, courriels: etat.courriels }[ici]) message(T.indisponible); else afficherPanne();
     return;
   }
   if (ici === 'accueil') { etat.accueil = r.donnees; etat.nouvelles = r.donnees.compteurs.nouvelles; }
   else if (ici === 'equipe') etat.equipe = r.donnees;
+  else if (ici === 'courriels') {
+    etat.courriels = r.donnees;
+    // Un brouillon redevenu identique au texte en vigueur n'en est plus un.
+    for (const c of etat.courriels.courriels) if (!brouillonDiffere(c)) delete etat.co.brouillons[c.id];
+  }
   else if (ici === 'ressources') { etat.fiches = r.donnees.ressources || []; etat.historique = r.donnees.historique !== false; }
   else if (ici === 'porteurs') {
     etat.porteurs = r.donnees.porteurs || [];
@@ -1916,6 +1930,7 @@ const TEINTES_GESTE = {
   'Approbation': 'ok', 'Fiche republiée': 'ok', 'Fiche vérifiée': 'ok', 'Invitation': 'ok', 'Fiche créée': 'ok', 'Porteur créé': 'ok',
   'Refus': 'bad', 'Fiche écartée': 'bad', 'Personne retirée': 'bad',
   'Second regard': 'warn', 'Fiche à revoir': 'warn', 'Modification proposée': 'warn', 'Rôle changé': 'warn',
+  'Mode d\'essai changé': 'warn',
 };
 const pointGeste = (geste) => `<span class="pt pt-${TEINTES_GESTE[geste] || 'info'}" aria-hidden="true"></span>`;
 function journalDeLEquipe() {
@@ -2036,6 +2051,218 @@ function reglageEquipe(cible) {
   return gesteEquipe(`resume:${x.id}`, 'regler-resume', { personne: x.id, actif }, () => (actif ? EQ.resumeActive : EQ.resumeArrete)(nom, x.moi));
 }
 
+// ─── Courriels : le mode d'essai, et le texte des six courriels automatiques ───
+const CO = T.courriels;
+const Gabarits = window.Gabarits;
+const courrielChoisi = () => { const liste = (etat.courriels && etat.courriels.courriels) || []; return liste.find((c) => c.id === etat.co.choisi) || liste[0] || null; };
+// Modifier demande le rôle Administration et la base « Réglages ».
+const modifiable = () => administre() && !!etat.courriels && etat.courriels.reglages.actifs;
+// Ce qui est écrit dans l'éditeur d'un courriel : le brouillon s'il y en a un, sinon le texte en vigueur.
+const saisieDe = (c) => etat.co.brouillons[c.id] || { objet: c.objet, texte: c.texte };
+const brouillonDiffere = (c) => { const b = etat.co.brouillons[c.id]; return !!b && (b.objet !== c.objet || b.texte !== c.texte); };
+// Vrai si un texte de courriel est en cours d'écriture, sans être enregistré.
+function saisieCourriels() { return !!etat.courriels && etat.courriels.courriels.some(brouillonDiffere); }
+
+function blocEssai() {
+  const d = etat.courriels; const x = d.essai; const co = etat.co; const fige = co.enCours ? ' disabled' : '';
+  const origine = x.source === 'panneau' ? CO.essai.duPanneau(x.modifiePar, jour(x.modifieLe)) : x.source === 'vercel' ? CO.essai.deVercel : CO.essai.parPrecaution;
+  const pastille = x.actif ? `<span class="pill p-warn">${e(T.envois.actif)}</span>` : `<span class="pill p-mute">${e(T.envois.arrete)}</span>`;
+  const confirmation = co.confirmation === 'essai'
+    ? `<div class="confirm" id="confirmationEssai"><span>${e(CO.essai.question)}</span><button type="button" class="btn sm" data-act="c-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="c-couper-essai"${fige}>${e(co.enCours ? T.enCours : CO.essai.couper)}</button></div>` : '';
+  return `<section class="card"><div class="switch"><div><b>${e(CO.essai.titre)}</b><span class="muted small">${e(CO.essai.aide)}</span></div><input type="checkbox" role="switch" id="essaiMode" aria-label="${e(CO.essai.titre)}"${x.actif ? ' checked' : ''}${modifiable() && !co.enCours ? '' : ' disabled'}></div>
+    <p class="small">${pastille} ${e(origine)}</p>
+    <p class="muted small">${e(x.adresseDefinie ? CO.essai.adresseDefinie : CO.essai.sansAdresse(x.actif))}${d.service ? '' : ` ${e(CO.essai.sansService)}`}</p>${confirmation}</section>`;
+}
+function listeCourriels() {
+  const choisi = courrielChoisi();
+  return etat.courriels.courriels.map((c) => {
+    const marque = brouillonDiffere(c) ? CO.nonEnregistre : c.ignore ? CO.ecarteCourt : c.modifie ? CO.modifieLe(jour(c.modifieLe), c.modifiePar) : '';
+    return `<button type="button" data-act="c-choisir" data-id="${e(c.id)}" aria-pressed="${c.id === choisi.id}"><b>${e(c.nom)}</b><small>${e(c.quand)}</small>${marque ? `<small class="modif">${e(marque)}</small>` : ''}</button>`;
+  }).join('');
+}
+// L'aperçu : le courriel rempli de valeurs d'exemple par la fonction qui sert aussi à l'envoi, montré
+// dans un cadre sans scripts. Tout y est déjà échappé par cette fonction.
+function apercuCourriel() {
+  const c = courrielChoisi(); const s = saisieDe(c);
+  const ex = Gabarits.exemple(c.id, location.origin);
+  let rendu;
+  try { rendu = Gabarits.rendre(c.id, s, ex.valeurs, ex); } catch (err) { return `<div class="pb muted">${e(CO.apercu.impossible)}</div>`; }
+  const page = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><base target="_blank"><style>body{margin:0;background:#ffffff}a{pointer-events:none}</style></head><body>${Gabarits.enveloppe(rendu.corps)}</body></html>`;
+  const aQui = etat.courriels.essai.actif ? CO.apercu.versEssai : c.aQui.charAt(0).toLowerCase() + c.aQui.slice(1);
+  return `<div class="subj"><b>${e(CO.apercu.a)}</b> ${e(aQui)}<br><b>${e(CO.apercu.objet)}</b> ${e(rendu.objet)}</div><iframe class="apercu-courriel" title="${e(CO.apercu.cadre)}" sandbox="" srcdoc="${e(page)}"></iframe>`;
+}
+function editeurCourriel() {
+  const c = courrielChoisi(); const s = saisieDe(c); const co = etat.co; const m = modifiable();
+  const fige = co.enCours ? ' disabled' : ''; const lecture = m ? '' : ' readonly';
+  const erreur = (cle) => (co.erreurs[cle] ? `<span class="err" role="alert">${e(co.erreurs[cle])}</span>` : '');
+  const puces = c.reperes.map((r) => `<button type="button" class="chip" data-act="c-repere" data-r="${e(r.repere)}" title="${e(r.aide)}"${m && !co.enCours ? '' : ' disabled'}>${e(r.repere)}</button>`).join('');
+  const aides = c.reperes.map((r) => `<li><code>${e(r.repere)}</code> : ${e(r.aide)}${r.requis ? ` <b>(${e(CO.indispensable)})</b>` : ''}</li>`).join('');
+  const stocke = c.modifie || !!c.ignore;
+  const confirmation = co.confirmation === 'retablir'
+    ? `<div class="confirm" id="confirmationCourriel"><span>${e(CO.retablir.question(c.nom))}</span><button type="button" class="btn sm" data-act="c-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="c-retablir"${fige}>${e(co.enCours ? T.enCours : CO.retablir.confirmer)}</button></div>` : '';
+  const boutons = [
+    m ? `<button type="button" class="btn primary" data-act="c-enregistrer"${fige}>${e(co.enCours === 'enregistrer' ? T.enCours : CO.enregistrer)}</button>` : '',
+    administre() ? `<button type="button" class="btn" data-act="c-essayer"${fige}>${e(co.enCours === 'essayer' ? T.enCours : CO.essayer)}</button>` : '',
+    m ? `<button type="button" class="btn" id="cAbandon" data-act="c-abandonner"${fige}${brouillonDiffere(c) ? '' : ' hidden'}>${e(CO.abandonner)}</button>` : '',
+    m && stocke ? `<button type="button" class="btn" data-act="c-demander-retablir"${fige}>${e(CO.retablir.bouton)}</button>` : '',
+  ].join('');
+  return `<section class="card"><h2 class="qtitre">${e(c.nom)}</h2>
+      <p class="muted small">${e(CO.envoye(c.aQui, c.quand))}${c.modifie ? ` ${e(CO.modifieLe(jour(c.modifieLe), c.modifiePar))}.` : ''}</p>
+      ${c.ignore ? `<div class="note warn">${e(CO.ecarte)}</div>` : ''}
+      <label class="f" for="mSubj">${e(CO.objet)}<input type="text" id="mSubj" maxlength="${Number(Gabarits.OBJET_MAX)}" value="${e(s.objet)}" autocomplete="off"${co.erreurs.objet ? ' aria-invalid="true"' : ''}${lecture}></label>${erreur('objet')}
+      <label class="f" for="mBody">${e(CO.texte)}<textarea id="mBody" maxlength="${Number(Gabarits.TEXTE_MAX)}"${co.erreurs.texte ? ' aria-invalid="true"' : ''}${lecture}>${e(s.texte)}</textarea></label>${erreur('texte')}
+      <div><h3 style="margin-bottom:.4rem">${e(CO.reperes)}</h3><div class="chips">${puces}</div>
+        <ul class="muted small reperes">${aides}</ul><p class="muted small">${e(CO.reperesAide)}</p></div>
+      ${boutons ? `<div class="row">${boutons}</div>` : ''}${confirmation}</section>
+    <section><h3 style="margin-bottom:.5rem">${e(CO.apercu.titre)}</h3><p class="muted small" style="margin-bottom:.5rem">${e(CO.apercu.aide)}</p><div class="preview" id="mPrev">${apercuCourriel()}</div></section>`;
+}
+function corpsCourriels() {
+  const d = etat.courriels;
+  if (!d) return `<p class="muted" role="status">${e(T.chargement)}</p>`;
+  const avis = !d.reglages.actifs ? `<div class="note warn">${e(CO.sansBase)}</div>`
+    : !d.reglages.lus ? `<div class="note warn">${e(CO.illisible)}</div>`
+      : !administre() ? `<div class="note info">${e(CO.lectureSeule)}</div>` : '';
+  return `${avis}${blocEssai()}
+    <div class="mail"><div class="mlist" id="mList" role="group" aria-label="${e(CO.liste)}">${listeCourriels()}</div><div class="grid" style="gap:1rem">${editeurCourriel()}</div></div>`;
+}
+function ecranCourriels() {
+  return `<div class="head"><div><h1>${e(T.routes.courriels)}</h1><p>${e(CO.intro)}</p></div></div><div id="cbody">${corpsCourriels()}</div>`;
+}
+// Redessine l'écran en gardant le focus et le curseur là où ils étaient : ce qui est écrit est dans l'état.
+function redessinerCourriels() {
+  const zone = $('#cbody');
+  if (!zone) return;
+  const actif = zone.contains(document.activeElement) ? document.activeElement : null;
+  const repere = actif ? { id: actif.id, act: actif.dataset.act, pour: actif.dataset.id, r: actif.dataset.r } : null;
+  let curseur = null; let defilement = 0;
+  try { if (actif && (actif.id === 'mSubj' || actif.id === 'mBody')) { curseur = [actif.selectionStart, actif.selectionEnd]; defilement = actif.scrollTop; } } catch (err) { /* sans position */ }
+  zone.innerHTML = corpsCourriels();
+  if (!repere) return;
+  const pareil = (x) => (repere.id ? x.id === repere.id : x.dataset.act === repere.act && x.dataset.id === repere.pour && x.dataset.r === repere.r);
+  const retrouve = [...zone.querySelectorAll('button, input, textarea')].find((x) => !x.disabled && !x.hidden && pareil(x));
+  if (!retrouve) return;
+  retrouve.focus({ preventScroll: true });
+  try { if (curseur) { retrouve.setSelectionRange(curseur[0], curseur[1]); retrouve.scrollTop = defilement; } } catch (err) { /* sans position */ }
+}
+// Chaque frappe est gardée dans l'état, sans redessiner l'éditeur : seuls l'aperçu et la liste suivent.
+let minuterieApercu;
+function saisirCourriel(cible) {
+  const c = courrielChoisi();
+  if (!c || !modifiable()) return;
+  const s = { ...saisieDe(c), [cible.id === 'mSubj' ? 'objet' : 'texte']: cible.value };
+  if (s.objet === c.objet && s.texte === c.texte) delete etat.co.brouillons[c.id]; else etat.co.brouillons[c.id] = s;
+  const liste = $('#mList'); if (liste) liste.innerHTML = listeCourriels();
+  const abandon = $('#cAbandon'); if (abandon) abandon.hidden = !brouillonDiffere(c);
+  clearTimeout(minuterieApercu);
+  minuterieApercu = setTimeout(() => { const zone = $('#mPrev'); if (zone && route() === 'courriels' && etat.courriels) zone.innerHTML = apercuCourriel(); }, 150);
+}
+function poserCourriel(vue) {
+  if (!vue || !etat.courriels) return;
+  const liste = etat.courriels.courriels; const i = liste.findIndex((x) => x.id === vue.id);
+  if (i >= 0) liste[i] = vue;
+}
+// Un geste sur les courriels : un seul à la fois, les boutons sont figés pendant l'envoi. Le serveur vérifie tout.
+async function gesteCourriels(cle, action, corps, reussite) {
+  const co = etat.co;
+  if (co.enCours) return undefined;
+  co.enCours = cle; co.erreurs = {}; redessinerCourriels();
+  const r = await appel(action, { corps });
+  co.enCours = null;
+  if (r.ok) { co.confirmation = null; reussite(r.donnees); return redessinerCourriels(); }
+  if (r.code === 401) {
+    // Session échue : le texte en cours d'écriture reste à l'écran.
+    if (!saisieCourriels()) return afficherEntree(null);
+    message(CO.sessionExpiree);
+    return redessinerCourriels();
+  }
+  co.confirmation = null;
+  if (r.code === 403) { message(T.reserveAdministration); redessinerCourriels(); await relireMoi(); return charger(); }
+  const code = r.donnees.code;
+  if (code === 'invalide' && r.donnees.erreurs) {
+    co.erreurs = { ...r.donnees.erreurs }; message(CO.aCorriger); redessinerCourriels();
+    const fautif = $(co.erreurs.objet ? '#mSubj' : '#mBody'); if (fautif) fautif.focus();
+    return undefined;
+  }
+  message(code === 'reglages-absents' ? CO.sansBaseCourt : code === 'limite' ? CO.essaiLimite : code === 'sans-adresse' ? CO.essaiSansAdresse : code === 'envoi' ? CO.essaiEchec : code === 'introuvable' ? CO.introuvable : T.indisponible);
+  redessinerCourriels();
+  // L'écran reprend ce que le serveur dit vraiment.
+  return code === 'reglages-absents' || code === 'introuvable' ? charger() : undefined;
+}
+// Le texte de l'éditeur, vérifié ici par la fonction que le serveur applique aussi. null s'il est à corriger.
+function brouillonValide(c) {
+  const v = Gabarits.valider(c.id, saisieDe(c));
+  if (v.ok) return v.gabarit;
+  etat.co.erreurs = { ...v.erreurs }; etat.co.confirmation = null; message(CO.aCorriger); redessinerCourriels();
+  const fautif = $(v.erreurs.objet ? '#mSubj' : '#mBody'); if (fautif) fautif.focus();
+  return null;
+}
+function gesteEcranCourriels(act, cible) {
+  const co = etat.co; const c = courrielChoisi();
+  if (co.enCours) return undefined;
+  if (!etat.courriels || !c) return undefined;
+  if (act === 'c-choisir') { co.choisi = cible.dataset.id; co.erreurs = {}; co.confirmation = null; return redessinerCourriels(); }
+  if (act === 'c-annuler') { co.confirmation = null; return redessinerCourriels(); }
+  if (!administre()) return undefined;
+  if (act === 'c-essayer') {
+    // Un brouillon s'essaie avant d'être enregistré ; sinon c'est le texte en vigueur qui part.
+    const gabarit = brouillonDiffere(c) ? brouillonValide(c) : undefined;
+    if (gabarit === null) return undefined;
+    return gesteCourriels('essayer', 'essai-courriel', gabarit ? { id: c.id, objet: gabarit.objet, texte: gabarit.texte } : { id: c.id },
+      (d) => message(d.simule ? CO.essaiSimule : d.essai ? CO.essaiVersEssai : CO.essaiEnvoye(etat.moi.courriel)));
+  }
+  if (!modifiable()) return undefined;
+  // Couper le mode d'essai ne part que d'ici, après la confirmation affichée.
+  if (act === 'c-couper-essai' && co.confirmation === 'essai') return gesteCourriels('essai-mode', 'mode-essai', { actif: false, confirme: true }, (d) => { poserEssai(d); message(d.inchange ? CO.essai.inchange : CO.essai.coupe); });
+  if (act === 'c-repere') {
+    const zone = $(co.champ === 'mSubj' ? '#mSubj' : '#mBody');
+    if (!zone || zone.readOnly) return undefined;
+    const r = cible.dataset.r;
+    const debut = typeof zone.selectionStart === 'number' ? zone.selectionStart : zone.value.length;
+    const fin = typeof zone.selectionEnd === 'number' ? zone.selectionEnd : debut;
+    zone.value = zone.value.slice(0, debut) + r + zone.value.slice(fin);
+    zone.focus(); zone.selectionStart = zone.selectionEnd = debut + r.length;
+    return saisirCourriel(zone);
+  }
+  if (act === 'c-abandonner') { delete co.brouillons[c.id]; co.erreurs = {}; co.confirmation = null; return redessinerCourriels(); }
+  if (act === 'c-enregistrer') {
+    const gabarit = brouillonValide(c);
+    if (!gabarit) return undefined;
+    return gesteCourriels('enregistrer', 'enregistrer-courriel', { id: c.id, objet: gabarit.objet, texte: gabarit.texte }, (d) => {
+      poserCourriel(d.courriel); delete co.brouillons[c.id];
+      message(d.inchange ? CO.inchange : d.retabli ? CO.retabli(c.nom) : CO.enregistre(c.nom));
+    });
+  }
+  // Rétablir le texte d'origine passe toujours par une confirmation.
+  if (act === 'c-demander-retablir') {
+    co.confirmation = 'retablir'; redessinerCourriels();
+    const zone = $('#confirmationCourriel');
+    if (zone) { zone.scrollIntoView({ block: 'center' }); const oui = zone.querySelector('.danger'); if (oui) oui.focus(); }
+    return undefined;
+  }
+  if (act === 'c-retablir' && co.confirmation === 'retablir') {
+    return gesteCourriels('retablir', 'retablir-courriel', { id: c.id }, (d) => { poserCourriel(d.courriel); delete co.brouillons[c.id]; message(CO.retabli(c.nom)); });
+  }
+  return undefined;
+}
+function poserEssai(d) {
+  if (!etat.courriels || d.inchange) return;
+  etat.courriels.essai = { ...etat.courriels.essai, actif: d.actif, source: d.source, modifieLe: new Date().toISOString(), modifiePar: (etat.moi && etat.moi.nom) || null };
+  // L'accueil sera relu : son bloc « Envois » ne garde pas l'ancien état.
+  etat.accueil = null;
+}
+// L'interrupteur du mode d'essai. L'activer part tout de suite ; le couper ouvre d'abord la confirmation,
+// et l'interrupteur reste où il était tant qu'elle n'est pas donnée.
+function reglerEssai(cible) {
+  const co = etat.co;
+  if (!modifiable() || co.enCours) return redessinerCourriels();
+  if (cible.checked) return gesteCourriels('essai-mode', 'mode-essai', { actif: true }, (d) => { poserEssai(d); message(d.inchange ? CO.essai.inchange : CO.essai.active); });
+  co.confirmation = 'essai'; redessinerCourriels();
+  const zone = $('#confirmationEssai');
+  // Le focus va sur « Annuler » : un geste qui écrit au public ne doit pas partir d'une touche Entrée de trop.
+  if (zone) { zone.scrollIntoView({ block: 'center' }); const non = zone.querySelector('[data-act="c-annuler"]'); if (non) non.focus(); }
+  return undefined;
+}
+
 // ─── Export en CSV, à partir des fiches lues par le tableau ───
 function lignesCsv(liste) {
   // Une cellule qui commencerait par un signe de formule est neutralisée pour les tableurs.
@@ -2115,6 +2342,7 @@ document.addEventListener('click', async (evenement) => {
   if (act === 'vue-porteurs') { etat.vueP = v === 'liste' ? 'liste' : 'colonnes'; return rendre(); }
   if (act && act.startsWith('q-')) return gesteEcranQualite(act, cible);
   if (act && act.startsWith('e-')) return gesteEcranEquipe(act, cible);
+  if (act && act.startsWith('c-')) return gesteEcranCourriels(act, cible);
   if (etat.csv) return gesteCsv(act, v);
   if (etat.r) return gesteFenetreFiche(act, cible);
   if (etat.o) return gesteVolet(act);
@@ -2181,6 +2409,8 @@ document.addEventListener('input', (evenement) => {
   // Écran Équipe : chaque frappe de l'invitation est gardée, sans redessiner.
   if (cible.id === 'invCourriel') { etat.eq.invitation.courriel = cible.value; return; }
   if (cible.id === 'invNom') { etat.eq.invitation.nom = cible.value; return; }
+  // Écran Courriels : chaque frappe de l'objet ou du texte est gardée, et l'aperçu suit.
+  if (cible.id === 'mSubj' || cible.id === 'mBody') return saisirCourriel(cible);
   // Volet d'un porteur : chaque frappe est gardée, et le repère suit les coordonnées écrites.
   const o = etat.o;
   if (o && o.d) {
@@ -2209,6 +2439,7 @@ document.addEventListener('change', (evenement) => {
   if (cible.id === 'fType') { etat.filtres.type = cible.value; return rafraichir(); }
   if (cible.id === 'rType') { etat.filtresR.type = cible.value; return rafraichir(); }
   if (cible.id === 'rStatut') { etat.filtresR.statut = cible.value; return rafraichir(); }
+  if (cible.id === 'essaiMode') return void reglerEssai(cible);
   if (cible.id === 'invRole') { if (T.roles[cible.value]) etat.eq.invitation.role = cible.value; return; }
   if (cible.dataset.role !== undefined || cible.dataset.resume !== undefined) return void reglageEquipe(cible);
   if (cible.id === 'fusionVers' && etat.o && etat.o.d && !etat.o.enCours) { etat.o.fusionVers = cible.value; etat.o.confirmation = false; return dessinerFenetre(); }
@@ -2244,6 +2475,9 @@ document.addEventListener('submit', (evenement) => {
   if (evenement.target.id === 'invitation') inviter();
 });
 
+// Le dernier champ de l'éditeur de courriel où était le curseur : un repère s'y insère.
+document.addEventListener('focusin', (evenement) => { const id = evenement.target && evenement.target.id; if (id === 'mSubj' || id === 'mBody') etat.co.champ = id; });
+
 // Glisser une carte d'une colonne à l'autre.
 document.addEventListener('dragstart', (evenement) => {
   const c = evenement.target.closest && evenement.target.closest('.mcard[draggable="true"]');
@@ -2265,13 +2499,13 @@ document.addEventListener('drop', (evenement) => {
 });
 
 // Fermer l'onglet ou recharger la page avec une saisie en cours : le navigateur demande confirmation.
-window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours() || saisieEquipe()) { evenement.preventDefault(); evenement.returnValue = ''; } });
+window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours() || saisieEquipe() || saisieCourriels()) { evenement.preventDefault(); evenement.returnValue = ''; } });
 
 // Changer d'écran. Une fenêtre avec une saisie en cours reste ouverte.
 window.addEventListener('hashchange', () => {
   if (!etat.moi) return;
   if (fenetreOuverte() && !saisieEnCours()) { etat.f = null; etat.r = null; etat.csv = null; etat.o = null; dessinerFenetre(); }
-  etat.q.confirmation = null; etat.eq.confirmation = null;
+  etat.q.confirmation = null; etat.eq.confirmation = null; etat.co.confirmation = null;
   rendre(); window.scrollTo(0, 0);
   charger();
 });

@@ -9,6 +9,15 @@ const { ouvertes, origineSure, memeOrigine, ipDe, corpsDe, dependances } = requi
 
 const BUTS = ['proposer', 'modifier', 'panneau'];
 
+// Le nom de la personne de l'équipe, pour le repère {nom} du courriel. S'il ne peut pas être lu,
+// le lien part quand même, sans nom.
+async function nomDansLEquipe(d, courriel) {
+  try {
+    const personne = (await d.propositions.equipe()).find((x) => x.courriel === courriel);
+    return (personne && personne.nom) || '';
+  } catch (err) { return ''; }
+}
+
 function creerGestionnaire(donnees) {
   return async function gestionnaire(req, res) {
     const env = (donnees && donnees.env) || process.env;
@@ -34,7 +43,7 @@ function creerGestionnaire(donnees) {
 
       if (corps.but === 'panneau') {
         if (await d.propositions.estApprobateur(courriel)) {
-          await d.courriels.lienPanneau({ a: courriel, lien: `${origine}/admin?jeton=${signer('panneau', { courriel }, secret)}` });
+          await d.courriels.lienPanneau({ a: courriel, lien: `${origine}/admin?jeton=${signer('panneau', { courriel }, secret)}`, destinataire: await nomDansLEquipe(d, courriel) });
         }
       } else if (corps.but === 'modifier') {
         const publiques = await d.source();

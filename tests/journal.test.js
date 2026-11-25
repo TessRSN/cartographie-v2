@@ -16,7 +16,8 @@ function banc({ env = ENV, pannes = {} } = {}) {
 
 test('les gestes du journal sont ceux de la colonne « Geste » de la base', () => {
   assert.deepEqual(GESTES, ['Approbation', 'Refus', 'Second regard', 'Fiche modifiée', 'Fiche créée', 'Version rétablie', 'Fiche écartée', 'Fiche republiée', 'Fiche vérifiée', 'Fiche à revoir',
-    'Porteur créé', 'Porteur modifié', 'Porteurs fusionnés', 'Valeurs fusionnées', 'Invitation', 'Rôle changé', 'Personne retirée', 'Résumé réglé', 'Modification proposée']);
+    'Porteur créé', 'Porteur modifié', 'Porteurs fusionnés', 'Valeurs fusionnées', 'Invitation', 'Rôle changé', 'Personne retirée', 'Résumé réglé', 'Modification proposée',
+    'Courriel modifié', 'Courriel rétabli', "Mode d'essai changé"]);
   assert.deepEqual(COLONNES, { titre: 'Titre', faitLe: 'Fait le', faitPar: 'Fait par', geste: 'Geste', sur: 'Sur' });
 });
 

@@ -338,9 +338,21 @@ table.qtable td { vertical-align: middle; }
 .list select:disabled, .switch input:disabled { cursor: not-allowed; opacity: .6; }
 @media (max-width: 520px) { .invite .row > * { flex: 1 1 100%; } }
 /* Les blocs d'un même écran respirent : même écart qu'entre les sections principales. */
-#mbody, #rbody, #pbody, #qbody, #ebody { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+#mbody, #rbody, #pbody, #qbody, #ebody, #cbody { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
 #qbody .chipsf { margin-bottom: 0; }
 /* Qui a fait le geste, et la famille du geste : ce qui se lit d'abord dans une liste. */
 .qui { color: var(--info); }
 .pt { flex: 0 0 auto; width: .55rem; height: .55rem; border-radius: 50%; background: var(--info); }
 .pt-ok { background: var(--ok); } .pt-bad { background: var(--bad); } .pt-warn { background: var(--warn); } .pt-info { background: var(--info); }
+/* Courriels : l'aperçu dans son cadre sans scripts, la marque d'un texte modifié, la liste des repères. */
+.apercu-courriel { width: 100%; height: 520px; border: 0; display: block; background: #ffffff; }
+.mlist small.modif { color: var(--accent-text); }
+.mlist button { color: var(--fg); }
+.chip { color: var(--fg); }
+.chip:disabled { cursor: not-allowed; opacity: .6; }
+.reperes { margin: .6rem 0 .4rem; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .2rem; }
+.reperes code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .84rem; background: var(--surface2); padding: .05rem .35rem; border-radius: 4px; color: var(--fg); }
+.mail textarea[readonly], .mail input[readonly] { background: var(--surface2); cursor: default; }
+.mail [aria-invalid="true"] { border-color: var(--bad); }
+.card > .confirm { align-self: stretch; }
+@media (max-width: 520px) { .apercu-courriel { height: 440px; } }

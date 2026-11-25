@@ -131,3 +131,21 @@ test('un jeton libéré peut resservir', async () => {
   assert.equal(await limites.consommerJeton('jti-9'), true);
   assert.equal(await limites.consommerJeton('jti-9'), false);
 });
+
+test("les essais de courriel qu'une personne s'envoie ont leur propre limite : vingt par heure, sans toucher à celle des liens", async () => {
+  const { limites, horloge } = enMemoire();
+  for (let i = 1; i <= 20; i++) assert.equal(await limites.autoriserEssai({ courriel: 'tess@e.org' }), true, String(i));
+  assert.equal(await limites.autoriserEssai({ courriel: 'tess@e.org' }), false);
+  assert.equal(await limites.autoriserEssai({ courriel: 'max@e.org' }), true, 'chacun son compte');
+  // Les liens d'entrée de la même personne ne sont pas entamés.
+  assert.equal(await limites.autoriserLien({ courriel: 'tess@e.org', ip: '10.0.0.1', plafondDuJour: false }), true);
+  horloge.t += HEURE;
+  assert.equal(await limites.autoriserEssai({ courriel: 'tess@e.org' }), true, "l'heure suivante, ça repart");
+});
+
+test("la limite des essais de courriel passe par le stockage partagé quand il existe", async () => {
+  const stockage = fauxStockage();
+  const limites = creerLimites({ env: { KV_REST_API_URL: 'https://kv.exemple', KV_REST_API_TOKEN: 'jeton' }, requete: stockage.requete, maintenant: () => Date.UTC(2026, 10, 24, 12), journal: () => {} });
+  assert.equal(await limites.autoriserEssai({ courriel: 'tess@e.org' }), true);
+  assert.deepEqual([...stockage.valeurs.keys()], ['carto:essai:c:tess@e.org:2026-11-24T12']);
+});

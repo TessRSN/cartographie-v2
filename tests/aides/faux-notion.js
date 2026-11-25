@@ -50,11 +50,13 @@ function fauxNotion({ pannes = {}, uuid = false } = {}) {
         if (!page) { const erreur = new Error('absent'); erreur.code = 'object_not_found'; throw erreur; }
         return lisible(page);
       },
-      async update({ page_id, properties }) {
-        noter('pages.update', { page_id, properties });
+      // « archived: true » met la page à la corbeille, comme dans Notion.
+      async update({ page_id, properties, archived }) {
+        noter('pages.update', archived === undefined ? { page_id, properties } : { page_id, properties, archived });
         const page = pages.get(page_id);
         if (!page) throw new Error('page absente');
-        Object.assign(page.properties, JSON.parse(JSON.stringify(properties)));
+        Object.assign(page.properties, JSON.parse(JSON.stringify(properties || {})));
+        if (archived !== undefined) page.archived = !!archived;
         return { id: page_id };
       },
     },
@@ -63,6 +65,13 @@ function fauxNotion({ pannes = {}, uuid = false } = {}) {
         async list({ block_id }) {
           noter('blocks.children.list', block_id);
           return { results: (blocs.get(block_id) || []).map((b) => ({ ...b, code: { ...b.code, rich_text: lu(b.code.rich_text) } })), has_more: false };
+        },
+        async append({ block_id, children }) {
+          noter('blocks.children.append', { block_id, children });
+          const liste = blocs.get(block_id) || [];
+          for (const b of children || []) liste.push({ ...JSON.parse(JSON.stringify(b)), id: `${block_id}-bloc-${liste.length}` });
+          blocs.set(block_id, liste);
+          return {};
         },
       },
       async update({ block_id, code }) {
