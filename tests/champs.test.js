@@ -169,3 +169,35 @@ test('fusionner et champsBouscules ignorent une entrée abîmée', () => {
   assert.deepEqual(fusionner({ nom: null, contact: { apres: 'a@b.org' }, x: 'texte' }), { contact: 'a@b.org' });
   assert.deepEqual(champsBouscules({ nom: null, contact: { avant: 'a@b.org', apres: 'c@d.org' } }, { contact: 'z@z.org' }), ['contact']);
 });
+
+// ─── Panneau : point de départ et corrections ───
+const { departPanneau, correctionsPanneau } = require('../public/js/champs.js');
+
+test('le point de départ du panneau : la valeur proposée, sinon la valeur actuelle, sinon vide', () => {
+  const depart = departPanneau({ phrase: { avant: 'A', apres: 'B' }, motsCles: { apres: ['x'] }, nom: null }, { nom: 'Cohorte X', phrase: 'A', normes: ['BIDS'], jumelage: true });
+  assert.equal(depart.phrase, 'B');
+  assert.deepEqual(depart.motsCles, ['x']);
+  assert.equal(depart.nom, 'Cohorte X');
+  assert.deepEqual(depart.normes, ['BIDS']);
+  assert.equal(depart.jumelage, true);
+  assert.deepEqual(depart.porteurs, []);
+  assert.equal(depart.contact, null);
+  assert.deepEqual(Object.keys(depart).sort(), CHAMPS.map((c) => c.cle).sort());
+  const neuve = departPanneau({ nom: { apres: 'Outil' } }, null);
+  assert.equal(neuve.nom, 'Outil');
+  assert.deepEqual(neuve.faitPartieDe, []);
+});
+
+test('les corrections du panneau ne portent que sur ce qui a vraiment changé', () => {
+  const depart = departPanneau({ phrase: { apres: 'B' } }, { nom: 'Cohorte X', motsCles: ['a', 'b'], jumelage: false, contact: null });
+  const copie = () => JSON.parse(JSON.stringify(depart));
+  assert.deepEqual(correctionsPanneau(copie(), depart), {});
+  const v = copie();
+  v.phrase = 'B '; v.contact = ''; v.jumelage = false; v.motsCles = ['b', 'a']; v.porteurs = [];
+  assert.deepEqual(correctionsPanneau(v, depart), {});
+  v.phrase = 'C'; v.motsCles = []; v.jumelage = true; v.etat = 'Archivé';
+  assert.deepEqual(correctionsPanneau(v, depart), { phrase: 'C', motsCles: [], jumelage: true, etat: 'Archivé' });
+  v.jumelage = false; v.phrase = 'B';
+  assert.deepEqual(correctionsPanneau(v, depart), { motsCles: [], etat: 'Archivé' });
+  assert.deepEqual(correctionsPanneau({ ...copie(), inconnu: 'x' }, depart), {});
+});

@@ -18,10 +18,17 @@ const { ouvertes, origineSure, memeOrigineStricte, corpsDe, dependances } = requ
 const TEMOIN = 'carto_session';
 const DUREE_SESSION_S = 7 * 24 * 3600;
 const ACTIONS = { session: 'POST', file: 'GET', detail: 'GET', logo: 'GET', approuver: 'POST', refuser: 'POST', deconnexion: 'POST' };
-const CODES = { 'non-approbateur': 401, introuvable: 404, 'deja-tranchee': 409, doublon: 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
+const CODES = { 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
 const CLES = new Set(CHAMPS.map((c) => c.cle));
 const idValide = (id) => typeof id === 'string' && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(id);
 const objet = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+// Changements proposés lisibles : clés du catalogue, chacune avec sa valeur « apres ».
+const proposeLisible = (propose) => Object.fromEntries(Object.entries(objet(propose))
+  .filter(([cle, c]) => CLES.has(cle) && c && typeof c === 'object' && Object.hasOwn(c, 'apres')));
+// Adresses des nouveaux porteurs : du texte seulement, 300 caractères au plus. Une adresse vide
+// est gardée : elle dit que l'approbateur a retiré celle du proposant.
+const adressesDe = (brut) => Object.fromEntries(Object.entries(objet(brut))
+  .filter(([, v]) => typeof v === 'string').map(([nom, v]) => [nom, v.replace(/\s+/g, ' ').trim().slice(0, 300)]));
 const duCatalogue = (valeurs) => Object.fromEntries(Object.entries(objet(valeurs)).filter(([cle]) => CLES.has(cle)));
 
 function temoinDe(req) {
@@ -98,18 +105,20 @@ function creerGestionnaire(donnees) {
       const id = envoi ? corps.id : req.query.id;
       if (!idValide(id)) return res.status(400).json({ erreur: 'Demande illisible.' });
 
-      if (action === 'detail' || action === 'logo') {
+      if (action === 'logo') {
+        const proposition = await d.propositions.lireProposition(id);
+        const image = proposition && proposition.logoPropose ? verifierOctets(await d.fichiers.telecharger(proposition.logoPropose.url)) : null;
+        if (!image || !image.ok) return res.status(404).send('');
+        res.setHeader('Content-Type', image.type);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+        return res.status(200).send(image.octets);
+      }
+
+      if (action === 'detail') {
         const examen = await d.approbation.examiner(id);
         if (!examen) return res.status(404).json({ code: 'introuvable', erreur: 'Cette proposition est introuvable.' });
         const { proposition } = examen;
-        if (action === 'logo') {
-          const image = proposition.logoPropose ? verifierOctets(await d.fichiers.telecharger(proposition.logoPropose.url)) : null;
-          if (!image || !image.ok) return res.status(404).send('');
-          res.setHeader('Content-Type', image.type);
-          res.setHeader('X-Content-Type-Options', 'nosniff');
-          res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
-          return res.status(200).send(image.octets);
-        }
         const [options, publiques] = await Promise.all([d.notion.lireOptions(), d.source()]);
         const { adresseParId, nomParAdresse } = reperes(publiques);
         const contenu = objet(proposition.contenu);
@@ -118,7 +127,10 @@ function creerGestionnaire(donnees) {
         return res.status(200).json({
           proposition: {
             ...resume(proposition, adresseParId, nomParAdresse),
-            propose: duCatalogue(contenu.propose), applique: contenu.applique ? duCatalogue(contenu.applique) : null,
+            propose: proposeLisible(contenu.propose),
+            // Vrai si une partie du contenu enregistré n'a pas pu être lue.
+            illisible: Object.keys(proposeLisible(contenu.propose)).length !== Object.keys(objet(contenu.propose)).filter((cle) => CLES.has(cle)).length,
+            applique: contenu.applique ? duCatalogue(contenu.applique) : null,
             porteursNouveaux: objet(contenu.porteursNouveaux),
           },
           actuelle: examen.actuelle ? duCatalogue(examen.actuelle) : null,
@@ -134,7 +146,7 @@ function creerGestionnaire(donnees) {
       }
 
       const resultat = action === 'approuver'
-        ? await d.approbation.approuver({ propositionId: id, corrections: objet(corps.corrections), porteursNouveaux: objet(corps.porteursNouveaux), sansLogo: corps.sansLogo === true, approbateur, origine })
+        ? await d.approbation.approuver({ propositionId: id, corrections: objet(corps.corrections), porteursNouveaux: adressesDe(corps.porteursNouveaux), sansLogo: corps.sansLogo === true, approbateur, origine })
         : await d.approbation.refuser({ propositionId: id, commentaire: typeof corps.commentaire === 'string' ? corps.commentaire.slice(0, 2000) : '', approbateur });
       if (resultat.ok) return res.status(200).json({ ok: true, courriel: !!resultat.courriel });
       return res.status(CODES[resultat.code] || 502).json({ code: resultat.code, erreurs: resultat.erreurs });

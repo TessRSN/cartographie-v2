@@ -9,7 +9,7 @@
 const T = TEXTES.panneau;
 const TC = TEXTES.contribuer;
 const e = echapper;
-const { CHAMPS, estVide, egales } = window.Champs;
+const { CHAMPS, estVide, departPanneau, correctionsPanneau } = window.Champs;
 const PAR_CLE = Object.fromEntries(CHAMPS.map((c) => [c.cle, c]));
 const racine = document.getElementById('panneau');
 
@@ -40,6 +40,11 @@ const existantes = (cle) => (etat.d && etat.d.existantes && etat.d.existantes[cl
 const nomDeFiche = (adresse) => { const f = existantes('fiches').find((x) => x.adresse === adresse); return f ? f.nom : adresse; };
 const estNouveauPorteur = (nom) => !existantes('porteurs').some((p) => p.trim().toLowerCase() === nom.trim().toLowerCase());
 const jour = (iso) => dateLongue(iso);
+// Ce qu'on choisit dans la liste des fiches : le nom, suivi de l'adresse quand deux fiches portent le même nom.
+function etiquetteFiche(f) {
+  const homonymes = existantes('fiches').filter((x) => x.nom.toLowerCase() === f.nom.toLowerCase()).length > 1;
+  return homonymes ? `${f.nom} (${f.adresse})` : f.nom;
+}
 
 // Une valeur en lecture seule.
 function lisible(cle, v) {
@@ -104,23 +109,28 @@ function htmlLigne(p) {
 
 function afficherFile() {
   etat.vue = 'file';
-  const onglets = Object.entries(T.onglets).map(([cle, nom]) => `<button type="button" role="tab" aria-selected="${etat.onglet === cle}" data-onglet="${cle}">${e(nom)}${cle === 'attente' && etat.onglet === 'attente' ? ` (${etat.liste.length})` : ''}</button>`).join('');
+  const onglets = Object.entries(T.onglets).map(([cle, nom]) => `<button type="button" aria-pressed="${etat.onglet === cle}" data-onglet="${cle}">${e(nom)}${cle === 'attente' && etat.onglet === 'attente' ? ` (${etat.liste.length})` : ''}</button>`).join('');
   racine.innerHTML = `<div class="f-carte">
     ${htmlEntete()}
-    <h2 class="f-titre">${e(T.titre)}</h2>
+    <h2 class="f-titre" id="titreVue" tabindex="-1">${e(T.titre)}</h2>
     ${htmlAvis()}
-    <div class="p-onglets" role="tablist">${onglets}</div>
+    <div class="p-onglets">${onglets}</div>
     ${etat.liste.length ? `<ul class="p-file">${etat.liste.map(htmlLigne).join('')}</ul>` : `<p class="formulaire-attente">${e(T.vide[etat.onglet])}</p>`}
   </div>`;
-  const avis = document.getElementById('avis');
-  if (avis) avis.focus();
+  (document.getElementById('avis') || document.getElementById('titreVue')).focus();
 }
 
 async function chargerFile({ garderAvis = false } = {}) {
+  const moi = ++demande;
   if (!garderAvis) etat.avis = null;
   const r = await appel('file', { query: { statut: etat.onglet } });
+  if (moi !== demande) return;
   if (r.code === 401) return afficherEntree(null);
-  if (!r.ok) { racine.innerHTML = `<div class="f-carte"><p class="f-avis erreur">${e(T.indisponible)}</p></div>`; return; }
+  if (!r.ok) {
+    etat.vue = 'panne';
+    racine.innerHTML = `<div class="f-carte"><p class="f-avis erreur" role="alert">${e(T.indisponible)}</p><div class="f-actions"><button type="button" class="f-bouton principal droite" id="reessayer">${e(T.reessayer)}</button></div></div>`;
+    return;
+  }
   etat.courriel = r.donnees.courriel;
   etat.liste = r.donnees.propositions || [];
   afficherFile();
@@ -129,15 +139,25 @@ async function chargerFile({ garderAvis = false } = {}) {
 // ─── Détail ───
 // Champs qu'on peut compléter en plus de ceux de la proposition.
 function champsEnPlus() {
-  const proposes = Object.keys(etat.d.proposition.propose);
+  const proposes = champsProposes();
   return CHAMPS.map((c) => c.cle).filter((cle) => !proposes.includes(cle));
 }
 
 // Les corrections : tout champ dont la valeur diffère de son point de départ.
-function corrections() {
-  const sortie = {};
-  for (const cle of Object.keys(etat.valeurs)) if (!egales(etat.valeurs[cle], etat.depart[cle])) sortie[cle] = etat.valeurs[cle];
-  return sortie;
+function corrections() { return correctionsPanneau(etat.valeurs, etat.depart); }
+// Vrai s'il y a une saisie qui serait perdue en quittant le détail.
+function saisieEnCours() {
+  return etat.vue === 'detail' && etat.d && etat.d.proposition.statut === 'attente'
+    && (Object.keys(corrections()).length > 0 || (etat.refus && etat.commentaire.trim() !== ''));
+}
+// Champs proposés lisibles, dans l'ordre du catalogue.
+function champsProposes() {
+  const propose = etat.d.proposition.propose;
+  return CHAMPS.map((c) => c.cle).filter((cle) => propose[cle] && Object.hasOwn(propose[cle], 'apres'));
+}
+// Rien à appliquer : aucun champ proposé, aucune correction, et le logo écarté ou absent.
+function approbationVide() {
+  return !champsProposes().length && !Object.keys(corrections()).length && (etat.sansLogo || !etat.d.proposition.aLogo);
 }
 
 function htmlPuces(cle) {
@@ -169,7 +189,7 @@ function htmlControle(cle) {
     return `<div class="f-cases" role="group" aria-label="${e(libelle(cle))}">${toutes.map((o) => `<label class="f-case"><input type="checkbox" data-cle="${cle}" data-option="${e(o)}" ${(v || []).includes(o) ? 'checked' : ''}>${e(o)}</label>`).join('')}</div>`;
   }
   if (champ.saisie === 'listeOuverte' || champ.saisie === 'fiches') {
-    const liste = champ.saisie === 'fiches' ? existantes('fiches').map((f) => f.nom) : existantes(cle);
+    const liste = champ.saisie === 'fiches' ? existantes('fiches').map(etiquetteFiche) : existantes(cle);
     return `<div class="f-puces" id="p-${cle}">${htmlPuces(cle)}</div>
       <div class="f-ajout"><input type="text" id="${id}" list="l-${cle}" maxlength="${champ.max || 200}" data-ajout="${cle}" placeholder="${e(TC.indiceListe)}" autocomplete="off" aria-label="${e(libelle(cle))}">
         <button type="button" class="f-bouton" data-ajouter="${cle}">${e(TC.ajouter)}</button></div>
@@ -210,14 +230,14 @@ function htmlChampEnPlus(cle) {
 
 function htmlProposant(p) {
   const nom = p.nomProposant || T.anonyme;
-  const lien = p.genre === 'rsn' ? '' : `, ${T.liens[p.lienAvecRessource] || ''}`;
-  return `<p class="p-proposant">${e(T.proposePar)} <strong>${e(nom)}</strong> (<a href="mailto:${e(p.courriel || '')}">${e(p.courriel || '')}</a>)${e(lien)}, ${e(T.proposeLe)} ${e(jour(p.proposeLe))}.</p>`;
+  const lien = p.genre === 'rsn' || !T.liens[p.lienAvecRessource] ? '' : `, ${T.liens[p.lienAvecRessource]}`;
+  return `<p class="p-proposant">${e(T.proposePar)} <strong>${e(nom)}</strong> (<a href="mailto:${e(encodeURIComponent(p.courriel || ''))}">${e(p.courriel || '')}</a>)${e(lien)}, ${e(T.proposeLe)} ${e(jour(p.proposeLe))}.</p>`;
 }
 
 function htmlLogo(p, lectureSeule) {
   if (!p.aLogo) return '';
   return `<div class="p-rang"><h4>${e(T.logoPropose)}</h4>
-    <div class="p-logo"><img src="/api/admin?action=logo&amp;id=${e(encodeURIComponent(p.id))}" alt="">
+    <div class="p-logo"><img src="/api/admin?action=logo&amp;id=${e(encodeURIComponent(p.id))}" alt="${e(T.logoPropose)}">
     ${lectureSeule ? '' : `<label class="f-case"><input type="checkbox" id="sansLogo" ${etat.sansLogo ? 'checked' : ''}>${e(T.sansLogo)}</label>`}</div></div>`;
 }
 
@@ -230,7 +250,7 @@ function htmlActions() {
       <div class="f-actions"><button type="button" class="f-bouton" id="annulerRefus" ${etat.enCours ? 'disabled' : ''}>${e(T.annuler)}</button>
       <button type="button" class="f-bouton principal p-danger droite" id="confirmerRefus" ${etat.enCours ? 'disabled' : ''}>${e(etat.enCours ? T.enCours : T.confirmerRefus)}</button></div>`;
   }
-  const bloque = etat.enCours || etat.d.ficheDisparue;
+  const bloque = etat.enCours || etat.d.ficheDisparue || approbationVide();
   return `<div class="f-actions"><button type="button" class="f-bouton" id="refuser" ${etat.enCours ? 'disabled' : ''}>${e(T.refuser)}</button>
     <button type="button" class="f-bouton principal droite" id="approuver" ${bloque ? 'disabled' : ''}>${e(etat.enCours ? T.enCours : libelleApprouver())}</button></div>`;
 }
@@ -238,7 +258,7 @@ function htmlActions() {
 function htmlTranchee(p) {
   const cles = CHAMPS.map((c) => c.cle).filter((cle) => Object.hasOwn(p.propose, cle) || (p.applique && Object.hasOwn(p.applique, cle)));
   const rangs = cles.map((cle) => `<div class="p-rang"><h4>${e(libelle(cle))}</h4><div class="p-cote">
-      <div class="p-actuel"><span class="p-tete">${e(T.propose)}</span><div>${Object.hasOwn(p.propose, cle) ? lisible(cle, p.propose[cle].apres) : `<span class="p-vide">${e(T.vide_)}</span>`}</div></div>
+      <div class="p-actuel"><span class="p-tete">${e(T.propose)}</span><div>${p.propose[cle] ? lisible(cle, p.propose[cle].apres) : `<span class="p-vide">${e(T.vide_)}</span>`}</div></div>
       ${p.applique ? `<div class="p-propose"><span class="p-tete">${e(T.applique)}</span><div>${Object.hasOwn(p.applique, cle) ? lisible(cle, p.applique[cle]) : `<span class="p-vide">${e(T.vide_)}</span>`}</div></div>` : ''}
     </div></div>`).join('');
   return `<p class="f-avis ${p.statut === 'refusee' ? 'erreur' : ''}">${e(T.decision(T.statuts[p.statut] || '', p.decidePar, jour(p.decideLe)))}${p.commentaire ? `<br><strong>${e(T.motif)} :</strong> ${e(p.commentaire)}` : ''}</p>${rangs}${htmlLogo(p, true)}`;
@@ -248,17 +268,18 @@ function afficherDetail({ haut = false } = {}) {
   etat.vue = 'detail';
   const { proposition: p, ficheDisparue } = etat.d;
   const enAttente = p.statut === 'attente';
-  const proposes = CHAMPS.map((c) => c.cle).filter((cle) => Object.hasOwn(p.propose, cle));
+  const proposes = champsProposes();
   let corps;
   if (!enAttente) corps = htmlTranchee(p);
   else {
     corps = `${ficheDisparue ? `<p class="f-avis erreur">${e(T.ficheDisparue)}</p>` : ''}
+      ${p.illisible ? `<p class="f-avis erreur">${e(T.illisible)}</p>` : ''}
       ${p.genre === 'rsn' ? `<p class="f-avis">${e(T.rsnAvis)}</p>` : ''}
       <section class="f-groupe"><h3>${e(T.changements)}</h3>
-        ${proposes.length ? proposes.map(htmlRang).join('') : `<p class="f-intro">${e(T.aucunChangement)}</p>`}
+        ${proposes.length ? proposes.map(htmlRang).join('') : (p.aLogo && !p.illisible ? `<p class="f-intro">${e(T.aucunChangement)}</p>` : '')}
         ${htmlLogo(p, false)}
       </section>
-      <details class="p-autres" ${p.genre === 'rsn' || champsEnPlus().some((cle) => etat.erreurs[cle]) ? 'open' : ''}><summary>${e(T.autres)}</summary>
+      <details class="p-autres" ${p.genre === 'rsn' || champsEnPlus().some((cle) => etat.erreurs[cle] || Object.hasOwn(corrections(), cle)) ? 'open' : ''}><summary>${e(T.autres)}</summary>
         <p class="aide">${e(T.autresAide)}</p>${champsEnPlus().map(htmlChampEnPlus).join('')}</details>
       <div id="actions">${htmlActions()}</div>`;
   }
@@ -267,31 +288,28 @@ function afficherDetail({ haut = false } = {}) {
     <p><button type="button" class="f-bouton lien" id="retour">← ${e(T.retourFile)}</button></p>
     <p class="p-sur"><span class="p-etiquette ${e(p.genre || '')}">${e(T.genres[p.genre] || '')}</span>
       ${p.fiche ? `<a href="/ressource/${e(encodeURIComponent(p.fiche.adresse))}" target="_blank" rel="noopener">${e(T.voirFiche)}</a>` : ''}</p>
-    <h2 class="f-titre">${e(p.titre)}</h2>
+    <h2 class="f-titre" id="titreVue" tabindex="-1">${e(p.titre)}</h2>
     ${htmlProposant(p)}
     ${htmlAvis()}
     ${corps}
   </div>`;
   if (haut) window.scrollTo(0, 0);
-  const avis = document.getElementById('avis');
-  if (avis) avis.focus();
+  const cible = document.getElementById('avis') || (haut ? document.getElementById('titreVue') : null);
+  if (cible) cible.focus();
 }
 
+let demande = 0; // numéro de la dernière demande de vue : une réponse plus ancienne est ignorée
+
 async function ouvrir(id) {
-  racine.innerHTML = `<p class="formulaire-attente">${e(T.chargement)}</p>`;
+  const moi = ++demande;
+  racine.innerHTML = `<p class="formulaire-attente" role="status">${e(T.chargement)}</p>`;
   const r = await appel('detail', { query: { id } });
+  if (moi !== demande) return;
   if (r.code === 401) return afficherEntree(null);
   if (!r.ok) { etat.avis = { sorte: 'erreur', texte: r.code === 404 ? T.introuvable : T.indisponible }; return afficherFile(); }
   const d = r.donnees;
-  const copie = (v) => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
-  const depart = {};
-  for (const champ of CHAMPS) {
-    const propose = d.proposition.propose[champ.cle];
-    const base = propose ? propose.apres : (d.actuelle ? d.actuelle[champ.cle] : null);
-    const liste = ['listeOuverte', 'choixMultiples', 'fiches'].includes(champ.saisie);
-    depart[champ.cle] = liste ? (Array.isArray(base) ? copie(base) : []) : (base === undefined ? null : copie(base));
-  }
-  Object.assign(etat, { d, depart, valeurs: copie(depart), porteursNouveaux: { ...d.proposition.porteursNouveaux }, sansLogo: false, erreurs: {}, refus: false, commentaire: '', enCours: false, avis: null });
+  const depart = departPanneau(d.proposition.propose, d.actuelle);
+  Object.assign(etat, { d, depart, valeurs: JSON.parse(JSON.stringify(depart)), porteursNouveaux: { ...d.proposition.porteursNouveaux }, sansLogo: false, erreurs: {}, refus: false, commentaire: '', enCours: false, avis: null });
   afficherDetail({ haut: true });
 }
 
@@ -308,44 +326,52 @@ async function trancher(action) {
     if (!etat.commentaire.trim()) { etat.erreurs = { commentaire: T.commentaireRequis }; rafraichirActions(); document.getElementById('commentaire').focus(); return; }
     corps = { id, commentaire: etat.commentaire.trim() };
   } else {
+    // Un mot tapé dans un champ d'ajout sans appuyer sur « Ajouter » compte quand même.
+    for (const entree of racine.querySelectorAll('input[data-ajout]')) {
+      if (entree.value.trim() && !ajouter(entree.dataset.ajout, { focus: false })) { entree.scrollIntoView({ block: 'center' }); entree.focus(); return; }
+    }
+    // Chaque nouveau porteur part avec son adresse, même vide : une adresse retirée ici ne doit pas revenir.
     const adresses = {};
-    for (const nom of (etat.valeurs.porteurs || []).filter(estNouveauPorteur)) if (etat.porteursNouveaux[nom]) adresses[nom] = etat.porteursNouveaux[nom];
+    for (const nom of (etat.valeurs.porteurs || []).filter(estNouveauPorteur)) adresses[nom] = etat.porteursNouveaux[nom] || '';
     corps = { id, corrections: corrections(), porteursNouveaux: adresses, sansLogo: etat.sansLogo };
   }
   etat.enCours = true; etat.erreurs = {}; rafraichirActions();
   const r = await appel(action, { corps });
   etat.enCours = false;
-  if (r.code === 401) return afficherEntree(null);
   if (r.ok) {
     etat.avis = { sorte: '', texte: (action === 'refuser' ? T.refusee : T.approuvee)(r.donnees.courriel) };
-    etat.onglet = 'attente';
+    etat.onglet = 'attente'; etat.vue = 'file';
     return chargerFile({ garderAvis: true });
   }
   const code = r.donnees.code;
   if (code === 'deja-tranchee' || code === 'introuvable' || code === 'fiche-introuvable') {
     etat.avis = { sorte: 'alerte', texte: code === 'deja-tranchee' ? T.dejaTranchee : code === 'introuvable' ? T.introuvable : T.ficheDisparue };
+    etat.vue = 'file';
     return chargerFile({ garderAvis: true });
   }
-  if (code === 'invalide' && r.donnees.erreurs) {
+  // Dans tous les autres cas la saisie reste à l'écran.
+  if (r.code === 401) etat.avis = { sorte: 'alerte', texte: T.sessionExpiree };
+  else if (code === 'occupee') etat.avis = { sorte: 'alerte', texte: T.occupee };
+  else if (code === 'invalide' && r.donnees.erreurs) {
     etat.erreurs = r.donnees.erreurs;
     etat.avis = { sorte: 'erreur', texte: r.donnees.erreurs._ || T.erreursEnHaut };
-  } else {
-    etat.avis = { sorte: 'erreur', texte: code === 'doublon' ? T.doublon : T.indisponible };
-  }
+  } else etat.avis = { sorte: 'erreur', texte: code === 'doublon' ? T.doublon : T.indisponible };
   afficherDetail({ haut: true });
 }
 
 // ─── Saisie ───
-function ajouter(cle) {
+// Ajoute à une liste ce qui est écrit dans son champ d'ajout. Renvoie false si la valeur est refusée.
+function ajouter(cle, { focus = true } = {}) {
   const champ = PAR_CLE[cle];
   const entree = document.getElementById(`c-${cle}`);
   const zoneErreur = racine.querySelector(`[data-champ="${cle}"] .erreur`);
   let valeur = entree.value.replace(/\s+/g, ' ').trim();
   if (zoneErreur) zoneErreur.textContent = '';
-  if (!valeur) return;
+  if (!valeur) return true;
   if (champ.saisie === 'fiches') {
-    const fiche = existantes('fiches').find((f) => f.nom.toLowerCase() === valeur.toLowerCase());
-    if (!fiche) { if (zoneErreur) zoneErreur.textContent = T.ficheInconnue; return; }
+    const visee = etat.d.proposition.fiche ? etat.d.proposition.fiche.adresse : null;
+    const fiche = existantes('fiches').find((f) => etiquetteFiche(f).toLowerCase() === valeur.toLowerCase() && f.adresse !== visee);
+    if (!fiche) { if (zoneErreur) zoneErreur.textContent = T.ficheInconnue; return false; }
     valeur = fiche.adresse;
   } else {
     // Une valeur déjà connue reprend son écriture exacte (« fhir » ne crée pas un doublon de « FHIR »).
@@ -356,7 +382,8 @@ function ajouter(cle) {
   if (!liste.some((v) => String(v).toLowerCase() === valeur.toLowerCase())) liste.push(valeur);
   entree.value = '';
   redessinerListe(cle);
-  entree.focus();
+  if (focus) entree.focus();
+  return true;
 }
 function redessinerListe(cle) {
   document.getElementById(`p-${cle}`).innerHTML = htmlPuces(cle);
@@ -372,12 +399,12 @@ racine.addEventListener('input', (evenement) => {
   if (!cle || !PAR_CLE[cle] || cible.type === 'checkbox') return;
   etat.valeurs[cle] = cible.value;
   const bouton = document.getElementById('approuver');
-  if (bouton && !etat.enCours) bouton.textContent = libelleApprouver();
+  if (bouton && !etat.enCours) { bouton.textContent = libelleApprouver(); bouton.disabled = !!etat.d.ficheDisparue || approbationVide(); }
 });
 
 racine.addEventListener('change', (evenement) => {
   const cible = evenement.target;
-  if (cible.id === 'sansLogo') { etat.sansLogo = cible.checked; return; }
+  if (cible.id === 'sansLogo') { etat.sansLogo = cible.checked; return rafraichirActions(); }
   const cle = cible.dataset.cle;
   if (!cle || !PAR_CLE[cle]) return;
   if (cible.type === 'checkbox') {
@@ -402,21 +429,30 @@ racine.addEventListener('submit', (evenement) => {
 racine.addEventListener('click', async (evenement) => {
   const cible = evenement.target.closest('button');
   if (!cible) return;
+  // Pendant un envoi, rien d'autre ne bouge ; quitter une saisie en cours demande confirmation.
+  if (etat.enCours) return;
+  const quitte = cible.id === 'retour' || cible.id === 'deconnexion';
+  if (quitte && saisieEnCours() && !window.confirm(T.quitter)) return;
+  if (cible.id === 'reessayer') return chargerFile();
   if (cible.dataset.onglet) { etat.onglet = cible.dataset.onglet; return chargerFile(); }
   if (cible.dataset.ouvrir) return ouvrir(cible.dataset.ouvrir);
   if (cible.dataset.ajouter) return ajouter(cible.dataset.ajouter);
   if (cible.dataset.retirer) {
     const cle = cible.dataset.retirer;
     (etat.valeurs[cle] || []).splice(Number(cible.dataset.index), 1);
-    return redessinerListe(cle);
+    redessinerListe(cle);
+    return document.getElementById(`c-${cle}`).focus();
   }
   if (cible.id === 'retour') return chargerFile();
   if (cible.id === 'deconnexion') { await appel('deconnexion', { corps: {} }); etat.courriel = null; return afficherEntree(null); }
   if (cible.id === 'refuser') { etat.refus = true; rafraichirActions(); return document.getElementById('commentaire').focus(); }
-  if (cible.id === 'annulerRefus') { etat.refus = false; etat.erreurs = {}; return rafraichirActions(); }
+  if (cible.id === 'annulerRefus') { etat.refus = false; etat.erreurs = {}; rafraichirActions(); return document.getElementById('refuser').focus(); }
   if (cible.id === 'confirmerRefus') return trancher('refuser');
   if (cible.id === 'approuver') return trancher('approuver');
 });
+
+// Fermer l'onglet ou recharger la page avec une saisie en cours : le navigateur demande confirmation.
+window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours()) { evenement.preventDefault(); evenement.returnValue = ''; } });
 
 // ─── Mode clair ou sombre ───
 document.getElementById('boutonTheme').addEventListener('click', () => {
@@ -437,6 +473,8 @@ document.getElementById('boutonTheme').addEventListener('click', () => {
       // Le lien a déjà servi : une session ouverte plus tôt reste valable.
       const file = await appel('file', { query: { statut: 'attente' } });
       if (!file.ok) return afficherEntree(r.code === 401 ? T.lienExpire : T.indisponible);
+      etat.courriel = file.donnees.courriel; etat.liste = file.donnees.propositions || [];
+      return afficherFile();
     }
   }
   chargerFile();

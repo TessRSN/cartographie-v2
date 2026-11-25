@@ -43,6 +43,7 @@ function banc({ env = ENV, approbateurs = [TESS], resultat = { ok: true, ficheId
     limites: { async consommerJeton(jti) { noter('consommerJeton', jti); if (vus.has(jti)) return false; vus.add(jti); return true; } },
     propositions: {
       async estApprobateur(c) { noter('estApprobateur', c); return approbateurs.includes(c); },
+      async lireProposition(id) { noter('lireProposition', id); return proposition; },
       async listerPropositions(o) { noter('listerPropositions', o); return [{ ...proposition, contenu: undefined }]; },
     },
     notion: { async lireOptions() { return OPTIONS; } },
@@ -183,6 +184,7 @@ test('le logo proposé est relayé avec des en-têtes sûrs', async () => {
   assert.equal(res.entetes['Content-Security-Policy'], "default-src 'none'; style-src 'unsafe-inline'; sandbox");
   assert.equal(res.entetes['Cache-Control'], 'no-store');
   assert.deepEqual(b.de('telecharger'), ['https://notion.exemple/secret?sig=abc']);
+  assert.equal(b.de('examiner').length, 0);
 });
 
 test('approuver transmet les corrections au nom de la personne en session', async () => {
@@ -201,7 +203,7 @@ test('refuser transmet le commentaire', async () => {
 });
 
 test('chaque issue de l\'approbation a son code de réponse', async () => {
-  const cas = { 'deja-tranchee': 409, doublon: 409, invalide: 400, notion: 502, introuvable: 404, 'fiche-introuvable': 410, 'non-approbateur': 401 };
+  const cas = { occupee: 409, 'deja-tranchee': 409, doublon: 409, invalide: 400, notion: 502, introuvable: 404, 'fiche-introuvable': 410, 'non-approbateur': 401 };
   for (const [code, attendu] of Object.entries(cas)) {
     const res = await appeler(banc({ resultat: { ok: false, code, erreurs: { nom: 'x' } } }), requete('POST', 'approuver', { body: { id: ID } }));
     assert.equal(res.code, attendu, code);
@@ -222,4 +224,40 @@ test('la déconnexion efface le témoin', async () => {
   const res = await appeler(banc(), requete('POST', 'deconnexion', { body: {} }));
   assert.equal(res.code, 200);
   assert.match(res.entetes['Set-Cookie'], /^carto_session=; .*Max-Age=0$/);
+});
+
+test('les adresses de porteurs envoyées sont bornées, et une adresse vidée reste vide', async () => {
+  const b = banc();
+  await appeler(b, requete('POST', 'approuver', { body: { id: ID, porteursNouveaux: { A: '', B: `  ${'x'.repeat(400)}  `, C: 42, D: ['x'] } } }));
+  const recu = b.de('approuver')[0].porteursNouveaux;
+  assert.deepEqual(Object.keys(recu), ['A', 'B']);
+  assert.equal(recu.A, '');
+  assert.equal(recu.B.length, 300);
+});
+
+test('des corps inattendus ne passent pas tels quels à l\'approbation', async () => {
+  const b = banc();
+  await appeler(b, requete('POST', 'approuver', { body: { id: ID, corrections: ['x'], sansLogo: 'oui' } }));
+  assert.deepEqual(b.de('approuver')[0].corrections, {});
+  assert.equal(b.de('approuver')[0].sansLogo, false);
+  assert.equal((await appeler(b, requete('POST', 'approuver', { body: { id: [ID] } }))).code, 400);
+  await appeler(b, requete('POST', 'refuser', { body: { id: ID, commentaire: { a: 1 } } }));
+  assert.equal(b.de('refuser')[0].commentaire, '');
+});
+
+test('une entrée abîmée du contenu proposé est écartée du détail', async () => {
+  const proposition = { id: ID, genre: 'nouvelle', ficheId: null, statut: 'attente', titre: 'X', logoPropose: null, contenu: { propose: { nom: null, phrase: 'texte nu', lien: { apres: 'https://x.org' } } } };
+  const res = await appeler(banc({ examen: { proposition, actuelle: null, bouscules: [], ficheDisparue: false } }), requete('GET', 'detail', { query: { id: ID } }));
+  assert.equal(res.code, 200);
+  assert.deepEqual(res.corps.proposition.propose, { lien: { apres: 'https://x.org' } });
+  assert.equal(res.corps.proposition.illisible, true);
+  assert.equal(res.corps.actuelle, null);
+});
+
+test('une session échue est refusée ; un envoi sans indication d\'origine aussi', async () => {
+  const echue = `carto_session=${signer('session', { courriel: TESS }, { secret, duree: -10 })}`;
+  assert.equal((await appeler(banc(), requete('GET', 'file', { cookie: echue }))).code, 401);
+  const sansOrigine = requete('POST', 'approuver', { body: { id: ID } });
+  delete sansOrigine.headers.origin;
+  assert.equal((await appeler(banc(), sansOrigine)).code, 403);
 });

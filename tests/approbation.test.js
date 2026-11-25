@@ -107,7 +107,7 @@ test('deux approbations lancées ensemble : une seule écriture', async () => {
   const b = banc({ lent: 20 });
   const resultats = await Promise.all([approuver(b), approuver(b)]);
   assert.deepEqual(resultats.map((r) => r.ok).sort(), [false, true]);
-  assert.equal(resultats.find((r) => !r.ok).code, 'deja-tranchee');
+  assert.equal(resultats.find((r) => !r.ok).code, 'occupee');
   assert.equal(b.de('creerFiche').length, 1);
   assert.equal(b.de('marquerDecision').length, 1);
 });
@@ -271,7 +271,7 @@ test('deux instances du serveur qui approuvent en même temps : une seule écrit
   const b = banc({ lent: 20, verrous, partage: a });
   const resultats = await Promise.all([approuver(a), approuver(b)]);
   assert.deepEqual(resultats.map((r) => r.ok).sort(), [false, true]);
-  assert.equal(resultats.find((r) => !r.ok).code, 'deja-tranchee');
+  assert.equal(resultats.find((r) => !r.ok).code, 'occupee');
   assert.equal(a.de('creerFiche').length, 1);
   assert.equal(a.de('marquerDecision').length, 1);
   assert.equal(a.de('courriel.approuvee').length, 1);
@@ -380,4 +380,13 @@ test("une nouvelle adresse de logo, approuvée sans image, retire l'ancien fichi
   const autre = banc({ proposition: { genre: 'modification', ficheId: 'fiche-1', contenu: { propose: { phrase: { avant: 'Une phrase.', apres: 'Une autre phrase.' } }, applique: null, porteursNouveaux: {} } } });
   assert.equal((await approuver(autre)).ok, true);
   assert.ok(!(PROP.logoFichier in autre.de('mettreAJourFiche')[0].p));
+});
+
+test('modifier un lien entre fiches garde les liens vers des fiches qui ne sont pas publiques', async () => {
+  const fiche = { id: 'fiche-1', nom: 'Cohorte X', porteurIds: [], reposeSur: ['fiche-c', 'fiche-cachee'], faitPartieDe: ['fiche-cachee-2'] };
+  const b = banc({ fiche, proposition: { genre: 'modification', ficheId: 'fiche-1', contenu: { propose: { phrase: { avant: 'Une phrase.', apres: 'Une autre.' } }, applique: null, porteursNouveaux: {} } } });
+  assert.equal((await approuver(b, { corrections: { reposeSur: ['cartagene', 'outil-x'] } })).ok, true);
+  const ecrit = b.de('mettreAJourFiche')[0].p;
+  assert.deepEqual(ecrit[PROP.reposeSur], { relation: [{ id: 'fiche-c' }, { id: 'fiche-neuve' }, { id: 'fiche-cachee' }] });
+  assert.ok(!(PROP.faitPartieDe in ecrit));
 });

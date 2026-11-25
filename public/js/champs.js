@@ -181,7 +181,31 @@ function fusionner(changements, corrections = {}) {
   return { ...valeurs, ...corrections };
 }
 
-const api = { CHAMPS, OBLIGATOIRES, LIENS_AVEC_RESSOURCE, nettoyer, calculerChangements, champsBouscules, fusionner, estVide, egales };
+// Panneau : la valeur de départ de chaque champ du catalogue. Un champ proposé part de la valeur
+// proposée ; les autres partent de la fiche actuelle, ou de vide pour une nouvelle ressource.
+function departPanneau(propose, actuelle) {
+  const depart = {};
+  for (const champ of CHAMPS) {
+    const c = propose ? propose[champ.cle] : null;
+    const proposee = c && typeof c === 'object' && Object.prototype.hasOwnProperty.call(c, 'apres');
+    const base = proposee ? c.apres : (actuelle ? actuelle[champ.cle] : null);
+    const liste = champ.saisie === 'listeOuverte' || champ.saisie === 'choixMultiples' || champ.saisie === 'fiches';
+    if (liste) depart[champ.cle] = Array.isArray(base) ? base.slice() : [];
+    else depart[champ.cle] = base === undefined ? null : base;
+  }
+  return depart;
+}
+
+// Panneau : les corrections à envoyer, c'est-à-dire les champs dont la valeur n'est plus celle du départ.
+function correctionsPanneau(valeurs, depart) {
+  const corrections = {};
+  for (const { cle } of CHAMPS) {
+    if (Object.prototype.hasOwnProperty.call(valeurs, cle) && !egales(valeurs[cle], depart[cle])) corrections[cle] = valeurs[cle];
+  }
+  return corrections;
+}
+
+const api = { CHAMPS, OBLIGATOIRES, LIENS_AVEC_RESSOURCE, nettoyer, calculerChangements, champsBouscules, fusionner, estVide, egales, departPanneau, correctionsPanneau };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else racine.Champs = api;
 })(typeof window !== 'undefined' ? window : globalThis);
