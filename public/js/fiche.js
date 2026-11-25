@@ -78,11 +78,15 @@ function htmlCarteFiche(r) {
     ? `<span class="card-porteur">${e(porteurs[0])}</span>`
       + (porteurs.length > 1 ? `<span class="card-plus">+${porteurs.length - 1}<span class="visually-hidden"> (${e(o.TEXTES.autresPorteurs(porteurs.length - 1))})</span></span>` : '')
     : '';
-  const acces = pucesAcces(r.modesAcces, true);
-  // Trois sujets au plus, cliquables comme dans la fiche ; les autres sont comptés.
+  // Accès et portée sur une même rangée : ce qu'on veut savoir avant d'ouvrir la fiche.
+  const acces = pucesAcces(r.modesAcces, true)
+    + (r.portee ? `<span class="axe-chip portee">${e(o.TEXTES.filtres.portee)} : ${e(r.portee)}</span>` : '');
+  // Bouton vers le site de la ressource, quand son adresse est sûre.
+  const site = lienExterne(r.lien, `${o.TEXTES.fiche.visiter} ↗`, 'card-site');
+  // Deux sujets au plus, cliquables comme dans la fiche ; les autres sont comptés.
   const tousSujets = (r.motsCles || []).filter(Boolean);
-  const sujets = tousSujets.slice(0, 3).map(puceSujet).join('')
-    + (tousSujets.length > 3 ? `<span class="chip-more" title="${e(tousSujets.slice(3).join(' · '))}">+${tousSujets.length - 3}<span class="visually-hidden"> (${e(o.TEXTES.autresSujets(tousSujets.length - 3))})</span></span>` : '');
+  const sujets = tousSujets.slice(0, 2).map(puceSujet).join('')
+    + (tousSujets.length > 2 ? `<span class="chip-more" title="${e(tousSujets.slice(2).join(' · '))}">+${tousSujets.length - 2}<span class="visually-hidden"> (${e(o.TEXTES.autresSujets(tousSujets.length - 2))})</span></span>` : '');
   // Normes, formats et outils : visibles d'un coup d'œil, dans une autre couleur que les sujets. Quatre au plus, le reste compté.
   const tousReperes = (r.normes || []).filter(Boolean).map((v) => ['norme', v]).concat((r.outils || []).filter(Boolean).map((v) => ['outil', v]));
   const reperes = tousReperes.slice(0, 4).map(([genre, v]) => `<span class="axe-chip ${genre}">${e(v)}</span>`).join('')
@@ -98,6 +102,7 @@ function htmlCarteFiche(r) {
     ${acces ? `<div class="card-chips-row">${acces}</div>` : ''}
     ${sujets ? `<div class="card-chips-row card-sujets">${sujets}</div>` : ''}
     ${reperes ? `<div class="card-chips-row card-reperes">${reperes}</div>` : ''}
+    ${site ? `<div class="card-liens">${site}</div>` : ''}
     <div class="card-foot">
       <a class="card-action" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}">${e(T.voirFiche)}<span class="visually-hidden"> : ${e(r.nom)}</span></a>
       <button type="button" class="card-action" data-graphe="${e(r.adresse)}">${ICONE_GRAPHE}${e(T.voirConnexions)}<span class="visually-hidden"> : ${e(r.nom)}</span></button>
