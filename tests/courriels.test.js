@@ -13,7 +13,7 @@ test("l'expéditeur et l'adresse de réponse sont ceux de la cartographie", asyn
   const { courriels, envois } = banc();
   const retour = await courriels.lienProposer({ a: 'p@exemple.org', lien: 'https://site/proposer?jeton=abc' });
   assert.deepEqual(retour, { envoye: true });
-  assert.equal(envois[0].from, 'Cartographie du RSN <ne-pas-repondre@cartographie.rsn.quebec>');
+  assert.equal(envois[0].from, 'Cartographie du RSN <cartographie@cartographie.rsn.quebec>');
   assert.equal(envois[0].replyTo, 'rsn.gestion@rimuhc.ca');
   assert.deepEqual(envois[0].to, ['p@exemple.org']);
   assert.equal(envois[0].subject, 'Votre lien pour proposer une ressource');
