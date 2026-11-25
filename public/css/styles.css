@@ -549,15 +549,16 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
 @keyframes rsn-voile { from { opacity: 0; } to { opacity: 1; } }
 .member-modal[open] { animation: rsn-fenetre 0.25s ease-out; }
 .member-modal[open]::backdrop { animation: rsn-voile 0.25s ease-out; }
-.member-modal-close { position: absolute; top: 0.5rem; right: 0.5rem; width: 40px; height: 40px; border-radius: 8px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--rsn-muted); line-height: 1; }
+.member-modal-close { position: absolute; top: 0.6rem; right: 0.6rem; width: 36px; height: 36px; border-radius: 50%; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--rsn-muted); line-height: 1; }
 .member-modal-close:hover { color: var(--rsn-text); background: rgba(43,108,176,0.12); }
 /* « Proposer une modification » : un crayon dans un rond, en haut de la fiche, à côté de la croix. */
-.fiche-modifier { position: absolute; top: 0.6rem; right: 3.1rem; width: 36px; height: 36px; border-radius: 50%; border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(43,108,176,0.14); color: var(--rsn-secondary); transition: background 0.15s, color 0.15s; }
+.fiche-modifier { position: absolute; top: 0.6rem; right: 3.1rem; height: 36px; padding: 0 0.85rem 0 0.7rem; gap: 0.35rem; border-radius: 999px; border: 0; display: flex; align-items: center; justify-content: center; font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; background: rgba(43,108,176,0.14); color: var(--rsn-secondary); transition: background 0.15s, color 0.15s; }
 .fiche-modifier:hover { background: var(--rsn-secondary); color: #fff; }
 .fiche-modifier svg { width: 16px; height: 16px; }
 [data-theme="dark"] .fiche-modifier { background: rgba(99,179,237,0.18); color: var(--rsn-accent); }
 [data-theme="dark"] .fiche-modifier:hover { background: var(--rsn-accent); color: #0f1724; }
-.fenetre-fiche.avec-modification .fiche-entete { padding-right: 4.8rem; }
+.fenetre-fiche.avec-modification .fiche-entete { padding-right: 8.6rem; }
+@media (max-width: 520px) { .fenetre-fiche.avec-modification .fiche-entete { padding-right: 2.2rem; padding-top: 2.4rem; } }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--rsn-border); }
 .modal-actions button { display: inline-flex; align-items: center; gap: 0.4rem; height: 44px; padding: 0 0.9rem; border-radius: 8px; border: 1px solid var(--rsn-border); background: var(--rsn-card-bg); color: var(--ink); font: inherit; font-size: 0.86rem; font-weight: 600; cursor: pointer; }
 .modal-actions button.primary { background: #1a365d; border-color: #1a365d; color: #fff; }

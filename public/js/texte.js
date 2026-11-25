@@ -311,6 +311,7 @@ const TEXTES = {
     court: 'Proposer',
     ressourceTitre: 'Proposer une ressource à ajouter à la cartographie',
     modification: 'Proposer une modification',
+    modifier: 'Modifier',
     titreModification: (nom) => `Proposer une modification : ${nom}`,
     explicationRessource: 'Entrez votre courriel pour recevoir le lien vers le formulaire. Une personne de l\'équipe relit chaque proposition avant sa publication.',
     explicationModification: 'Entrez votre courriel pour recevoir le lien vers le formulaire, prérempli avec cette fiche. Une personne de l\'équipe relit chaque proposition avant sa publication.',
