@@ -358,6 +358,8 @@ const TEXTES = {
       nom: 'Nom', adresse: 'Adresse', latitude: 'Latitude', longitude: 'Longitude',
       retrouver: 'Retrouver l’adresse sur la carte',
       retrouverAide: 'ou cliquez sur la carte pour déplacer le repère.',
+      retrouverSous: 'Remplit la latitude et la longitude à partir de l’adresse.',
+      carteAide: 'Vous pouvez aussi cliquer sur la carte pour déplacer le repère.',
       retrouverAideSansCarte: 'ou entrez la latitude et la longitude en chiffres.',
       carteTitre: 'Carte : la place du porteur',
       carteChargement: 'Chargement de la carte…',
@@ -396,6 +398,17 @@ const TEXTES = {
     qualite: {
       intro: 'Ce que le panneau a repéré dans les fiches publiées. Chaque ligne mène à sa correction.',
       rien: 'Rien à corriger : les fiches sont complètes et à jour.',
+      tout: 'Tout', filtrer: 'Filtrer par sujet', titreTout: 'Fiches incomplètes', chercher: 'Chercher une fiche',
+      colonnes: { fiche: 'Fiche', manque: 'Ce qui manque' },
+      aucuneFiche: 'Aucune fiche ne correspond à la recherche.', rienIci: 'Rien à corriger ici.',
+      filtres: {
+        sansContact: 'Sans contact', sansPorteur: 'Sans porteur', sansLogo: 'Sans logo', liens: 'Lien à vérifier', aVerifier: 'À vérifier',
+        doublons: 'Doublons', porteursDoubles: 'Porteurs en double', valeursNouvelles: 'Valeurs nouvelles',
+      },
+      manque: {
+        sansContact: 'Contact', sansPorteur: 'Porteur', sansLogo: 'Logo', logoPropose: 'Logo (une proposition en apporte un)',
+        liens: (jour) => `Lien à vérifier depuis le ${jour}`, jamais: 'Jamais vérifiée', ancienne: (jour) => `Vérifiée le ${jour}`,
+      },
       sujets: {
         sansContact: 'Fiches sans contact', sansPorteur: 'Fiches sans porteur', sansLogo: 'Fiches sans logo',
         liens: 'Lien principal qui ne répond pas à notre vérification',

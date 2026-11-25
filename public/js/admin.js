@@ -46,7 +46,7 @@ const etat = {
   o: null,              // le volet d'un porteur, quand il est ouvert (voir voletNeuf)
   points: null,         // dernière lecture de la qualité des données
   compteurs: null,      // pastilles de la barre latérale : { points, porteursAPlacer }
-  q: { confirmation: null, enCours: null }, // écran Qualité : la fusion à confirmer, le geste en cours
+  q: { confirmation: null, enCours: null, filtre: '', rech: '' }, // écran Qualité : la fusion à confirmer, le geste en cours, le filtre, la recherche
 };
 // Une seule fenêtre à la fois : une proposition, une fiche, l'export ou le volet d'un porteur.
 const fenetreOuverte = () => !!(etat.f || etat.r || etat.csv || etat.o);
@@ -153,7 +153,7 @@ function montrerCoque(avecNav) {
 function afficherEntree(avertissement) {
   etat.moi = null; etat.accueil = null; etat.liste = null; etat.nouvelles = null; etat.f = null;
   etat.fiches = null; etat.r = null; etat.csv = null;
-  etat.porteurs = null; etat.o = null; etat.points = null; etat.compteurs = null; etat.q = { confirmation: null, enCours: null };
+  etat.porteurs = null; etat.o = null; etat.points = null; etat.compteurs = null; etat.q = { confirmation: null, enCours: null, filtre: '', rech: '' };
   dessinerBandeau(); montrerCoque(false); dessinerFenetre();
   $('#main').innerHTML = `<div class="card entree">
     <h1>${e(T.titre)}</h1>
@@ -1499,11 +1499,12 @@ function contenuPorteur() {
   return `<div class="row" style="flex-wrap:nowrap;align-items:flex-start"><div style="min-width:0"><h2 id="titreFenetre">${e(o.nouvelle ? P.ajouter : p.nom || T.sansNom)}</h2>
       ${o.nouvelle ? '' : `<span class="row" style="margin-top:.2rem">${p.place ? `<span class="pill p-ok">${e(P.placeSurLaCarte)}</span>` : `<span class="pill p-warn">${e(P.aPlacerSurLaCarte)}</span>`}</span>`}</div>${fermer}</div>
     ${note}
-    <div class="fields">${champ('nom', P.nom, true, ' maxlength="200"')}${champ('adresse', P.adresse, true, ' maxlength="300"')}${bottin}
+    <div class="fields">${champ('nom', P.nom, true, ' maxlength="200"')}${champ('adresse', P.adresse, true, ' maxlength="300"')}
+      ${peut() ? `<div class="f wide" style="margin-top:-.2rem"><span class="row"><button type="button" class="btn primary" data-act="o-retrouver"${fige}>${e(P.retrouver)}</button><span class="muted small" style="font-weight:400">${e(P.retrouverSous)}</span></span></div>` : ''}${bottin}
       ${champ('latitude', P.latitude, false, ' inputmode="decimal" maxlength="24"')}${champ('longitude', P.longitude, false, ' inputmode="decimal" maxlength="24"')}
       ${o.erreurs.coordonnees ? `<span class="err wide" role="alert">${e(o.erreurs.coordonnees)}</span>` : ''}</div>
     ${o.carte === 'absente' ? `<div class="note warn">${e(P.carteAbsente)}</div>` : `<div class="map"><div class="carte-porteur" id="carteP" role="application" aria-label="${e(P.carteTitre)}">${e(P.carteChargement)}</div></div>`}
-    ${peut() ? `<div class="row"><button type="button" class="btn sm" data-act="o-retrouver"${fige}>${e(P.retrouver)}</button><span class="muted small">${e(o.carte === 'absente' ? P.retrouverAideSansCarte : P.retrouverAide)}</span></div>
+    ${peut() ? `${o.carte === 'absente' ? '' : `<p class="muted small">${e(P.carteAide)}</p>`}
     <div class="row"><button type="button" class="btn primary" data-act="o-enregistrer"${fige}>${e(o.enCours ? T.enCours : o.nouvelle ? P.creer : P.enregistrer)}</button></div>` : ''}
     ${ressources}${o.nouvelle || !peut() ? '' : blocFusion()}`;
 }
@@ -1579,11 +1580,8 @@ async function enregistrerPorteur() {
     message(P.messages.cree);
     return charger();
   }
-  // Ce qui vient d'être enregistré devient le point de départ de la saisie.
-  Object.assign(o.d.porteur, valeurs, { place: latitude !== null });
-  o.depart = { nom, adresse: valeurs.adresse, latitude: texteCoordonnee(latitude), longitude: texteCoordonnee(longitude) };
-  o.valeurs = { ...o.depart };
-  dessinerFenetre(); placerRepere();
+  // Enregistré : le volet se ferme, le message dit où en est le porteur, et la liste se relit.
+  etat.o = null; dessinerFenetre();
   message(r.donnees.inchange ? P.messages.inchange : latitude !== null ? P.messages.enregistrePlace : P.messages.enregistreAPlacer);
   charger();
 }
@@ -1690,25 +1688,68 @@ function ligneQualite(p) {
   if (p.sujet === 'valeursNouvelles') return { texte: Q.valeur(p.valeur, libelle(p.cle), p.proposition.nom || T.sansNom), boutons: `<button type="button" class="btn sm" data-act="ouvrir" data-id="${e(p.proposition.id)}">${e(Q.voirProposition)}</button>` };
   return null;
 }
+// Les sujets qui portent sur une fiche : ils se lisent fiche par fiche, « ce qui lui manque ».
+const SUJETS_FICHE = ['sansContact', 'sansPorteur', 'sansLogo', 'liens', 'aVerifier'];
+// Ceux qui comptent dans la pastille ; « à vérifier » est un état de fond, vu seulement par son filtre.
+const SUJETS_COMPTES = ['sansContact', 'sansPorteur', 'sansLogo', 'liens'];
+const AUTRES_SUJETS = ['doublons', 'porteursDoubles', 'valeursNouvelles'];
+
+// Les fiches et ce qui leur manque : { fiche, points : { sujet : le point } }, les plus incomplètes d'abord.
+function fichesQualite() {
+  const parFiche = new Map();
+  for (const p of etat.points || []) {
+    if (!SUJETS_FICHE.includes(p.sujet) || !p.fiche) continue;
+    if (!parFiche.has(p.fiche.id)) parFiche.set(p.fiche.id, { fiche: p.fiche, points: {} });
+    parFiche.get(p.fiche.id).points[p.sujet] = p;
+  }
+  const poids = (x) => SUJETS_COMPTES.filter((sujet) => x.points[sujet]).length;
+  return [...parFiche.values()].sort((a, b) => poids(b) - poids(a) || String(a.fiche.nom).localeCompare(String(b.fiche.nom), 'fr'));
+}
+function pastillesManque(x, filtre) {
+  const P2 = Q.manque;
+  const sortes = { sansContact: 'p-warn', sansPorteur: 'p-warn', sansLogo: 'p-warn', liens: 'p-bad', aVerifier: 'p-mute' };
+  return SUJETS_FICHE.filter((sujet) => x.points[sujet] && (sujet !== 'aVerifier' || filtre === 'aVerifier')).map((sujet) => {
+    const p = x.points[sujet];
+    const texte = sujet === 'liens' ? P2.liens(jour(p.depuis)) : sujet === 'aVerifier' ? (p.verifieeLe ? P2.ancienne(jour(p.verifieeLe)) : P2.jamais) : sujet === 'sansLogo' && p.proposition ? P2.logoPropose : P2[sujet];
+    return `<span class="pill ${sortes[sujet]}">${e(texte)}</span>`;
+  }).join(' ');
+}
+function tableQualite(filtre) {
+  const fige = !peut() || etat.q.enCours ? ' disabled' : '';
+  const rech = plier((etat.q.rech || '').trim());
+  const lignes = fichesQualite().filter((x) => (filtre ? x.points[filtre] : SUJETS_COMPTES.some((sujet) => x.points[sujet])) && (!rech || plier(x.fiche.nom).includes(rech)));
+  if (!lignes.length) return `<section class="card"><p class="muted">${e(rech ? Q.aucuneFiche : Q.rienIci)}</p></section>`;
+  return `${filtre === 'liens' ? `<p class="muted small">${e(Q.liensAide)}</p>` : ''}${filtre === 'aVerifier' ? `<p class="muted small">${e(Q.aVerifierAide)}</p>` : ''}
+    <div class="scroll"><table class="qtable"><thead><tr><th>${e(Q.colonnes.fiche)}</th><th>${e(Q.colonnes.manque)}</th><th></th></tr></thead><tbody>${lignes.map((x) => {
+    const id = e(x.fiche.id);
+    const lien = x.points.liens && filtre === 'liens' ? `<button type="button" class="btn sm" data-act="q-revisiter" data-id="${id}"${fige}>${e(etat.q.enCours === `lien:${x.fiche.id}` ? T.enCours : Q.revisiter)}</button>` : '';
+    const verifier = x.points.aVerifier && filtre === 'aVerifier' ? `<button type="button" class="btn sm primary" data-act="q-verifier" data-id="${id}"${fige}>${e(Q.verifier)}</button>` : '';
+    const proposition = x.points.sansLogo && x.points.sansLogo.proposition ? `<button type="button" class="btn sm" data-act="ouvrir" data-id="${e(x.points.sansLogo.proposition)}">${e(Q.voirProposition)}</button>` : '';
+    return `<tr><td><b>${e(x.fiche.nom || T.sansNom)}</b></td><td><span class="row" style="gap:.3rem">${pastillesManque(x, filtre)}</span></td>
+      <td><span class="row" style="justify-content:flex-end;flex-wrap:nowrap">${lien}${verifier}${proposition}<button type="button" class="btn sm" data-act="ouvrir-fiche" data-id="${id}">${e(Q.ouvrirFiche)}</button></span></td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
 function corpsQualite() {
   if (!etat.points) return `<p class="muted" role="status">${e(T.chargement)}</p>`;
-  const sujets = Object.keys(Q.sujets).filter((sujet) => etat.points.some((p) => p.sujet === sujet));
-  if (!sujets.length) return `<section class="card"><p class="muted">${e(Q.rien)}</p></section>`;
-  return sujets.map((sujet) => {
+  const compte = (sujet) => etat.points.filter((p) => p.sujet === sujet).length;
+  const fiches = fichesQualite();
+  const total = fiches.filter((x) => SUJETS_COMPTES.some((sujet) => x.points[sujet])).length;
+  const filtre = Object.keys(Q.sujets).includes(etat.q.filtre) && compte(etat.q.filtre) ? etat.q.filtre : '';
+  const bouton = (cle, nom, n) => `<button type="button" class="chipf" data-act="q-filtre" data-v="${e(cle)}" aria-pressed="${filtre === cle}">${e(nom)} <span class="num">${Number(n)}</span></button>`;
+  const filtres = `<div class="chipsf" role="group" aria-label="${e(Q.filtrer)}">${bouton('', Q.tout, total)}${Object.keys(Q.sujets).filter((sujet) => compte(sujet)).map((sujet) => bouton(sujet, Q.filtres[sujet], compte(sujet))).join('')}</div>`;
+  if (!etat.points.length) return `<section class="card"><p class="muted">${e(Q.rien)}</p></section>`;
+  const cartes = AUTRES_SUJETS.filter((sujet) => compte(sujet) && (!filtre || filtre === sujet)).map((sujet) => {
     const lignes = etat.points.filter((p) => p.sujet === sujet).map(ligneQualite).filter(Boolean);
-    const tete = `<h3>${e(Q.sujets[sujet])}</h3><span class="pill p-mute num">${lignes.length}</span>`;
-    const liste = `${sujet === 'liens' ? `<p class="muted small">${e(Q.liensAide)}</p>` : ''}
-      <div class="list">${lignes.map((l) => `<div><div class="grow">${e(l.texte)}</div><span class="row">${l.boutons}</span>${l.suite || ''}</div>`).join('')}</div>`;
-    // Les fiches à vérifier sont un état de fond, long au départ : le groupe arrive replié.
-    if (sujet === 'aVerifier') {
-      return `<section class="card"><details class="repli" data-repli="aVerifier"${etat.q.aVerifierOuvert ? ' open' : ''}><summary class="row" style="justify-content:space-between">${tete}</summary>
-        <p class="muted small">${e(Q.aVerifierAide)}</p>${liste}</details></section>`;
-    }
-    return `<section class="card"><div class="row" style="justify-content:space-between">${tete}</div>${liste}</section>`;
+    return `<section class="card"><div class="row" style="justify-content:space-between"><h2 class="qtitre">${e(Q.sujets[sujet])}</h2><span class="pill p-mute num">${lignes.length}</span></div>
+      <div class="list">${lignes.map((l) => `<div><div class="grow">${e(l.texte)}</div><span class="row">${l.boutons}</span>${l.suite || ''}</div>`).join('')}</div></section>`;
   }).join('');
+  const table = !filtre || SUJETS_FICHE.includes(filtre) ? `<h2 class="qtitre">${e(filtre ? Q.sujets[filtre] : Q.titreTout)}</h2>${tableQualite(filtre)}` : '';
+  return `${filtres}${table}${cartes}`;
 }
 function ecranQualite() {
-  return `<div class="head"><div><h1>${e(T.routes.qualite)}</h1><p>${e(Q.intro)}</p></div></div><div id="qbody">${corpsQualite()}</div>`;
+  return `<div class="head"><div><h1>${e(T.routes.qualite)}</h1><p>${e(Q.intro)}</p></div></div>
+    <div class="tools"><input type="search" id="qq" placeholder="${e(Q.chercher)}" value="${e(etat.q.rech || '')}" aria-label="${e(Q.chercher)}"></div>
+    <div id="qbody">${corpsQualite()}</div>`;
 }
 // Les compteurs de la barre latérale, lus sans rien bloquer : points de qualité et porteurs à placer.
 async function chargerCompteurs() {
@@ -1736,6 +1777,7 @@ async function gesteQualite(cle, envoyer, reussite) {
 }
 function gesteEcranQualite(act, cible) {
   const { id } = cible.dataset;
+  if (act === 'q-filtre') { etat.q.filtre = cible.dataset.v || ''; etat.q.confirmation = null; return rafraichir(); }
   if (!peut() || etat.q.enCours) return undefined;
   if (act === 'q-verifier') return gesteQualite(`verifier:${id}`, () => appel('verifier', { corps: { fiche: id } }), () => Q.verifiee);
   if (act === 'q-revisiter') {
@@ -1870,6 +1912,7 @@ document.addEventListener('click', async (evenement) => {
 });
 
 document.addEventListener('keydown', (evenement) => {
+  if (evenement.key === 'Enter' && evenement.target && evenement.target.id === 'o-adresse' && etat.o && peut()) { evenement.preventDefault(); return void retrouverAdresse(); }
   const cible = evenement.target;
   if (evenement.key === 'Escape' && fenetreOuverte()) return void fermerFenetre();
   // Tab tourne dans la fenêtre ouverte, sans sortir vers la page derrière.
@@ -1891,6 +1934,7 @@ document.addEventListener('keydown', (evenement) => {
 document.addEventListener('input', (evenement) => {
   const cible = evenement.target; const f = etat.f;
   if (cible.id === 'q') { etat.filtres.q = cible.value; return rafraichir(); }
+  if (cible.id === 'qq') { etat.q.rech = cible.value; return rafraichir(); }
   if (cible.id === 'rq') { etat.filtresR.q = cible.value; return rafraichir(); }
   // Volet d'un porteur : chaque frappe est gardée, et le repère suit les coordonnées écrites.
   const o = etat.o;
@@ -1971,12 +2015,6 @@ document.addEventListener('drop', (evenement) => {
   evenement.preventDefault(); c.classList.remove('over');
   deplacer(evenement.dataTransfer.getData('text/plain'), c.dataset.drop);
 });
-
-// Un groupe replié de l'écran Qualité garde son état d'un redessin à l'autre.
-document.addEventListener('toggle', (evenement) => {
-  const cible = evenement.target;
-  if (cible && cible.dataset && cible.dataset.repli === 'aVerifier') etat.q.aVerifierOuvert = cible.open;
-}, true);
 
 // Fermer l'onglet ou recharger la page avec une saisie en cours : le navigateur demande confirmation.
 window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours()) { evenement.preventDefault(); evenement.returnValue = ''; } });

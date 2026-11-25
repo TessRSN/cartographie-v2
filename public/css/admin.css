@@ -321,8 +321,11 @@ del { background: var(--bad-bg); color: var(--bad); text-decoration: line-throug
 .fields .err.wide { grid-column: 1 / -1; }
 .list > div > .confirm { flex: 1 1 100%; }
 @media (max-width: 720px) { .map .carte-porteur { height: 230px; } }
-details.repli > summary { cursor: pointer; list-style: none; }
-details.repli > summary::-webkit-details-marker { display: none; }
-details.repli > summary h3::before { content: '▸ '; color: var(--muted); }
-details.repli[open] > summary h3::before { content: '▾ '; }
-details.repli[open] > summary { margin-bottom: .5rem; }
+.chipsf { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+.chipf { min-height: 34px; padding: .25rem .8rem; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font-size: .86rem; cursor: pointer; }
+.chipf .num { margin-left: .25rem; color: var(--muted); font-weight: 600; }
+.chipf[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.chipf[aria-pressed="true"] .num { color: inherit; opacity: .85; }
+h2.qtitre { font-size: 1.05rem; font-weight: 700; color: var(--fg); text-transform: none; letter-spacing: 0; margin: .2rem 0 .6rem; }
+.card h2.qtitre { margin: 0; }
+table.qtable td { vertical-align: middle; }
