@@ -395,6 +395,16 @@ div.vis-tooltip { font-family: inherit; font-size: 0.8rem; max-width: 280px; whi
 .types-legend { display: flex; flex-wrap: wrap; gap: 0 16px; margin-top: 2px; font-size: 0.78rem; line-height: 1.35; color: var(--muted-strong); }
 .types-legend button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
 .types-legend strong { color: var(--ink); }
+/* Le nombre et le pourcentage ne se séparent jamais. */
+.types-legend .mesure { white-space: nowrap; }
+/* Sur un écran large, chaque légende est alignée sous son segment de la barre : les deux
+   rangées partagent les mêmes colonnes (posées par le script, à proportion des nombres). */
+@media (min-width: 901px) {
+    .stats-main.types-alignes { display: grid; column-gap: 2px; }
+    .types-alignes .types-bar, .types-alignes .types-legend { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; column-gap: 2px; }
+    .types-alignes .types-legend { margin-top: 4px; align-items: start; }
+    .types-alignes .types-legend > * { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; min-width: 0; padding-right: 8px; text-align: left; }
+}
 .types-legend button:hover .nom, .types-legend button[aria-pressed="true"] .nom { color: var(--rsn-accent); text-decoration: underline; text-underline-offset: 3px; }
 .stat-tokens { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; }
 .stat-token { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 6px 14px 6px 0; border: 0; border-right: 1px solid var(--rsn-border); border-radius: 0; background: none; font: inherit; color: var(--rsn-text); cursor: pointer; text-align: left; }

@@ -355,9 +355,13 @@ function afficherPortrait() {
   const T = TEXTES.portrait;
   $('resumePortrait').innerHTML = `<strong>${chiffres.ressources}</strong> ${echapper(T.ressources(chiffres.ressources))} · <strong>${chiffres.porteurs}</strong> ${echapper(T.porteurs(chiffres.porteurs))}`;
   const total = chiffres.types.reduce((s, t) => s + t.nombre, 0) || 1;
+  // Barre et légende partagent les mêmes colonnes : chaque légende tombe sous son segment.
+  const boiteTypes = $('barreTypes').parentElement;
+  boiteTypes.classList.add('types-alignes');
+  boiteTypes.style.gridTemplateColumns = chiffres.types.map((t) => `minmax(min-content, ${t.nombre}fr)`).join(' ');
   $('barreTypes').innerHTML = chiffres.types.map((t) => `<div class="seg type-${t.cle}" style="flex:${t.nombre} 1 0"></div>`).join('');
   $('legendeTypes').innerHTML = chiffres.types.map((t) => {
-    const contenu = `${puceType(t.cle)}<span class="nom">${echapper(TEXTES.typesCourts[t.cle])}</span> <strong>${t.nombre}</strong> · ${echapper(T.pourcent(100 * t.nombre / total))}`;
+    const contenu = `${puceType(t.cle)}<span class="nom">${echapper(TEXTES.typesCourts[t.cle])}</span> <span class="mesure"><strong>${t.nombre}</strong> · ${echapper(T.pourcent(100 * t.nombre / total))}</span>`;
     return t.type
       ? `<button type="button" class="type-${t.cle}" data-jeton="type" data-valeur="${echapper(t.type)}" title="${echapper(t.type)}" aria-pressed="${etat.filtres.type.includes(t.type) ? 'true' : 'false'}">${contenu}</button>`
       : `<span class="type-${t.cle}">${contenu}</span>`;
