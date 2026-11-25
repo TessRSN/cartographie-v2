@@ -29,6 +29,7 @@ function banc({ env = ENV, approbateurs = [], autorise = true, pannes = {}, fich
     limites: {
       async autoriserLien(a) { noter('autoriserLien', a); return autorise; },
       async consommerJeton(jti) { noter('consommerJeton', jti); if (jetonsVus.has(jti)) return false; jetonsVus.add(jti); return true; },
+      async libererJeton(jti) { noter('libererJeton', jti); jetonsVus.delete(jti); },
     },
     courriels: {
       async lienProposer(m) { noter('lienProposer', m); return { envoye: true }; },
@@ -37,7 +38,7 @@ function banc({ env = ENV, approbateurs = [], autorise = true, pannes = {}, fich
       async nouvelleProposition(m) { noter('nouvelleProposition', m); return { envoye: true }; },
     },
     propositions: {
-      async estApprobateur(c) { return approbateurs.includes(c); },
+      async estApprobateur(c) { if (pannes.estApprobateur) throw new Error('Notion en panne'); return approbateurs.includes(c); },
       async approbateursActifs() { return approbateurs; },
       async enAttenteSur(id) { noter('enAttenteSur', id); return enAttente; },
       async creerProposition(p) { noter('creerProposition', p); return 'prop-1'; },
@@ -293,4 +294,30 @@ test('deux textes qui ne diffèrent que par des espaces sont égaux, pas deux pa
   assert.equal(egales('Un.\r\n\r\nDeux.', 'Un.\n\nDeux.'), true);
   assert.equal(egales('Un. Deux.', 'Un.\n\nDeux.'), false);
   assert.equal(egales('a', 'b'), false);
+});
+
+test('le lien pour modifier porte aussi l\'adresse publique de la fiche', async () => {
+  const b = banc();
+  await appeler(b.lien, requete('POST', { body: { courriel: 'pat@exemple.org', but: 'modifier', adresse: 'cohorte-x' } }));
+  const url = new URL(b.de('lienProposer')[0].lien);
+  assert.equal(url.searchParams.get('fiche'), 'cohorte-x');
+  assert.ok(url.searchParams.get('jeton'));
+});
+
+test('si Notion échoue à la création, le lien est rendu et peut resservir', async () => {
+  const liberes = [];
+  const b = banc({ pannes: { creerProposition: true } });
+  const j = jeton('proposer', { courriel: 'pat@exemple.org' });
+  const deps = require('../api/proposition');
+  assert.equal((await appeler(b.proposition, envoi(j))).code, 502);
+  assert.equal(b.de('libererJeton').length, 1);
+  assert.equal(b.de('libererJeton')[0], b.de('consommerJeton')[0]);
+  void liberes; void deps;
+});
+
+test("une panne en lisant les approbateurs n'empêche pas de prévenir l'équipe", async () => {
+  const b = banc({ approbateurs: ['tess@exemple.ca'], pannes: { estApprobateur: true } });
+  const res = await appeler(b.proposition, envoi(jeton('proposer', { courriel: 'pat@exemple.org' })));
+  assert.deepEqual(res.corps, { ok: true, approuvee: false, courriel: true });
+  assert.equal(b.de('nouvelleProposition').length, 1);
 });

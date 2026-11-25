@@ -11,7 +11,11 @@ const e = echapper;
 const { CHAMPS, OBLIGATOIRES, nettoyer, estVide, egales } = window.Champs;
 const PAR_CLE = Object.fromEntries(CHAMPS.map((c) => [c.cle, c]));
 const racine = document.getElementById('proposer');
-const jeton = new URLSearchParams(location.search).get('jeton');
+const parametres = new URLSearchParams(location.search);
+const jeton = parametres.get('jeton');
+// Adresse publique de la fiche visée, portée par le lien : elle sert même si le lien a expiré.
+const ficheDuLien = /^[a-z0-9-]{1,200}$/.test(parametres.get('fiche') || '') ? parametres.get('fiche') : null;
+const DUREE_MEMOIRE_MS = 7 * 24 * 3600 * 1000;
 
 // Champs communs, regroupés comme sur la fiche.
 const GROUPES = [
@@ -38,20 +42,24 @@ const etat = {
 };
 
 // ─── Mémoire de la saisie ───
-function cleMemoire() {
+// La saisie est gardée dans localStorage : elle doit survivre à un nouveau lien, qui s'ouvre
+// dans un autre onglet. Elle est effacée à l'envoi, ou oubliée au bout de sept jours.
+function adresseVisee() {
   const fiche = etat.donnees && etat.donnees.fiche;
-  return `rsn-carto-proposition:${fiche ? fiche.adresse : 'nouvelle'}`;
+  return (fiche && fiche.adresse) || ficheDuLien;
 }
+function cleMemoire() { return `rsn-carto-proposition:${adresseVisee() || 'nouvelle'}`; }
 function garder() {
   try {
     const { genre, etape, valeurs, porteursNouveaux, nomProposant, lienAvecRessource } = etat;
-    sessionStorage.setItem(cleMemoire(), JSON.stringify({ genre, etape, valeurs, porteursNouveaux, nomProposant, lienAvecRessource }));
+    localStorage.setItem(cleMemoire(), JSON.stringify({ t: Date.now(), genre, etape, valeurs, porteursNouveaux, nomProposant, lienAvecRessource }));
   } catch (err) { /* sans mémoire : la saisie vit le temps de la page */ }
 }
 function reprendre() {
   try {
-    const garde = JSON.parse(sessionStorage.getItem(cleMemoire()) || 'null');
+    const garde = JSON.parse(localStorage.getItem(cleMemoire()) || 'null');
     if (!garde || typeof garde !== 'object') return;
+    if (!(Date.now() - Number(garde.t) < DUREE_MEMOIRE_MS)) return oublier();
     const modification = etat.genre === 'modification';
     if (modification !== (garde.genre === 'modification')) return;
     Object.assign(etat, {
@@ -60,7 +68,7 @@ function reprendre() {
     });
   } catch (err) { /* saisie gardée illisible : on repart de zéro */ }
 }
-function oublier() { try { sessionStorage.removeItem(cleMemoire()); } catch (err) { /* rien à oublier */ } }
+function oublier() { try { localStorage.removeItem(cleMemoire()); } catch (err) { /* rien à oublier */ } }
 
 // ─── Étapes ───
 function sectionsPropres() {
@@ -111,7 +119,8 @@ function htmlChamp(cle) {
   const id = `c-${cle}`;
   const oblig = estObligatoire(cle) ? `<span class="oblig">${e(T.obligatoire)}</span>` : '';
   const aide = t.aide ? `<p class="aide" id="a-${cle}">${e(t.aide)}</p>` : '';
-  const decrit = `${t.aide ? `aria-describedby="a-${cle}"` : ''} ${erreur ? 'aria-invalid="true"' : ''}`;
+  const descriptions = [t.aide ? `a-${cle}` : '', erreur ? `e-${cle}` : ''].filter(Boolean).join(' ');
+  const decrit = `${descriptions ? `aria-describedby="${descriptions}"` : ''} ${erreur ? 'aria-invalid="true"' : ''}`;
   const pied = `<p class="erreur" id="e-${cle}" role="alert">${e(erreur)}</p>`;
   const classe = `champ${erreur ? ' en-erreur' : ''}`;
   const options = (etat.donnees.options && etat.donnees.options[cle]) || [];
@@ -199,13 +208,16 @@ function afficher({ haut = false } = {}) {
     <p class="f-intro">${e(T.intro)}</p>
     ${etat.donnees.dejaEnAttente ? `<p class="f-avis alerte">${e(T.dejaEnAttente)}</p>` : ''}
     <ol class="f-etapes" aria-hidden="true">${liste.map((_, i) => `<li class="${i < etat.etape ? 'faite' : i === etat.etape ? 'ici' : ''}"></li>`).join('')}</ol>
-    <p class="f-etape-nom">${e(T.etape(etat.etape + 1, liste.length))} · <strong>${e(T.etapes[nom])}</strong></p>
+    <p class="f-etape-nom" id="titreEtape" tabindex="-1">${e(T.etape(etat.etape + 1, liste.length))} · <strong>${e(T.etapes[nom])}</strong></p>
     ${avis}${corps}${derniere && nom !== 'type' ? htmlVous() : ''}
     <div class="f-actions">
       ${etat.etape > 0 ? `<button type="button" class="f-bouton" id="precedent">${e(T.precedent)}</button>` : ''}
       <button type="submit" class="f-bouton principal droite" ${etat.envoi ? 'disabled' : ''}>${e(etat.envoi ? T.envoiEnCours : derniere && nom !== 'type' ? T.envoyer : T.suivant)}</button>
     </div>${htmlQuestion()}</form>`;
-  if (haut) window.scrollTo({ top: 0 });
+  // Le formulaire vient d'être redessiné : le focus va au premier champ à corriger, sinon au titre de l'étape.
+  const fautif = racine.querySelector('.en-erreur input, .en-erreur select, .en-erreur textarea');
+  if (fautif) { fautif.focus({ preventScroll: true }); fautif.scrollIntoView({ block: 'center' }); }
+  else if (haut) { window.scrollTo({ top: 0 }); document.getElementById('titreEtape').focus({ preventScroll: true }); }
 }
 
 // ─── Saisie ───
@@ -244,7 +256,12 @@ function rafraichirListe(cle) {
 // Valide les champs de l'étape en cours ; renvoie vrai si elle peut être quittée.
 function validerEtape(nom) {
   const cles = champsDeLEtape(nom);
-  const saisie = Object.fromEntries(cles.filter((cle) => etat.valeurs[cle] !== undefined).map((cle) => [cle, etat.valeurs[cle]]));
+  const fiche = etat.donnees.fiche;
+  // En modification, seuls les champs touchés sont validés, comme le fera le serveur : une valeur
+  // d'origine hors norme ne doit pas empêcher de corriger autre chose.
+  const saisie = Object.fromEntries(cles
+    .filter((cle) => etat.valeurs[cle] !== undefined && (!fiche || !egales(fiche.valeurs[cle], etat.valeurs[cle])))
+    .map((cle) => [cle, etat.valeurs[cle]]));
   const options = { ...etat.donnees.options };
   const { erreurs } = nettoyer(saisie, { role: 'proposant', options, genre: etat.genre });
   etat.erreurs = Object.fromEntries(Object.entries(erreurs).filter(([cle]) => cles.includes(cle)));
@@ -253,7 +270,8 @@ function validerEtape(nom) {
 
 function valeursAEnvoyer() {
   const fiche = etat.donnees.fiche;
-  const cles = etat.genre === 'rsn' ? CHAMPS_RSN : CHAMPS.filter((c) => c.role === 'proposant').map((c) => c.cle);
+  // Seulement les champs des étapes affichées : ce qui a été saisi pour un autre type ne part pas.
+  const cles = etapes().flatMap(champsDeLEtape);
   const valeurs = {};
   for (const cle of cles) {
     const v = etat.valeurs[cle];
@@ -281,7 +299,7 @@ async function envoyer() {
   etat.envoi = false;
   if (reponse && reponse.ok) { oublier(); return afficherMerci(corps.approuvee); }
   if (reponse && reponse.status === 401) return afficherDemandeDeLien(T.lienExpire);
-  if (reponse && reponse.status === 410) return afficherDemandeDeLien(T.ficheIntrouvable);
+  if (reponse && reponse.status === 410) return afficherMessage(T.ficheIntrouvable);
   if (reponse && reponse.status === 400 && corps.erreurs) {
     etat.erreurs = corps.erreurs;
     const liste = etapes();
@@ -302,27 +320,32 @@ function afficherMerci(approuvee) {
   window.scrollTo({ top: 0 });
 }
 
+function afficherMessage(texte) {
+  racine.innerHTML = `<div class="f-carte"><p class="f-avis alerte" role="alert">${e(texte)}</p>
+    <div class="f-actions"><a class="f-bouton principal" href="/">${e(T.retourCarte)}</a></div>${htmlQuestion()}</div>`;
+}
+
 function afficherDemandeDeLien(message) {
-  const fiche = etat.donnees && etat.donnees.fiche;
+  const adresse = adresseVisee();
   racine.innerHTML = `<form class="f-carte" id="demandeLien" novalidate>
     <h2 class="f-titre">${e(T.lienTitre)}</h2>
     ${message ? `<p class="f-avis alerte">${e(message)}</p>` : `<p class="f-intro">${e(T.lienIntro)}</p>`}
     <div class="champ"><label for="courrielLien">${e(T.courriel)}</label><input type="email" id="courrielLien" maxlength="254" autocomplete="email" required>
       <p class="erreur" id="erreurLien" role="alert"></p></div>
-    <div class="f-piege" aria-hidden="true"><label>Site web<input type="text" id="siteLien" tabindex="-1" autocomplete="off"></label></div>
+    <div class="f-piege" aria-hidden="true"><label>Laisser ce champ vide<input type="text" id="siteLien" name="rsn-verification" tabindex="-1" autocomplete="off"></label></div>
     <div class="f-actions"><a class="f-bouton" href="/">${e(T.retourCarte)}</a><button type="submit" class="f-bouton principal droite">${e(T.recevoir)}</button></div>${htmlQuestion()}</form>`;
   document.getElementById('demandeLien').addEventListener('submit', async (evenement) => {
     evenement.preventDefault();
     const courriel = document.getElementById('courrielLien').value.trim();
     const erreur = document.getElementById('erreurLien');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courriel)) { erreur.textContent = TEXTES.contribuer.champs.contact.libelle + ' : ' + "l'adresse n'a pas la bonne forme."; return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courriel)) { erreur.textContent = T.courrielInvalide; return; }
     const bouton = evenement.target.querySelector('button[type="submit"]');
     bouton.disabled = true;
     let ok = false;
     try {
       const reponse = await fetch('/api/lien', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courriel, but: fiche ? 'modifier' : 'proposer', adresse: fiche ? fiche.adresse : undefined, site: document.getElementById('siteLien').value }),
+        body: JSON.stringify({ courriel, but: adresse ? 'modifier' : 'proposer', adresse: adresse || undefined, site: document.getElementById('siteLien').value }),
       });
       ok = reponse.ok;
     } catch (err) { ok = false; }
@@ -373,10 +396,7 @@ racine.addEventListener('submit', (evenement) => {
   if (nom === 'type' && etat.genre !== 'rsn' && !etat.valeurs.typePrincipal) { etat.erreurs = { typePrincipal: T.questionType }; return afficher(); }
   if (!validerEtape(nom)) {
     etat.avis = { sorte: 'erreur', texte: T.erreursEnHaut };
-    afficher();
-    const premier = racine.querySelector('.en-erreur');
-    if (premier) premier.scrollIntoView({ block: 'center' });
-    return;
+    return afficher();
   }
   etat.avis = null;
   if (etat.etape < liste.length - 1) { etat.etape += 1; garder(); return afficher({ haut: true }); }
@@ -403,7 +423,7 @@ document.getElementById('boutonTheme').addEventListener('click', () => {
     return;
   }
   if (reponse.status === 401) return afficherDemandeDeLien(T.lienExpire);
-  if (reponse.status === 410) return afficherDemandeDeLien(T.ficheIntrouvable);
+  if (reponse.status === 410) return afficherMessage(T.ficheIntrouvable);
   etat.donnees = corps;
   etat.genre = corps.genre;
   if (corps.fiche) {

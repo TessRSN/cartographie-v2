@@ -42,7 +42,7 @@ function creerGestionnaire(donnees) {
         if (Object.hasOwn(publiques.idParAdresse || {}, adresse)) {
           const fiche = publiques.ressources.find((r) => r.adresse === adresse);
           const jeton = signer('modifier', { courriel, ficheId: publiques.idParAdresse[adresse] }, secret);
-          await d.courriels.lienProposer({ a: courriel, lien: `${origine}/proposer?jeton=${jeton}`, nomFiche: fiche ? fiche.nom : adresse });
+          await d.courriels.lienProposer({ a: courriel, lien: `${origine}/proposer?fiche=${encodeURIComponent(adresse)}&jeton=${jeton}`, nomFiche: fiche ? fiche.nom : adresse });
         }
       } else {
         await d.courriels.lienProposer({ a: courriel, lien: `${origine}/proposer?jeton=${signer('proposer', { courriel }, secret)}` });

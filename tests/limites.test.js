@@ -123,3 +123,11 @@ test('un verrou oublié expire au bout d\'une minute', async () => {
   horloge.t += 61000;
   assert.equal(await limites.prendreVerrou('proposition:1'), true);
 });
+
+test('un jeton libéré peut resservir', async () => {
+  const { limites } = enMemoire();
+  assert.equal(await limites.consommerJeton('jti-9'), true);
+  await limites.libererJeton('jti-9');
+  assert.equal(await limites.consommerJeton('jti-9'), true);
+  assert.equal(await limites.consommerJeton('jti-9'), false);
+});

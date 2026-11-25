@@ -105,25 +105,32 @@ function creerGestionnaire(donnees) {
       if (!(await d.limites.consommerJeton(charge.jti))) return expire(res);
 
       const titre = `${PREFIXES[genre]} : ${nomFiche}`;
-      const propositionId = await d.propositions.creerProposition({
-        genre, ficheId: modification ? charge.ficheId : null, courriel: charge.courriel,
-        nomProposant: typeof corps.nomProposant === 'string' ? corps.nomProposant.replace(/\s+/g, ' ').trim().slice(0, 200) : '',
-        lienAvecRessource: LIENS_AVEC_RESSOURCE.includes(corps.lienAvecRessource) ? corps.lienAvecRessource : 'aucun',
-        titre, contenu: { propose, applique: null, porteursNouveaux },
-      });
+      let propositionId;
+      try {
+        propositionId = await d.propositions.creerProposition({
+          genre, ficheId: modification ? charge.ficheId : null, courriel: charge.courriel,
+          nomProposant: typeof corps.nomProposant === 'string' ? corps.nomProposant.replace(/\s+/g, ' ').trim().slice(0, 200) : '',
+          lienAvecRessource: LIENS_AVEC_RESSOURCE.includes(corps.lienAvecRessource) ? corps.lienAvecRessource : 'aucun',
+          titre, contenu: { propose, applique: null, porteursNouveaux },
+        });
+      } catch (err) {
+        // Rien n'a été enregistré : le lien est rendu pour que la personne puisse réessayer.
+        await d.limites.libererJeton(charge.jti);
+        throw err;
+      }
 
       // À partir d'ici la proposition est enregistrée : rien ne doit faire échouer la réponse.
       const origine = origineSure(req, env);
       let approuvee = false; let recu = { envoye: false };
-      try {
-        recu = await d.courriels.propositionRecue({ a: charge.courriel, titre });
-        // La proposition d'un approbateur est approuvée d'office ; sinon, l'équipe est prévenue.
-        if (await d.propositions.estApprobateur(charge.courriel)) {
-          approuvee = (await d.approbation.approuver({ propositionId, approbateur: charge.courriel, origine })).ok === true;
-        }
-        if (!approuvee) await d.courriels.nouvelleProposition({ a: await d.propositions.approbateursActifs(), titre, lienPanneau: `${origine}/admin` });
-      } catch (err) {
-        d.journal('[proposition] suites de la proposition incomplètes :', err.message);
+      const suite = async (quoi, faire) => {
+        try { return await faire(); } catch (err) { d.journal(`[proposition] ${quoi} impossible :`, err.message); return null; }
+      };
+      recu = (await suite('accusé de réception', () => d.courriels.propositionRecue({ a: charge.courriel, titre }))) || recu;
+      // La proposition d'un approbateur est approuvée d'office ; sinon, l'équipe est prévenue.
+      approuvee = (await suite("approbation d'office", async () => (await d.propositions.estApprobateur(charge.courriel))
+        && (await d.approbation.approuver({ propositionId, approbateur: charge.courriel, origine })).ok === true)) === true;
+      if (!approuvee) {
+        await suite("avis à l'équipe", async () => d.courriels.nouvelleProposition({ a: await d.propositions.approbateursActifs(), titre, lienPanneau: `${origine}/admin` }));
       }
       return res.status(200).json({ ok: true, approuvee, courriel: !!(recu && recu.envoye) });
     } catch (err) {
