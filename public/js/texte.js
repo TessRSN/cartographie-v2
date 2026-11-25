@@ -273,7 +273,8 @@ function adresseSure(valeur) {
 // Adresse d'un logo : une copie servie par le site (/logos/…) ou une adresse http(s).
 function adresseLogo(valeur) {
   const v = String(valeur || '').trim();
-  return /^\/logos\/[a-f0-9]{16}\.[a-z]{3,4}$/.test(v) ? v : adresseSure(v);
+  if (/^\/logos\/[a-f0-9]{16}\.[a-z]{3,4}$/.test(v) || /^\/api\/logo\?adresse=[a-z0-9-]{1,200}&v=[a-f0-9]{10}$/.test(v)) return v;
+  return adresseSure(v);
 }
 
 // Cadre approximatif du Québec : une ressource placée en dehors rejoint le
