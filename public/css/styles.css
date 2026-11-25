@@ -322,7 +322,16 @@ body {
 .bouton-aide::after { content: ''; position: absolute; inset: -8px; }
 /* Pendant le calcul du graphe, la zone garde la hauteur de la vue pour que la page ne saute pas. */
 #chargementConnexions { min-height: clamp(520px, 72vh, 740px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 3rem 1rem; color: var(--rsn-muted); font-weight: 600; }
-div.vis-tooltip { font-family: inherit; font-size: 0.8rem; max-width: 280px; white-space: normal; border-radius: 6px; }
+/* Étiquette de survol du graphe. La feuille de vis-network est chargée après celle-ci :
+   le sélecteur est renforcé pour que le texte revienne à la ligne et que l'étiquette
+   prenne les couleurs du site, en clair comme en sombre. */
+#zoneConnexions div.vis-tooltip {
+    font-family: inherit; font-size: 0.8rem; line-height: 1.4; font-weight: 500;
+    width: max-content; max-width: min(300px, 80vw); white-space: normal; overflow-wrap: anywhere;
+    padding: 6px 10px; border-radius: 8px;
+    background: var(--rsn-card-bg); color: var(--rsn-text);
+    border: 1px solid var(--rsn-border); box-shadow: var(--shadow-md);
+}
 
 /* ─── Carte : ronds, grappes et fenêtres en verre ─── */
 .marker-cluster-custom { background: rgba(168, 85, 247, 0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; }

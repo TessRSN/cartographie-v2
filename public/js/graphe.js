@@ -464,7 +464,8 @@ function construire() {
     return Object.assign(forme, {
       id: n.adresse,
       label: n.nom.length > 30 ? n.nom.slice(0, 28) + '…' : n.nom,
-      title: [n.nom, n.type ? TEXTES.typesCourts[cleDuType] || n.type : '', porteur || ''].filter(Boolean).join(' · '),
+      // Le porteur n'est pas répété quand il porte le même nom que la ressource.
+      title: [n.nom, n.type ? TEXTES.typesCourts[cleDuType] || n.type : '', porteur && porteur !== n.nom ? porteur : ''].filter(Boolean).join(' · '),
       // En mode sujets, les ressources sont plus petites : ce sont les sujets qu'on lit d'abord.
       size: parSujets ? (logo ? 20 : 15) : tailleNoeud(g.degre.get(n.adresse) || 0, !!logo),
       font: police(sombre),
