@@ -35,9 +35,9 @@ test("le lien pour modifier nomme la fiche", async () => {
 
 test("en mode d'essai, tout part vers l'adresse d'essai", async () => {
   const { courriels, envois } = banc({ EMAIL_TEST_MODE: 'true', EMAIL_TEST_RECIPIENT: 'essai@rsn.quebec' });
-  await courriels.nouvelleProposition({ a: ['a@exemple.org', 'b@exemple.org'], titre: 'Nouvelle : X', lienPanneau: 'https://site/admin' });
+  await courriels.resumeHebdomadaire({ a: 'a@exemple.org', propositions: [{ titre: 'Nouvelle : X' }], lienPanneau: 'https://site/admin' });
   assert.deepEqual(envois[0].to, ['essai@rsn.quebec']);
-  assert.equal(envois[0].subject, '[TEST → a@exemple.org, b@exemple.org] Nouvelle proposition à examiner : Nouvelle : X');
+  assert.equal(envois[0].subject, '[TEST → a@exemple.org] 1 proposition à examiner dans la cartographie');
 });
 
 test("en mode d'essai sans adresse d'essai, rien ne part", async () => {
@@ -56,7 +56,7 @@ test('sans clé Resend, le courriel est simulé et le lien va au journal', async
 
 test('sans destinataire, rien ne part', async () => {
   const { courriels, envois } = banc();
-  assert.deepEqual(await courriels.nouvelleProposition({ a: [], titre: 'X', lienPanneau: 'https://site/admin' }), { envoye: false });
+  assert.deepEqual(await courriels.resumeHebdomadaire({ a: '', propositions: [{ titre: 'X' }], lienPanneau: 'https://site/admin' }), { envoye: false });
   assert.equal(envois.length, 0);
 });
 
@@ -92,10 +92,32 @@ test('aucun courriel ne contient de tiret cadratin', async () => {
   const { courriels, envois } = banc();
   await courriels.lienProposer({ a: 'p@e.org', lien: 'https://s/x' });
   await courriels.propositionRecue({ a: 'p@e.org', titre: 'T' });
-  await courriels.nouvelleProposition({ a: ['p@e.org'], titre: 'T', lienPanneau: 'https://s/admin' });
+  await courriels.resumeHebdomadaire({ a: 'p@e.org', propositions: [{ titre: 'T' }], lienPanneau: 'https://s/admin' });
   await courriels.approuvee({ a: 'p@e.org', nom: 'N', lienFiche: 'https://s/r' });
   await courriels.refusee({ a: 'p@e.org', titre: 'T', commentaire: 'C' });
   await courriels.lienPanneau({ a: 'p@e.org', lien: 'https://s/admin' });
   assert.equal(envois.length, 6);
   for (const m of envois) assert.ok(!/—/.test(m.subject + m.html), m.subject);
+});
+
+test('le résumé hebdomadaire liste les propositions en attente et mène au panneau', async () => {
+  const { courriels, envois } = banc();
+  const retour = await courriels.resumeHebdomadaire({
+    a: 'p@exemple.org', lienPanneau: 'https://site/admin',
+    propositions: [{ titre: 'Nouvelle : Outil <b>X</b>', proposeLe: '2026-11-20T15:00:00.000Z' }, { titre: 'Modification : CARTaGENE', proposeLe: '2026-11-24T15:00:00.000Z' }],
+  });
+  assert.deepEqual(retour, { envoye: true });
+  assert.deepEqual(envois[0].to, ['p@exemple.org']);
+  assert.equal(envois[0].subject, '2 propositions à examiner dans la cartographie');
+  assert.ok(envois[0].html.includes('Nouvelle : Outil &lt;b&gt;X&lt;/b&gt;'));
+  assert.ok(!envois[0].html.includes('<b>X</b>'));
+  assert.ok(envois[0].html.includes('Modification : CARTaGENE'));
+  assert.ok(envois[0].html.includes('https://site/admin'));
+  assert.ok(envois[0].html.includes('20 novembre'));
+});
+
+test('sans proposition en attente, le résumé ne part pas', async () => {
+  const { courriels, envois } = banc();
+  assert.deepEqual(await courriels.resumeHebdomadaire({ a: 'p@exemple.org', propositions: [], lienPanneau: 'https://site/admin' }), { envoye: false });
+  assert.equal(envois.length, 0);
 });

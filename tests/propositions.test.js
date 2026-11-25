@@ -46,7 +46,7 @@ function fauxNotion({ approbateurs = [] } = {}) {
   };
   return { client, pages, blocs };
 }
-const approbateur = (courriel, actif = true) => ({ id: courriel, properties: { Courriel: { email: courriel }, Actif: { checkbox: actif } } });
+const approbateur = (courriel, actif = true, sansResume) => ({ id: courriel, properties: { Courriel: { email: courriel }, Actif: { checkbox: actif }, ...(sansResume === undefined ? {} : { 'Sans résumé hebdomadaire': { checkbox: sansResume } }) } });
 
 const base = {
   genre: 'modification', ficheId: 'fiche-1', courriel: 'p@exemple.org', nomProposant: 'Pat', lienAvecRessource: 'responsable',
@@ -191,4 +191,10 @@ test('un logo déposé est attaché à la proposition et relu avec son adresse t
   assert.deepEqual((await propositions.lireProposition(id)).logoPropose, { nom: 'logo.png', url: 'https://notion.exemple/x' });
   const sans = await propositions.creerProposition(base);
   assert.equal((await propositions.lireProposition(sans)).logoPropose, null);
+});
+
+test('le résumé hebdomadaire va aux approbateurs actifs qui ne l\'ont pas refusé', async () => {
+  const { client } = fauxNotion({ approbateurs: [approbateur('a@exemple.ca'), approbateur('b@exemple.ca', true, true), approbateur('c@exemple.ca', true, false), approbateur('d@exemple.ca', false)] });
+  const propositions = creerPropositions(client, env);
+  assert.deepEqual(await propositions.approbateursAPrevenir(), ['a@exemple.ca', 'c@exemple.ca']);
 });

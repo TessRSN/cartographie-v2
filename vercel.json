@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/resume",
+      "schedule": "0 13 * * 1"
+    }
+  ],
   "functions": {
     "api/export.js": {
       "maxDuration": 30
@@ -17,6 +23,9 @@
       "maxDuration": 15
     },
     "api/admin.js": {
+      "maxDuration": 30
+    },
+    "api/resume.js": {
       "maxDuration": 30
     }
   },
@@ -48,7 +57,7 @@
   ],
   "headers": [
     {
-      "source": "/(proposer|proposer.html|admin|admin.html|api/lien|api/proposition|api/admin)",
+      "source": "/(proposer|proposer.html|admin|admin.html|api/lien|api/proposition|api/admin|api/resume)",
       "headers": [
         {
           "key": "X-Robots-Tag",
