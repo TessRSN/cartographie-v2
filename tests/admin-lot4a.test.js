@@ -526,7 +526,7 @@ test('le journal se lit avec des noms : jamais de courriel, pas même celui d\'u
       ['Maxime Lafrenière', 'a marqué Cohorte X comme vérifiée'],
     ], 'de la plus récente à la plus ancienne ; le nom d\'une personne retirée reste, une adresse inconnue devient anonyme');
     for (const l of journal.lignes) {
-      assert.deepEqual(Object.keys(l).sort(), ['le', 'phrase', 'qui']);
+      assert.deepEqual(Object.keys(l).sort(), ['geste', 'le', 'phrase', 'qui']);
       assert.match(l.le, /^2026-11-25T/);
     }
     const tout = JSON.stringify(journal);
@@ -830,4 +830,11 @@ test('un journal qui échoue après les trois secondes ne lève rien ; un journa
   const rapide = await c.envoyer('revoir', { fiche: 'cohorte-x', actif: true, note: 'x' }, MAX);
   assert.equal(rapide.code, 200);
   assert.equal(c.journalEcrit().length, 1);
+});
+
+test('chaque ligne du journal porte son geste, pour que la page le mette en couleur', () => {
+  const route = require('node:fs').readFileSync(require('node:path').join(__dirname, '../api/admin.js'), 'utf8');
+  assert.match(route, /lecture\.lignes\.map\(\(l\) => \(\{ qui: nomDans\(annuaire, l\.par\), geste: l\.geste, phrase: l\.phrase, le: l\.le \}\)\)/);
+  const page = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/js/admin.js'), 'utf8');
+  assert.match(page, /TEINTES_GESTE/);
 });

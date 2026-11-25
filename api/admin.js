@@ -442,7 +442,7 @@ function creerGestionnaire(donnees) {
           personnes,
           resume: { jour: JOUR_RESUME },
           // Le nom de la personne, jamais son courriel ; null si elle n'a plus de ligne ou pas de nom.
-          journal: { actif, lu: lecture.lu, lignes: lecture.lignes.map((l) => ({ qui: nomDans(annuaire, l.par), phrase: l.phrase, le: l.le })) },
+          journal: { actif, lu: lecture.lu, lignes: lecture.lignes.map((l) => ({ qui: nomDans(annuaire, l.par), geste: l.geste, phrase: l.phrase, le: l.le })) },
         });
       }
       if (Object.hasOwn(GESTES_EQUIPE, action)) {

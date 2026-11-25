@@ -337,3 +337,10 @@ table.qtable td { vertical-align: middle; }
 .invite input[aria-invalid="true"] { border-color: var(--bad); }
 .list select:disabled, .switch input:disabled { cursor: not-allowed; opacity: .6; }
 @media (max-width: 520px) { .invite .row > * { flex: 1 1 100%; } }
+/* Les blocs d'un même écran respirent : même écart qu'entre les sections principales. */
+#mbody, #rbody, #pbody, #qbody, #ebody { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+#qbody .chipsf { margin-bottom: 0; }
+/* Qui a fait le geste, et la famille du geste : ce qui se lit d'abord dans une liste. */
+.qui { color: var(--info); }
+.pt { flex: 0 0 auto; width: .55rem; height: .55rem; border-radius: 50%; background: var(--info); }
+.pt-ok { background: var(--ok); } .pt-bad { background: var(--bad); } .pt-warn { background: var(--warn); } .pt-info { background: var(--info); }
