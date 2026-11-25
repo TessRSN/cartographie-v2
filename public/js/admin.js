@@ -244,7 +244,9 @@ function carte(p) {
     suite = `<span class="pill p-info">${e(T.enVerificationDepuis(jour(p.verificationLe)))}</span>${pucesAvis(p.avis)}`
       + (peut() ? `<span class="row"><button type="button" class="btn sm primary" data-act="approuver-carte" data-id="${id}">${e(T.approuver)}</button><button type="button" class="btn sm" data-act="refuser-carte" data-id="${id}">${e(T.refuser)}</button></span>` : '');
   } else {
-    suite = `<span class="muted small">${e(T.decision(p.statut, p.decidePar, jour(p.decideLe), p.corrige))}</span>`;
+    // Une décision ne se défait pas ici : pour revenir dessus, on passe par la fiche de la ressource.
+    suite = `<span class="muted small">${e(T.decision(p.statut, p.decidePar, jour(p.decideLe), p.corrige))}</span>`
+      + (p.statut === 'approuvee' && p.fiche ? `<span class="row"><button type="button" class="btn sm" data-act="ouvrir-fiche" data-id="${e(p.fiche.adresse)}">${e(T.ouvrirLaFiche)}</button></span>` : '');
   }
   const proposant = `${e(p.nomProposant || T.anonyme)}<br><span class="muted">${e(p.courriel || '')}</span>`;
   const recue = T.recueLe(jour(p.proposeLe)) + (p.nbChamps === null ? '' : ` · ${pluriel(p.nbChamps, T.champTouche, T.champsTouches)}`);
@@ -593,8 +595,9 @@ function contenuFenetre() {
   const confirmation = !ouvert || !peut() ? ''
     : f.confirmation === 'refus' ? `<div class="confirm" style="flex-direction:column;align-items:stretch"><label class="f" for="refusTxt" style="color:inherit">${e(T.refus.libelle)} <small>${e(T.refus.aide)}</small><textarea class="notes" id="refusTxt" maxlength="2000">${e(f.commentaire)}</textarea></label>
         <span class="err" role="alert">${e(f.erreurs.commentaire || '')}</span>
+        <span><b>${e(T.definitif(p.courriel || ''))}</b></span>
         <span class="row"><button type="button" class="btn sm" data-act="annuler-confirmation"${occupe}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="confirmer-refus"${occupe}>${e(f.enCours ? T.enCours : T.refus.confirmer)}</button></span></div>`
-      : f.confirmation === 'approbation' ? `<div class="note info" id="confirmationApprobation"><b>${e(T.confirmerApprobation.titre)}</b><span>${e(T.confirmerApprobation.aide)}</span>
+      : f.confirmation === 'approbation' ? `<div class="note info" id="confirmationApprobation"><b>${e(T.confirmerApprobation.titre)}</b><span>${e(T.confirmerApprobation.aide)}</span><span><b>${e(T.definitif(p.courriel || ''))}</b></span>
         <span class="row"><button type="button" class="btn sm" data-act="annuler-confirmation"${occupe}>${e(T.annuler)}</button><button type="button" class="btn sm primary" data-act="approuver"${f.enCours || ficheDisparue || approbationVide() ? ' disabled' : ''}>${e(f.enCours ? T.enCours : T.approuver)}</button></span></div>` : '';
   return `<div class="row" style="flex-wrap:nowrap;align-items:flex-start"><span class="logoimg t-${p.type ? cleType(p.type) : ''}">${e(initiales(p.nom))}</span>
       <div style="min-width:0"><h2 id="titreFenetre">${e(p.nom || T.sansNom)}</h2><span class="row" style="margin-top:.25rem">${pastilleEtat(p.statut)}${pastilleGenre(p.genre)}${pastilleType(p.type)}</span></div>
