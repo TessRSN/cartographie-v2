@@ -137,7 +137,7 @@ test('l\'écran Qualité : la liste calculée sur les bases, les compteurs, et a
   const ouvertes = [{ id: 'prop-1', ficheId: 'id-notion-a', statut: 'attente', genre: 'modification', titre: 'Modification : Alpha', logoPropose: null }];
   const b = banc({ ouvertes, contenus: { 'prop-1': { propose: { outils: { apres: ['Python'] } } } } });
   const { points, compteurs } = await b.qualite.lire();
-  assert.deepEqual(compteurs, { points: points.length, porteursAPlacer: 3 });
+  assert.deepEqual(compteurs, { points: points.length, aVerifier: 0, porteursAPlacer: 3 });
   assert.deepEqual([...new Set(points.map((p) => p.sujet))], ['liens', 'doublons', 'valeursNouvelles']);
   assert.deepEqual(points.find((p) => p.sujet === 'liens'), { sujet: 'liens', fiche: { id: 'delta', nom: 'Delta' }, lien: 'https://delta.exemple.org', depuis: '2026-11-18' });
   assert.deepEqual(points.find((p) => p.sujet === 'doublons'), { sujet: 'doublons', cle: 'motsCles', garder: 'fhir', retirer: 'FHIR', fiches: { garder: 2, retirer: 2 }, toutes: { garder: 3, retirer: 2 }, sur: true });
@@ -211,4 +211,15 @@ test('une norme contenue dans une autre n\'est qu\'une ressemblance à vérifier
   }
   const [meme] = points([saine({ id: 'f1', nom: 'A', normes: ['hl7-fhir'] }), saine({ id: 'f2', nom: 'B', normes: ['HL7 FHIR'] })]).filter((x) => x.sujet === 'doublons');
   assert.equal(meme.sur, true);
+});
+
+test('le compteur de la barre latérale ne compte pas les fiches à vérifier : c\'est un état de fond, pas un défaut à corriger', async () => {
+  const { banc: bancLot3 } = require('./aides/banc-lot3');
+  const { brute } = require('./aides/fausses-fiches');
+  const fiches = [brute({ id: 'id-notion-a', nom: 'Alpha', verifieeLe: null, contact: null, logo: 'https://x.org/l.png', porteurIds: ['id-notion-chum'] })];
+  const b = bancLot3({ fiches });
+  const { points, compteurs } = await b.qualite.lire();
+  assert.deepEqual(points.map((p) => p.sujet).sort(), ['aVerifier', 'sansContact']);
+  assert.equal(compteurs.points, 1);
+  assert.equal(compteurs.aVerifier, 1);
 });

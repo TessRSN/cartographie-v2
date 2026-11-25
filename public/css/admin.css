@@ -321,3 +321,8 @@ del { background: var(--bad-bg); color: var(--bad); text-decoration: line-throug
 .fields .err.wide { grid-column: 1 / -1; }
 .list > div > .confirm { flex: 1 1 100%; }
 @media (max-width: 720px) { .map .carte-porteur { height: 230px; } }
+details.repli > summary { cursor: pointer; list-style: none; }
+details.repli > summary::-webkit-details-marker { display: none; }
+details.repli > summary h3::before { content: '▸ '; color: var(--muted); }
+details.repli[open] > summary h3::before { content: '▾ '; }
+details.repli[open] > summary { margin-bottom: .5rem; }

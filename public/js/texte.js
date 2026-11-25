@@ -403,6 +403,7 @@ const TEXTES = {
         doublons: 'Mots-clés ou normes en double', porteursDoubles: 'Porteurs peut-être en double',
         valeursNouvelles: 'Valeurs nouvelles apportées par des propositions',
       },
+      aVerifierAide: 'Une fiche est vérifiée quand une personne de la ressource l’a confirmée, ou quand l’équipe la marque vérifiée. Ce groupe n’est pas compté dans la pastille.',
       liensAide: 'La vérification passe une fois par semaine. Un site qui bloque les robots peut être signalé à tort : ouvrez le lien avant de conclure.',
       sansContact: (nom) => `${nom} n’a aucun courriel de contact : personne à qui écrire depuis la fiche.`,
       sansPorteur: (nom) => `${nom} n’est rattachée à aucun porteur : elle n’apparaît pas sur la carte.`,

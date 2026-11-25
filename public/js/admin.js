@@ -1696,9 +1696,15 @@ function corpsQualite() {
   if (!sujets.length) return `<section class="card"><p class="muted">${e(Q.rien)}</p></section>`;
   return sujets.map((sujet) => {
     const lignes = etat.points.filter((p) => p.sujet === sujet).map(ligneQualite).filter(Boolean);
-    return `<section class="card"><div class="row" style="justify-content:space-between"><h3>${e(Q.sujets[sujet])}</h3><span class="pill p-mute num">${lignes.length}</span></div>
-      ${sujet === 'liens' ? `<p class="muted small">${e(Q.liensAide)}</p>` : ''}
-      <div class="list">${lignes.map((l) => `<div><div class="grow">${e(l.texte)}</div><span class="row">${l.boutons}</span>${l.suite || ''}</div>`).join('')}</div></section>`;
+    const tete = `<h3>${e(Q.sujets[sujet])}</h3><span class="pill p-mute num">${lignes.length}</span>`;
+    const liste = `${sujet === 'liens' ? `<p class="muted small">${e(Q.liensAide)}</p>` : ''}
+      <div class="list">${lignes.map((l) => `<div><div class="grow">${e(l.texte)}</div><span class="row">${l.boutons}</span>${l.suite || ''}</div>`).join('')}</div>`;
+    // Les fiches à vérifier sont un état de fond, long au départ : le groupe arrive replié.
+    if (sujet === 'aVerifier') {
+      return `<section class="card"><details class="repli" data-repli="aVerifier"${etat.q.aVerifierOuvert ? ' open' : ''}><summary class="row" style="justify-content:space-between">${tete}</summary>
+        <p class="muted small">${e(Q.aVerifierAide)}</p>${liste}</details></section>`;
+    }
+    return `<section class="card"><div class="row" style="justify-content:space-between">${tete}</div>${liste}</section>`;
   }).join('');
 }
 function ecranQualite() {
@@ -1965,6 +1971,12 @@ document.addEventListener('drop', (evenement) => {
   evenement.preventDefault(); c.classList.remove('over');
   deplacer(evenement.dataTransfer.getData('text/plain'), c.dataset.drop);
 });
+
+// Un groupe replié de l'écran Qualité garde son état d'un redessin à l'autre.
+document.addEventListener('toggle', (evenement) => {
+  const cible = evenement.target;
+  if (cible && cible.dataset && cible.dataset.repli === 'aVerifier') etat.q.aVerifierOuvert = cible.open;
+}, true);
 
 // Fermer l'onglet ou recharger la page avec une saisie en cours : le navigateur demande confirmation.
 window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours()) { evenement.preventDefault(); evenement.returnValue = ''; } });
