@@ -433,12 +433,10 @@ body {
 /* Carte de fiche : pas de bande de couleur sur le côté ; la couleur du type est portée par la pastille et le logo. */
 .member-card { background: var(--rsn-card-bg); border: 1px solid var(--rsn-border); border-radius: 10px; padding: 1.1rem; display: flex; flex-direction: column; gap: 0.7rem; min-width: 0; box-shadow: 0 1px 2px rgba(18,35,63,0.05); transition: box-shadow 0.2s, background 0.3s; }
 .member-card:hover { box-shadow: var(--shadow-md); }
-/* Bandeau de type d'une carte, sur toute la largeur. Le corps de la carte remonte dessus avec
-   deux coins arrondis (le pseudo-élément, de la couleur de la carte) : le bandeau a ainsi des
-   coins concaves qui enveloppent la carte au lieu d'une ligne droite. */
-.card-bandeau { position: relative; display: flex; align-items: center; gap: 0.45rem; margin: -1.1rem -1.1rem -0.25rem; padding: 0.42rem 1.1rem calc(0.42rem + 14px); border-radius: 9px 9px 0 0; background: var(--type, var(--rsn-border)); color: var(--type-sur, var(--ink)); font-size: 0.75rem; font-weight: 700; line-height: 1.3; letter-spacing: 0.01em; }
-.card-bandeau::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 14px; border-radius: 14px 14px 0 0; background: var(--rsn-card-bg); transition: background 0.3s; }
-.card-bandeau .icone-type { font-size: 0.95rem; }
+/* Bandeau de type d'une carte, sur toute la largeur : une teinte douce de la couleur du type,
+   un filet de la même teinte, et l'icône dans un rond plein. Le logo et le nom restent dominants. */
+.card-bandeau { display: flex; align-items: center; gap: 0.5rem; margin: -1.1rem -1.1rem 0; padding: 0.4rem 1.1rem; border-radius: 9px 9px 0 0; background: color-mix(in srgb, var(--type, var(--rsn-border)) 16%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--type, var(--rsn-border)) 32%, transparent); color: var(--ink); font-size: 0.75rem; font-weight: 700; line-height: 1.3; letter-spacing: 0.01em; }
+.card-bandeau .puce-type { width: 20px; height: 20px; font-size: 12px; }
 .card-top { display: flex; align-items: flex-start; gap: 0.75rem; }
 .card-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .card-name { font-size: 1rem; font-weight: 600; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
