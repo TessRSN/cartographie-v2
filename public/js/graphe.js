@@ -149,6 +149,8 @@ function formeSujet(s, sombre) {
     id: s.id, shape: 'box', label: s.nom, title: `${s.nom} · ${TEXTES.graphe.ressourcesDuSujet(s.nombre)}`,
     margin: { top: 14, bottom: 14, left: 24, right: 24 }, borderWidth: 1.5, borderWidthSelected: 1.5, shapeProperties: { borderRadius: 40 },
     widthConstraint: { maximum: 460 }, mass: 4,
+    // Au survol ou au clic, la bulle change de teinte mais son texte ne passe pas en gras : sa taille ne bouge pas.
+    labelHighlightBold: false,
     color: { background: teinte.fond, border: lisere, highlight: { background: teinte.vif, border: lisere }, hover: { background: teinte.vif, border: lisere } },
     shadow: { enabled: true, color: sombre ? 'rgba(0,0,0,0.35)' : 'rgba(26,54,93,0.16)', size: 18, x: 0, y: 6 },
     // Le graphe est vu de loin : les étiquettes sont écrites gros pour rester lisibles.
