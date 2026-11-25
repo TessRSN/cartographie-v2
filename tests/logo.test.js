@@ -103,13 +103,14 @@ test('lireFichierLogo donne le nom et l\'adresse temporaire du fichier', async (
 function reponse() {
   return { code: null, corps: null, entetes: {}, setHeader(k, v) { this.entetes[k] = v; }, status(c) { this.code = c; return this; }, send(o) { this.corps = o; return this; }, end() { return this; }, json(o) { this.corps = o; return this; } };
 }
-function bancLogo({ fichier = { nom: 'logo.png', url: 'https://notion.exemple/x' }, octets = PNG } = {}) {
+function bancLogo({ fichier = { nom: 'logo.png', url: 'https://notion.exemple/x' }, octets = PNG, logos = { 'cohorte-x': { v: 'abc', url: 'https://notion.exemple/x' } }, panneUneFois = false } = {}) {
+  let panne = panneUneFois;
   const appels = [];
   const gestionnaire = logo.creerGestionnaire({
     journal: () => {},
-    source: async () => ({ idParAdresse: { 'cohorte-x': 'f1' } }),
+    source: async () => ({ idParAdresse: { 'cohorte-x': 'f1', 'sans-logo': 'f2' }, logos }),
     notion: { async lireFichierLogo(id) { appels.push(id); return fichier; } },
-    fichiers: { async telecharger(url) { appels.push(url); return octets; } },
+    fichiers: { async telecharger(url) { appels.push(url); if (panne) { panne = false; throw new Error('adresse expirée'); } return octets; } },
   });
   return { gestionnaire, appels };
 }
@@ -124,14 +125,109 @@ test('la route /api/logo sert l\'image avec des en-têtes sûrs et une longue m�
   assert.equal(res.entetes['X-Content-Type-Options'], 'nosniff');
   assert.match(res.entetes['Content-Security-Policy'], /sandbox/);
   assert.match(res.entetes['Cache-Control'], /s-maxage=86400/);
-  assert.deepEqual(b.appels, ['f1', 'https://notion.exemple/x']);
+  assert.deepEqual(b.appels, ['https://notion.exemple/x']);
 });
 
 test('/api/logo : adresse inconnue, fiche sans fichier ou contenu qui n\'est pas une image', async () => {
   assert.equal((await voir(bancLogo(), { adresse: 'inconnue' })).code, 404);
   assert.equal((await voir(bancLogo(), { adresse: '../etc' })).code, 404);
   assert.equal((await voir(bancLogo(), { adresse: 'constructor' })).code, 404);
-  assert.equal((await voir(bancLogo({ fichier: null }), { adresse: 'cohorte-x' })).code, 404);
-  assert.equal((await voir(bancLogo({ octets: Buffer.from('<html></html>') }), { adresse: 'cohorte-x' })).code, 404);
+  assert.equal((await voir(bancLogo({ octets: Buffer.from('<html></html>') }), { adresse: 'cohorte-x', v: 'abc' })).code, 404);
   assert.equal((await voir(bancLogo(), { adresse: 'cohorte-x' }, 'POST')).code, 405);
+});
+
+test('/api/logo : une fiche sans fichier répond 404 sans interroger Notion', async () => {
+  const b = bancLogo();
+  assert.equal((await voir(b, { adresse: 'sans-logo', v: 'abc' })).code, 404);
+  assert.deepEqual(b.appels, []);
+});
+
+test('/api/logo : une version inconnue ou un paramètre en trop renvoie à l\'adresse courante, sans rien télécharger', async () => {
+  for (const query of [{ adresse: 'cohorte-x', v: 'hasard' }, { adresse: 'cohorte-x' }, { adresse: 'cohorte-x', v: 'abc', x: '1' }]) {
+    const b = bancLogo();
+    const res = await voir(b, query);
+    assert.equal(res.code, 302, JSON.stringify(query));
+    assert.equal(res.entetes.Location, '/api/logo?adresse=cohorte-x&v=abc');
+    assert.deepEqual(b.appels, []);
+  }
+});
+
+test('/api/logo : si l\'adresse gardée a expiré, le fichier est relu une fois dans Notion', async () => {
+  const b = bancLogo({ panneUneFois: true });
+  const res = await voir(b, { adresse: 'cohorte-x', v: 'abc' });
+  assert.equal(res.code, 200);
+  assert.deepEqual(b.appels, ['https://notion.exemple/x', 'f1', 'https://notion.exemple/x']);
+});
+
+test('/api/logo : un SVG est servi avec une politique qui interdit tout chargement et toute exécution', async () => {
+  const res = await voir(bancLogo({ octets: SVG }), { adresse: 'cohorte-x', v: 'abc' });
+  assert.equal(res.code, 200);
+  assert.equal(res.entetes['Content-Type'], 'image/svg+xml');
+  assert.equal(res.entetes['Content-Security-Policy'], "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+});
+
+test('l\'assemblage garde à part, pour le serveur, la version et l\'adresse de chaque fichier de logo', () => {
+  const page = { id: 'f1', last_edited_time: '2026-11-24T10:00:00.000Z', properties: {
+    [PROP.nom]: { title: [{ plain_text: 'Avec fichier' }] }, [PROP.statutFiche]: { select: { name: 'Publiée' } },
+    [PROP.logoFichier]: { files: [{ type: 'file', name: 'logo.png', file: { url: 'https://notion.exemple/secret?sig=abc' } }] },
+  } };
+  const { ressources, logos } = assembler([ficheDepuisPage(page)], [], { logosCopies: {} });
+  assert.deepEqual(Object.keys(logos), ['avec-fichier']);
+  assert.equal(logos['avec-fichier'].url, 'https://notion.exemple/secret?sig=abc');
+  assert.equal(ressources[0].logo, `/api/logo?adresse=avec-fichier&v=${logos['avec-fichier'].v}`);
+  assert.ok(!JSON.stringify(ressources).includes('notion.exemple'));
+});
+
+test('un téléchargement annoncé trop gros est refusé avant d\'être lu', async () => {
+  let lu = false;
+  const gros = creerFichiers({ env: {}, requete: async () => ({ ok: true, headers: { get: (n) => (n.toLowerCase() === 'content-length' ? String(TAILLE_MAX + 1) : null) }, arrayBuffer: async () => { lu = true; return new ArrayBuffer(8); } }) });
+  await assert.rejects(gros.telecharger('https://fichiers.exemple/x'), /trop/);
+  assert.equal(lu, false);
+});
+
+const svgDe = (contenu, attributs = '') => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg"${attributs}>${contenu}</svg>`);
+
+test('les contournements connus du filtre SVG sont refusés', () => {
+  const X = 'http://www.w3.org/1999/xhtml';
+  const cas = {
+    'élément préfixé': svgDe('<s:script>alert(1)</s:script>', ' xmlns:s="http://www.w3.org/2000/svg"'),
+    'foreignObject préfixé': svgDe(`<s:foreignObject><h:iframe src="https://example.org/"/></s:foreignObject>`, ` xmlns:s="http://www.w3.org/2000/svg" xmlns:h="${X}"`),
+    'gestionnaire posé par la DTD': Buffer.from('<!DOCTYPE svg SYSTEM "<?xml" [<!ATTLIST svg onload CDATA "alert(1)"><?p ?>]><svg xmlns="http://www.w3.org/2000/svg"/>'),
+    'DOCTYPE simple': Buffer.from('<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg xmlns="http://www.w3.org/2000/svg"/>'),
+    'encodage déclaré': Buffer.from('<?xml version="1.0" encoding="ISO-2022-JP"?><svg xmlns="http://www.w3.org/2000/svg"><scr\x1b(Bipt>alert(1)</scr\x1b(Bipt></svg>'),
+    'caractère de contrôle': svgDe('<circle o\x1b(Bnload="alert(1)"/>'),
+    '@import': svgDe('<style>@import "https://example.org/x.css";</style>'),
+    'url échappée': svgDe('<rect style="fill:u\\72l(https://example.org/x)"/>'),
+    'url en entités': svgDe('<rect style="fill:&#117;rl(https://example.org/x)"/>'),
+    'img html': svgDe(`<img xmlns="${X}" src="https://example.org/pixel"/>`),
+    'animation': svgDe('<animateTransform attributeName="transform"/>'),
+    'instruction de traitement': svgDe('<?xml-stylesheet href="https://example.org/x.css"?>'),
+    'section CDATA': svgDe('<style><![CDATA[ a { fill: red } ]]></style>'),
+    'commentaire jamais fermé': Buffer.from('<!-- <svg xmlns="http://www.w3.org/2000/svg"/>'),
+    'gestionnaire sans espace': svgDe('<circle r="1"onclick="alert(1)"/>'),
+  };
+  for (const [nom, octets] of Object.entries(cas)) assert.equal(verifierOctets(octets).ok, false, nom);
+});
+
+test('un SVG ordinaire avec dégradé, style et titre reste accepté', () => {
+  for (const contenu of [
+    '<defs><linearGradient id="g"><stop offset="0" stop-color="#fff"/></linearGradient></defs><rect fill="url(\'#g\')" width="1" height="1"/>',
+    '<rect fill="url( #g)" width="1" height="1"/><rect style="fill:url(#g)"/>',
+    '<title>Metadata: logo</title><desc>Version 2</desc><g><path d="M0 0h1"/></g>',
+    '<style>.a{fill:#123456}</style><text class="a">RSN</text><use href="#forme"/>',
+    '<!-- exporté --><clipPath id="c"><circle r="1"/></clipPath><g clip-path="url(#c)"><ellipse rx="1" ry="2"/></g>',
+  ]) assert.equal(verifierOctets(svgDe(contenu)).ok, true, contenu);
+  assert.equal(verifierOctets(Buffer.from('﻿<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>')).ok, true);
+});
+
+test('le contrôle d\'un SVG reste rapide sur une entrée hostile, et un SVG énorme est refusé', () => {
+  for (const motif of ['<!--', '<?xml', '<!DOCTYPE', '<svg ']) {
+    const debut = Date.now();
+    const v = verifierOctets(Buffer.from(motif.repeat(100000)));
+    if (motif !== '<svg ') assert.equal(v.ok, false, motif);
+    assert.ok(Date.now() - debut < 500, `${motif} : ${Date.now() - debut} ms`);
+  }
+  const lourd = svgDe(`<path d="${'M0 0h1'.repeat(100000)}"/>`);
+  assert.ok(lourd.length > 500 * 1024 && lourd.length < TAILLE_MAX);
+  assert.equal(verifierOctets(lourd).ok, false);
 });

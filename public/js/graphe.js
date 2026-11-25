@@ -163,7 +163,7 @@ function formeSujet(s, sombre) {
 // cercle ne coupe plus que du blanc. Seuls les logos servis par le site peuvent être redessinés.
 const logosRonds = new Map();   // adresse du logo → promesse de l'image redessinée
 function logoRond(adresse) {
-  if (!/^\/logos\//.test(adresse || '')) return Promise.resolve(null);
+  if (!/^\/(logos\/|api\/logo\?)/.test(adresse || '')) return Promise.resolve(null);
   if (!logosRonds.has(adresse)) {
     logosRonds.set(adresse, new Promise((resoudre) => {
       const image = new Image();

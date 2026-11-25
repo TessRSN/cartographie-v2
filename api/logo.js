@@ -5,6 +5,7 @@
  * (la version change quand la fiche change, donc un nouveau logo a une nouvelle adresse).
  */
 const { verifierOctets } = require('../lib/images');
+const { adresseLogoDepose } = require('../lib/fiches');
 
 function modules() {
   const { ecriture } = require('../lib/notion');
@@ -21,11 +22,29 @@ function creerGestionnaire(donnees) {
     try {
       const adresse = String((req.query && req.query.adresse) || '');
       if (!/^[a-z0-9-]{1,200}$/.test(adresse)) return introuvable();
-      const table = (await d.source()).idParAdresse || {};
-      if (!Object.hasOwn(table, adresse)) return introuvable();
-      const fichier = await d.notion.lireFichierLogo(table[adresse]);
-      if (!fichier) return introuvable();
-      const image = verifierOctets(await d.fichiers.telecharger(fichier.url));
+      const publiques = await d.source();
+      // Une fiche sans fichier de logo ne coûte aucun appel à Notion.
+      const logos = publiques.logos || {};
+      if (!Object.hasOwn(logos, adresse)) return introuvable();
+      const { v, url } = logos[adresse];
+      // Une seule adresse par logo : une autre version ou un paramètre en trop n'ouvre pas une nouvelle entrée de cache.
+      const cles = Object.keys(req.query || {});
+      if (req.query.v !== v || cles.some((c) => c !== 'adresse' && c !== 'v')) {
+        res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60');
+        res.setHeader('Location', adresseLogoDepose(adresse, v));
+        return res.status(302).send('');
+      }
+      let octets;
+      try {
+        octets = await d.fichiers.telecharger(url);
+      } catch (err) {
+        // L'adresse gardée en mémoire a pu expirer (lecture ancienne) : on la redemande une fois.
+        const table = publiques.idParAdresse || {};
+        const fichier = Object.hasOwn(table, adresse) ? await d.notion.lireFichierLogo(table[adresse]) : null;
+        if (!fichier) throw err;
+        octets = await d.fichiers.telecharger(fichier.url);
+      }
+      const image = verifierOctets(octets);
       if (!image.ok) return introuvable();
       res.setHeader('Content-Type', image.type);
       res.setHeader('X-Content-Type-Options', 'nosniff');

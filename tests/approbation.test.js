@@ -372,3 +372,12 @@ test('un logo illisible fait échouer l\'approbation sans écrire la fiche', asy
   assert.deepEqual(await approuver(b), { ok: false, code: 'notion' });
   assert.equal(b.de('creerFiche').length + b.de('marquerDecision').length, 0);
 });
+
+test("une nouvelle adresse de logo, approuvée sans image, retire l'ancien fichier de la fiche", async () => {
+  const b = banc({ proposition: { genre: 'modification', ficheId: 'fiche-1', contenu: { propose: { logo: { avant: null, apres: 'https://exemple.org/nouveau.png' } }, applique: null, porteursNouveaux: {} } } });
+  assert.equal((await approuver(b)).ok, true);
+  assert.deepEqual(b.de('mettreAJourFiche')[0].p[PROP.logoFichier], { files: [] });
+  const autre = banc({ proposition: { genre: 'modification', ficheId: 'fiche-1', contenu: { propose: { phrase: { avant: 'Une phrase.', apres: 'Une autre phrase.' } }, applique: null, porteursNouveaux: {} } } });
+  assert.equal((await approuver(autre)).ok, true);
+  assert.ok(!(PROP.logoFichier in autre.de('mettreAJourFiche')[0].p));
+});
