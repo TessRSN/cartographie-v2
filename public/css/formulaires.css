@@ -1,0 +1,103 @@
+/* Formulaire de proposition et panneau d'approbation : mêmes variables que styles.css. */
+.page-formulaire { background: var(--rsn-body-bg); min-height: 100vh; }
+.formulaire-page { max-width: 780px; margin: 0 auto; padding: 1.5rem 1rem 4rem; color: var(--rsn-text); }
+.formulaire-attente { text-align: center; color: var(--muted-strong); padding: 3rem 0; }
+
+.f-carte { background: var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 16px; padding: 1.5rem; }
+[data-theme="dark"] .f-carte { background: rgba(30,39,64,0.72); border-color: rgba(255,255,255,0.08); }
+.f-titre { font-size: 1.45rem; font-weight: 700; color: var(--ink); line-height: 1.25; }
+[data-theme="dark"] .f-titre, [data-theme="dark"] .f-groupe > h3, [data-theme="dark"] .champ > label, [data-theme="dark"] .champ legend { color: #f1f5f9; }
+.f-intro { margin-top: 0.4rem; color: var(--muted-strong); font-size: 0.95rem; }
+.f-avis { margin-top: 1rem; padding: 0.7rem 0.9rem; border-radius: 10px; font-size: 0.88rem; line-height: 1.45; background: var(--rsn-light); border: 1px solid var(--rsn-border); color: var(--rsn-text); }
+.f-avis.alerte { background: var(--acces-demande-fond); color: var(--acces-demande-texte); border-color: transparent; }
+.f-avis.erreur { background: var(--acces-reserve-fond); color: var(--acces-reserve-texte); border-color: transparent; }
+
+/* Barre d'étapes */
+.f-etapes { display: flex; gap: 0.5rem; margin: 1.25rem 0 0.35rem; padding: 0; list-style: none; }
+.f-etapes li { flex: 1; height: 5px; border-radius: 3px; background: var(--rsn-border); }
+.f-etapes li.faite, .f-etapes li.ici { background: var(--rsn-secondary); }
+[data-theme="dark"] .f-etapes li.faite, [data-theme="dark"] .f-etapes li.ici { background: var(--rsn-accent); }
+.f-etape-nom:focus { outline: none; }
+.f-etape-nom { font-size: 0.8rem; color: var(--muted-strong); margin-bottom: 1.1rem; }
+.f-etape-nom strong { color: var(--rsn-text); }
+
+/* Cartes de type */
+.f-types { display: grid; gap: 0.6rem; margin-top: 0.9rem; }
+.f-type { display: flex; align-items: flex-start; gap: 0.8rem; width: 100%; text-align: left; padding: 0.85rem 1rem; border-radius: 12px; border: 1.5px solid var(--rsn-border); background: var(--rsn-card-bg); color: var(--rsn-text); font: inherit; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.f-type:hover { border-color: var(--rsn-accent); }
+.f-type[aria-checked="true"] { border-color: var(--rsn-secondary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rsn-secondary) 22%, transparent); }
+.f-type .puce-type { flex: none; margin-top: 2px; }
+.f-type strong { display: block; font-size: 0.95rem; color: var(--ink); }
+[data-theme="dark"] .f-type strong { color: #f1f5f9; }
+.f-type span.def { display: block; font-size: 0.86rem; margin-top: 0.15rem; }
+.f-type span.ex { display: block; font-size: 0.8rem; color: var(--muted-strong); margin-top: 0.15rem; }
+.f-type.rsn { border-style: dashed; margin-top: 0.4rem; }
+.f-question { font-size: 1.02rem; font-weight: 600; margin-top: 1.1rem; }
+
+/* Groupes et champs */
+.f-groupe { margin-top: 1.6rem; padding-top: 1.1rem; border-top: 1px solid var(--rsn-border); }
+.f-groupe:first-of-type { margin-top: 0.4rem; padding-top: 0; border-top: 0; }
+.f-groupe > h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--rsn-secondary); margin-bottom: 0.2rem; }
+[data-theme="dark"] .f-groupe > h3 { color: var(--rsn-accent); }
+.champ { margin-top: 0.95rem; border: 0; padding: 0; min-width: 0; }
+.champ > label, .champ legend { display: block; font-size: 0.9rem; font-weight: 600; color: var(--ink); padding: 0; }
+/* « * obligatoire » : pastille au jaune de la charte du RSN, lisible en clair comme en sombre. */
+.champ .oblig { display: inline-block; font-weight: 700; font-size: 0.7rem; line-height: 1.5; margin-left: 0.4rem; padding: 0 0.45rem; border-radius: 999px; white-space: nowrap; vertical-align: 0.08em; background: var(--type-logiciel); color: var(--type-logiciel-sur); }
+.champ .oblig::before { content: "* "; }
+.champ .aide { font-size: 0.8rem; color: var(--muted-strong); margin-top: 0.1rem; line-height: 1.4; }
+.champ input[type="text"], .champ input[type="url"], .champ input[type="email"], .champ select, .champ textarea {
+    width: 100%; margin-top: 0.35rem; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--rsn-border);
+    background: var(--rsn-card-bg); color: var(--rsn-text); font: inherit; font-size: 0.92rem; }
+.champ textarea { min-height: 6.5rem; resize: vertical; line-height: 1.45; }
+.champ textarea.court { min-height: 4rem; }
+.champ input:focus, .champ select:focus, .champ textarea:focus { outline: 2px solid var(--rsn-accent); outline-offset: 1px; border-color: var(--rsn-accent); }
+.champ.en-erreur input, .champ.en-erreur select, .champ.en-erreur textarea { border-color: #c53030; }
+.champ .erreur { font-size: 0.82rem; color: #c53030; margin-top: 0.3rem; font-weight: 500; }
+[data-theme="dark"] .champ .erreur { color: #feb2b2; }
+.champ .erreur:empty { display: none; }
+.f-cases { display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin-top: 0.4rem; }
+.f-case { display: inline-flex; align-items: flex-start; gap: 0.45rem; font-size: 0.9rem; font-weight: 400; cursor: pointer; min-height: 28px; }
+.f-case input { margin-top: 0.2rem; width: 16px; height: 16px; flex: none; accent-color: var(--rsn-secondary); }
+.champ > label.f-case { display: inline-flex; }
+.champ.coche > .f-case { font-weight: 600; color: var(--ink); }
+[data-theme="dark"] .champ.coche > .f-case { color: #f1f5f9; }
+
+/* Listes ouvertes : puces et ajout */
+.f-puces { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
+.f-puces:empty { display: none; }
+.f-puce { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.3rem 0.2rem 0.65rem; border-radius: 999px; font-size: 0.84rem; background: var(--rsn-light); border: 1px solid var(--rsn-border); color: var(--rsn-text); }
+.f-puce.nouvelle { border-style: dashed; border-color: var(--rsn-accent); }
+.f-puce button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 1rem; line-height: 1; cursor: pointer; }
+.f-puce button:hover { background: rgba(0,0,0,0.1); }
+.f-ajout { display: flex; gap: 0.4rem; }
+.f-ajout input { flex: 1; min-width: 0; }
+.f-ajout button { margin-top: 0.35rem; }
+.f-porteur-neuf { margin-top: 0.6rem; padding: 0.6rem 0.75rem; border-radius: 8px; background: var(--rsn-light); font-size: 0.84rem; }
+.f-porteur-neuf label { font-weight: 500; }
+
+/* Boutons */
+.f-bouton { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 40px; padding: 0 1.15rem; border-radius: 8px; border: 1px solid var(--rsn-border); background: var(--rsn-card-bg); color: var(--rsn-text); font: inherit; font-size: 0.92rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+.f-bouton:hover { border-color: var(--rsn-accent); }
+.f-bouton.principal { background: var(--rsn-secondary); border-color: var(--rsn-secondary); color: #fff; }
+.f-bouton.principal:hover { filter: brightness(1.08); }
+.f-bouton:disabled { opacity: 0.6; cursor: default; }
+.f-bouton.lien { border: 0; background: none; padding: 0; min-height: 0; color: var(--rsn-secondary); font-weight: 600; text-decoration: underline; }
+[data-theme="dark"] .f-bouton.lien { color: var(--rsn-accent); }
+.f-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; margin-top: 1.8rem; padding-top: 1.1rem; border-top: 1px solid var(--rsn-border); }
+.f-actions .droite { margin-left: auto; }
+.f-question-contact { margin-top: 1.1rem; text-align: center; font-size: 0.84rem; color: var(--muted-strong); }
+.f-question-contact a { color: var(--rsn-secondary); font-weight: 600; }
+[data-theme="dark"] .f-question-contact a { color: var(--rsn-accent); }
+/* Champ piège : hors de l'écran, jamais atteint au clavier. */
+.f-piege { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.f-merci { text-align: center; padding: 1rem 0; }
+.f-merci svg { width: 48px; height: 48px; color: var(--type-plateforme); margin-bottom: 0.6rem; }
+.f-merci p { margin: 0.6rem auto 1.4rem; max-width: 30rem; color: var(--muted-strong); }
+
+@media (max-width: 600px) {
+    .formulaire-page { padding: 0.75rem 0.6rem 3rem; }
+    .f-carte { padding: 1.1rem 0.95rem; border-radius: 12px; }
+    .f-titre { font-size: 1.2rem; }
+    .page-formulaire .header-controls .header-btn:first-child { display: none; }
+    .f-actions .f-bouton { flex: 1; }
+}

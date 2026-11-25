@@ -244,3 +244,10 @@ test('l\'accueil déclare le site avec son adresse, sa langue et son éditeur', 
   assert.equal(bloc.inLanguage, 'fr');
   assert.deepEqual(bloc.publisher, { '@type': 'Organization', name: 'Réseau santé numérique', url: 'https://rsn.quebec/' });
 });
+
+test("le formulaire et le panneau sont exclus de l'indexation", () => {
+  const ouvert = rendreRobots(true, origine);
+  assert.ok(ouvert.includes('Disallow: /proposer'));
+  assert.ok(ouvert.includes('Disallow: /admin'));
+  assert.ok(ouvert.includes('Disallow: /api/'));
+});
