@@ -9,7 +9,7 @@ const OPTIONS = { typePrincipal: ['Logiciel ou application'], secondType: [], et
 const NOUVELLE = { nom: { apres: 'Outil X' }, typePrincipal: { apres: 'Logiciel ou application' }, phrase: { apres: 'Une phrase.' }, lien: { apres: 'https://x.org' } };
 
 // Banc d'essai : tout ce qui touche Notion, les courriels et le géocodage est factice et noté.
-function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', contact: 'a@b.org', porteurIds: [] }, pannes = {}, approbateurs = [APPROBATEUR], lecteurs = [], equipe = [{ nom: 'Tess Berthier', courriel: APPROBATEUR, role: 'administration' }], fichesExistantes = {}, porteurs = [], lent = 0, verrous, partage } = {}) {
+function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', contact: 'a@b.org', porteurIds: [] }, pannes = {}, approbateurs = [APPROBATEUR], lecteurs = [], equipe = [{ nom: 'Tess Berthier', courriel: APPROBATEUR, role: 'administration' }], fichesExistantes = {}, porteurs = [], lent = 0, verrous, partage, avecVersions = false } = {}) {
   const appels = partage ? partage.appels : [];
   const noter = (nom, args) => { appels.push({ nom, args }); if (pannes[nom]) { const e = pannes[nom]; if (typeof e === 'function') { const r = e(); if (r) throw r; } else throw e; } };
   const prop = partage ? partage.prop : {
@@ -59,6 +59,8 @@ function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', con
     journal: () => {},
     verrous,
     attendre: () => new Promise((r) => setTimeout(r, 5)),
+    // L'historique des versions, factice et noté comme le reste ; absent par défaut, comme avant le lot 2.
+    versions: avecVersions ? { async ecrire(v) { noter('versions.ecrire', v); return { ecrite: true, numero: 2 }; } } : undefined,
   });
   const de = (nom) => appels.filter((a) => a.nom === nom).map((a) => a.args);
   return { approbation, appels, de, prop };
@@ -544,4 +546,81 @@ test('examiner signale aussi les champs bousculés d\'une proposition en vérifi
   assert.deepEqual((await b.approbation.examiner('prop-1')).bouscules, ['contact']);
   const tranchee = banc({ fiche, proposition: { genre: 'modification', ficheId: 'fiche-1', statut: 'approuvee', contenu } });
   assert.deepEqual((await tranchee.approbation.examiner('prop-1')).bouscules, []);
+});
+
+// ─── Historique des versions ───
+const MODIFICATION = { genre: 'modification', ficheId: 'fiche-1', titre: 'Modification : Cohorte X', contenu: { propose: { contact: { avant: 'a@b.org', apres: 'c@d.org' }, nom: { avant: 'Cohorte X', apres: 'Cohorte X' } }, applique: null, porteursNouveaux: {} } };
+
+test('approuver une modification écrit une version « Proposition », reliée à la proposition, après la fiche', async () => {
+  const b = banc({ proposition: MODIFICATION, avecVersions: true });
+  assert.equal((await approuver(b)).ok, true);
+  assert.deepEqual(b.de('versions.ecrire'), [{
+    ficheId: 'fiche-1', nom: 'Cohorte X', source: 'proposition', par: APPROBATEUR, propositionId: 'prop-1',
+    changements: { contact: { avant: 'a@b.org', apres: 'c@d.org' } },
+  }]);
+  const ordre = b.appels.map((a) => a.nom).filter((n) => ['mettreAJourFiche', 'versions.ecrire', 'marquerDecision'].includes(n));
+  assert.deepEqual(ordre, ['mettreAJourFiche', 'versions.ecrire', 'marquerDecision']);
+});
+
+test('approuver une nouvelle ressource écrit une version « Création » avec tout ce qui est publié', async () => {
+  const b = banc({ avecVersions: true });
+  assert.equal((await approuver(b)).ok, true);
+  const [version] = b.de('versions.ecrire');
+  assert.equal(b.de('versions.ecrire').length, 1);
+  assert.equal(version.source, 'creation');
+  assert.equal(version.ficheId, 'fiche-neuve');
+  assert.equal(version.propositionId, 'prop-1');
+  assert.equal(version.par, APPROBATEUR);
+  assert.deepEqual(version.changements, {
+    typePrincipal: { apres: 'Logiciel ou application' }, nom: { apres: 'Outil X' }, phrase: { apres: 'Une phrase.' }, lien: { apres: 'https://x.org' }, etat: { apres: 'Actif' },
+  });
+});
+
+test('une approbation qui ne change aucun champ de la fiche n\'écrit pas de version', async () => {
+  const b = banc({ avecVersions: true, proposition: { ...MODIFICATION, contenu: { propose: { contact: { avant: 'x@y.org', apres: 'a@b.org' } }, applique: null, porteursNouveaux: {} } } });
+  assert.equal((await approuver(b)).ok, true);
+  assert.equal(b.de('mettreAJourFiche').length, 1);
+  assert.equal(b.de('versions.ecrire').length, 0);
+});
+
+test('l\'approbation réussit même si la version ne peut pas s\'écrire', async () => {
+  for (const proposition of [MODIFICATION, {}]) {
+    const b = banc({ proposition, avecVersions: true, pannes: { 'versions.ecrire': new Error('base Versions en panne') } });
+    const retour = await approuver(b);
+    assert.equal(retour.ok, true);
+    assert.equal(retour.courriel, true);
+    assert.equal(b.de('marquerDecision')[0].statut, 'approuvee');
+    assert.equal(b.de('courriel.approuvee').length, 1);
+    assert.equal(retour.historique, false, 'le geste dit que l\'historique n\'a pas pu être écrit');
+  }
+});
+
+test('une approbation dont la version s\'écrit le dit aussi', async () => {
+  const b = banc({ proposition: MODIFICATION, avecVersions: true });
+  assert.equal((await approuver(b)).historique, true);
+});
+
+test('la décision échoue puis réussit : la fiche a changé une fois, une seule version', async () => {
+  const fiche = { id: 'fiche-1', nom: 'Cohorte X', contact: 'a@b.org', porteurIds: [] };
+  let premier = true;
+  const b = banc({ fiche, proposition: MODIFICATION, avecVersions: true, pannes: {
+    mettreAJourFiche: () => { fiche.contact = 'c@d.org'; return null; },
+    marquerDecision: () => { if (premier) { premier = false; return new Error('Notion en panne'); } return null; },
+  } });
+  assert.equal((await approuver(b)).code, 'notion');
+  assert.equal((await approuver(b)).ok, true);
+  assert.equal(b.de('versions.ecrire').length, 1);
+});
+
+test('la fiche visée est verrouillée pendant l\'approbation : occupée, rien ne s\'écrit ; libre ensuite', async () => {
+  const verrous = verrousPartages();
+  await verrous.prendreVerrou('fiche:fiche-1');
+  const b = banc({ proposition: MODIFICATION, avecVersions: true, verrous });
+  assert.deepEqual(await approuver(b), { ok: false, code: 'occupee' });
+  assert.equal(b.de('mettreAJourFiche').length + b.de('marquerDecision').length + b.de('versions.ecrire').length, 0);
+  assert.equal(await verrous.prendreVerrou('proposition:prop-1'), true, 'le verrou de la proposition est rendu');
+  await verrous.rendreVerrou('proposition:prop-1');
+  await verrous.rendreVerrou('fiche:fiche-1');
+  assert.equal((await approuver(b)).ok, true);
+  assert.equal(await verrous.prendreVerrou('fiche:fiche-1'), true, 'le verrou de la fiche est rendu');
 });

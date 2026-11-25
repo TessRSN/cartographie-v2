@@ -11,6 +11,14 @@
  *   POST avis         { id, sens, commentaire }
  *   POST approuver    { id, corrections, porteursNouveaux, sansLogo }
  *   POST refuser      { id, commentaire }
+ *   GET  ressources                             → toutes les fiches, publiques et écartées
+ *   GET  ressource    ?fiche= (ou ?neuve=1)     → une fiche, son historique et les listes de choix
+ *   POST enregistrer  { fiche, valeurs, depart } → modifie une fiche ; 409 si un champ a changé entre-temps
+ *   POST retablir     { fiche, numero }         → la fiche reprend les valeurs d'une version
+ *   POST verifier | ecarter | republier { fiche }
+ *   POST creer        { valeurs }               → ajoute une ressource
+ * Une fiche est désignée par son adresse publique, ou par un repère opaque si elle est écartée :
+ * jamais par son identifiant Notion.
  * Hors « session » et « deconnexion », chaque appel exige un témoin de session valide ET une
  * personne toujours inscrite et active, dont le rôle, relu à chaque appel, suffit pour l'action.
  * Tout envoi doit venir du site lui-même.
@@ -20,6 +28,7 @@ const { CHAMPS, egales } = require('../public/js/champs.js');
 const { avisDe } = require('../lib/propositions');
 const { verifierOctets } = require('../lib/images');
 const { ouvertes, origineSure, memeOrigineStricte, corpsDe, dependances } = require('../lib/contributions');
+const { repereValide } = require('../lib/ressources');
 
 const TEMOIN = 'carto_session';
 const DUREE_SESSION_S = 7 * 24 * 3600;
@@ -30,7 +39,13 @@ const ACTIONS = {
   detail: { methode: 'GET', role: 'lecture' }, logo: { methode: 'GET', role: 'lecture' },
   verification: { methode: 'POST', role: 'approbation' }, avis: { methode: 'POST', role: 'approbation' },
   approuver: { methode: 'POST', role: 'approbation' }, refuser: { methode: 'POST', role: 'approbation' },
+  ressources: { methode: 'GET', role: 'lecture' }, ressource: { methode: 'GET', role: 'lecture' },
+  enregistrer: { methode: 'POST', role: 'approbation' }, retablir: { methode: 'POST', role: 'approbation' },
+  verifier: { methode: 'POST', role: 'approbation' }, ecarter: { methode: 'POST', role: 'approbation' },
+  republier: { methode: 'POST', role: 'approbation' }, creer: { methode: 'POST', role: 'approbation' },
 };
+// Les gestes qui portent sur une fiche existante.
+const GESTES_FICHE = ['enregistrer', 'retablir', 'verifier', 'ecarter', 'republier'];
 // Un rôle inconnu a le rang le plus bas : il ne permet que la lecture.
 const RANGS = { lecture: 1, approbation: 2, administration: 3 };
 const rang = (role) => RANGS[role] || 1;
@@ -41,10 +56,11 @@ const CONTENUS_TRANCHEES_MAX = 40;
 const ACTIVITE_MAX = 20;
 // Jour d'envoi du résumé hebdomadaire : celui du planificateur (« crons » dans vercel.json), vérifié par un essai.
 const JOUR_RESUME = 'lundi';
-const CODES = { 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
+const CODES = { 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
 const CLES = new Set(CHAMPS.map((c) => c.cle));
 const idValide = (id) => typeof id === 'string' && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(id);
-const objet = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+const estObjet = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const objet = (v) => (estObjet(v) ? v : {});
 // Changements proposés lisibles : clés du catalogue, chacune avec sa valeur « apres ».
 const proposeLisible = (propose) => Object.fromEntries(Object.entries(objet(propose))
   .filter(([cle, c]) => CLES.has(cle) && c && typeof c === 'object' && Object.hasOwn(c, 'apres')));
@@ -227,6 +243,40 @@ function creerGestionnaire(donnees) {
         });
       }
 
+      // ─── Ressources ───
+      const illisible = () => res.status(400).json({ erreur: 'Demande illisible.' });
+      if (action === 'ressources') {
+        const { ressources, historique } = await d.ressources.lister();
+        // Le nom de la personne, jamais son courriel.
+        return res.status(200).json({ historique, ressources: ressources.map((r) => ({ ...r, dernier: r.dernier ? { ...r.dernier, par: nomDans(equipe, r.dernier.par) } : null })) });
+      }
+      if (action === 'ressource') {
+        if (req.query.neuve) return res.status(200).json(await d.ressources.neuve());
+        if (!repereValide(req.query.fiche)) return illisible();
+        const vue = await d.ressources.lire(req.query.fiche);
+        if (!vue) return res.status(404).json({ code: 'introuvable', erreur: 'Cette fiche est introuvable.' });
+        return res.status(200).json({ ...vue, versions: vue.versions.map((v) => ({ ...v, par: nomDans(equipe, v.par) })) });
+      }
+      if (action === 'creer' || GESTES_FICHE.includes(action)) {
+        // La personne qui agit est celle de la session : rien de ce que dit le corps ne la remplace.
+        let retour;
+        if (action === 'creer') {
+          if (!estObjet(corps.valeurs)) return illisible();
+          retour = await d.ressources.creer({ valeurs: corps.valeurs, par: approbateur, malgreRessemblance: corps.malgreRessemblance === true });
+        } else {
+          if (!repereValide(corps.fiche)) return illisible();
+          if (action === 'enregistrer' && !(estObjet(corps.valeurs) && estObjet(corps.depart))) return illisible();
+          if (action === 'retablir' && !(Number.isInteger(corps.numero) && corps.numero > 0)) return illisible();
+          const demande = { repere: corps.fiche, par: approbateur };
+          if (action === 'enregistrer') Object.assign(demande, { valeurs: corps.valeurs, depart: corps.depart });
+          if (action === 'retablir') demande.numero = corps.numero;
+          retour = await d.ressources[action](demande);
+        }
+        if (retour.ok) return res.status(200).json(retour);
+        const { ok, code, ...detail } = retour;
+        return res.status(CODES[code] || 502).json({ code, ...detail });
+      }
+
       const id = envoi ? corps.id : req.query.id;
       if (!idValide(id)) return res.status(400).json({ erreur: 'Demande illisible.' });
 
@@ -289,7 +339,7 @@ function creerGestionnaire(donnees) {
       const resultat = action === 'approuver'
         ? await d.approbation.approuver({ propositionId: id, corrections: objet(corps.corrections), porteursNouveaux: adressesDe(corps.porteursNouveaux), sansLogo: corps.sansLogo === true, approbateur, origine })
         : await d.approbation.refuser({ propositionId: id, commentaire, approbateur });
-      if (resultat.ok) return res.status(200).json({ ok: true, courriel: !!resultat.courriel });
+      if (resultat.ok) return res.status(200).json({ ok: true, courriel: !!resultat.courriel, historique: resultat.historique !== false });
       return res.status(CODES[resultat.code] || 502).json({ code: resultat.code, erreurs: resultat.erreurs });
     } catch (err) {
       d.journal(`[admin] ${action} impossible :`, err.message);
