@@ -387,3 +387,14 @@ test('sans lien sûr ni portée, la carte n\'affiche ni bouton ni étiquette vid
   const html = htmlCarteFiche(fiche('X', { lien: 'javascript:alert(1)', portee: null }));
   assert.ok(!html.includes('card-site') && !html.includes('alert(1)') && !html.includes('axe-chip portee'));
 });
+
+// ─── Carte : une information par ligne, bouton « Voir la fiche » mis en avant ───
+
+test('la carte sépare l\'accès et la portée, et met en avant « Voir la fiche »', () => {
+  const html = htmlCarteFiche(fiche('CODA', { modesAcces: ['Ouvert'], portee: 'Le Québec', lien: 'https://exemple.org/' }));
+  // L'accès et la portée sont sur deux rangées distinctes.
+  assert.match(html, /<div class="card-chips-row card-acces"><span class="axe-chip acces acces-ouvert">Accès : Ouvert<\/span><\/div>/);
+  assert.match(html, /<div class="card-chips-row card-portee"><span class="axe-chip portee">Portée : Le Québec<\/span><\/div>/);
+  // « Voir la fiche » est le bouton principal, précédé d'un « + » décoratif.
+  assert.match(html, /<a class="card-action principale" href="\/ressource\/[^"]+" data-fiche="[^"]+"><span class="plus" aria-hidden="true">\+<\/span>Voir la fiche/);
+});
