@@ -369,5 +369,5 @@ test('la mention du bas dit seulement d\'où vient la fiche', () => {
 
 test('la carte porte un bandeau de type, avec son icône', () => {
   const html = htmlCarteFiche(fiche('X', { typePrincipal: 'Logiciel ou application' }));
-  assert.match(html, /<div class="card-bandeau type-logiciel" title="Logiciel ou application"><svg class="icone-type"/);
+  assert.match(html, /<div class="card-bandeau type-logiciel" title="Logiciel ou application"><span class="puce-type"><svg class="icone-type"/);
 });
