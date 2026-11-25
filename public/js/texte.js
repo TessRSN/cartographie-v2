@@ -412,6 +412,7 @@ const TEXTES = {
       ancienne: (nom, jour) => `${nom} a été vérifiée le ${jour}, il y a plus d’un an.`,
       ecriture: (valeur, n) => `« ${valeur} » (${n} ${n > 1 ? 'fiches' : 'fiche'})`,
       doublon: (liste, a, b) => `${liste} : ${a} et ${b} disent la même chose.`,
+      proche: (liste, a, b) => `${liste} : ${a} et ${b} se ressemblent. Ce sont peut-être deux normes différentes : vérifiez avant de n’en garder qu’une.`,
       porteurs: (a, b) => `« ${a} » ressemble à « ${b} ».`,
       valeur: (valeur, liste, nom) => `« ${valeur} » n’existe pas encore dans ${liste}. Proposée pour ${nom} : elle entrera dans la liste commune à l’approbation.`,
       ouvrirFiche: 'Ouvrir la fiche', voirProposition: 'Voir la proposition', verifier: 'Marquer vérifiée aujourd’hui',

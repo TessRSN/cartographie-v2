@@ -1392,8 +1392,11 @@ function chargerLeaflet() {
   if (!chargementLeaflet) {
     chargementLeaflet = new Promise((reussir, echouer) => {
       const feuille = document.createElement('link');
+      // Empreintes de Leaflet 1.9.4 : un fichier altéré en route n'est ni appliqué ni exécuté.
       feuille.rel = 'stylesheet'; feuille.href = `${LEAFLET}leaflet.css`;
+      feuille.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY='; feuille.crossOrigin = 'anonymous';
       const script = document.createElement('script');
+      script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo='; script.crossOrigin = 'anonymous';
       script.src = `${LEAFLET}leaflet.js`;
       script.onload = () => (window.L && window.L.map ? reussir() : echouer(new Error('Leaflet absent')));
       script.onerror = () => echouer(new Error('Leaflet non chargé'));
@@ -1677,8 +1680,9 @@ function ligneQualite(p) {
     const c = etat.q.confirmation;
     const demandee = c && c.cle === p.cle && [p.garder, p.retirer].includes(c.de) && [p.garder, p.retirer].includes(c.vers);
     return {
-      texte: Q.doublon(libelle(p.cle), Q.ecriture(p.retirer, Number(p.fiches.retirer)), Q.ecriture(p.garder, Number(p.fiches.garder))),
-      boutons: garder(p.retirer, p.garder, true) + garder(p.garder, p.retirer, false),
+      // Deux écritures seulement proches (l'une contient l'autre) peuvent être deux normes : aucun bouton n'est mis en avant.
+      texte: (p.sur === false ? Q.proche : Q.doublon)(libelle(p.cle), Q.ecriture(p.retirer, Number(p.fiches.retirer)), Q.ecriture(p.garder, Number(p.fiches.garder))),
+      boutons: garder(p.retirer, p.garder, p.sur !== false) + garder(p.garder, p.retirer, false),
       suite: demandee ? `<div class="confirm" id="confirmationQualite"><span>${e(Q.confirmer(c.de, c.vers, Number(p.toutes[c.de === p.garder ? 'garder' : 'retirer'])))}</span><button type="button" class="btn sm" data-act="q-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="q-remplacer"${fige}>${e(etat.q.enCours ? T.enCours : Q.remplacer)}</button></div>` : '',
     };
   }

@@ -240,3 +240,58 @@ test('le planificateur : la tournée des liens passe une fois par semaine, à un
   assert.ok(duree > 30 && duree <= 60);
   assert.ok(vercel.headers.some((h) => h.source.includes('api/liens') && h.headers.some((x) => x.key === 'X-Robots-Tag')));
 });
+
+// ─── Constats de la relecture ───
+test('plages de relais et écritures IPv6 d\'une adresse locale : refusées', () => {
+  for (const ip of ['::127.0.0.1', '::7f00:1', '::ffff:0:127.0.0.1', '2001:0:7f00:1::1', '192.88.99.1', '2001:10::1', '3fff::1', '5f00::1']) assert.equal(adresseInterdite(ip), true, ip);
+  for (const ip of ['2606:2800:220:1:248:1893:25c8:1946', '2a00:1450:4001:81b::200e', '93.184.216.34']) assert.equal(adresseInterdite(ip), false, ip);
+});
+
+test('seuls les ports habituels du web sont visités', async () => {
+  const r = reseau();
+  for (const url of ['http://exemple.org:22/', 'https://exemple.org:6379/', 'http://exemple.org:8080/']) {
+    assert.deepEqual(await controler(url, r), { ok: false, raison: 'interdite' }, url);
+  }
+  assert.equal((await controler('https://exemple.org:443/x', r)).ok, true);
+  assert.equal((await controler('http://exemple.org:80/x', r)).ok, true);
+  assert.equal(r.demandes.length, 0);
+});
+
+test('un nom qui n\'existe pas est une panne ; une résolution en échec passager ne dit rien', async () => {
+  const passager = async () => { const e = new Error('EAI_AGAIN'); e.code = 'EAI_AGAIN'; throw e; };
+  assert.deepEqual(await visiter('https://exemple.org/', { resoudre: passager, requete: async () => ({ statut: 200 }) }), { etat: 'ignore', raison: 'resolution' });
+  const r = reseau({ noms: { 'disparu.exemple.org': null } });
+  assert.deepEqual(await visiter('https://disparu.exemple.org/', r), { etat: 'panne', raison: 'nom' });
+});
+
+test('parmi les adresses d\'un nom, une adresse IPv4 est préférée', async () => {
+  const r = reseau({ noms: { 'double.exemple.org': ['2606:2800:220:1:248:1893:25c8:1946', PUBLIQUE] } });
+  const c = await controler('https://double.exemple.org/', r);
+  assert.equal(c.adresse, PUBLIQUE);
+  assert.equal(c.famille, 4);
+});
+
+test('une visite a une échéance totale, tous sauts compris : un lien lent ne retient pas la tournée', async () => {
+  const lent = (ms) => new Promise((suite) => setTimeout(suite, ms));
+  const requete = async (d) => { await lent(60); return { statut: 302, location: `${d.url}x` }; };
+  const debut = Date.now();
+  const r = await visiter('https://lent.exemple.org/', { resoudre: async () => [{ address: PUBLIQUE, family: 4 }], requete, echeanceMs: 150 });
+  assert.deepEqual(r, { etat: 'ignore', raison: 'delai' });
+  assert.ok(Date.now() - debut < 500, `${Date.now() - debut} ms`);
+  // Un serveur de noms qui ne répond jamais ne retient rien non plus.
+  const debut2 = Date.now();
+  const muet = await visiter('https://muet.exemple.org/', { resoudre: () => new Promise(() => {}), requete: async () => ({ statut: 200 }), echeanceMs: 120 });
+  assert.deepEqual(muet, { etat: 'ignore', raison: 'delai' });
+  assert.ok(Date.now() - debut2 < 500);
+});
+
+test('la tournée écrit au fil de l\'eau : un lien lent en fin de liste ne fait pas perdre les autres', async () => {
+  const fiches = [brute({ id: 'f1', nom: 'A', lien: 'https://tombe.exemple.org/' }), brute({ id: 'f2', nom: 'B', lien: 'https://lent.exemple.org/' })];
+  const base = fausseBase({ fiches });
+  const requete = async (d) => { if (d.url.includes('lent')) await new Promise((s) => setTimeout(s, 80)); return { statut: d.url.includes('tombe') ? 404 : 200, location: null }; };
+  const service = creerLiens({ notion: base.notion, resoudre: async () => [{ address: PUBLIQUE, family: 4 }], requete, simultanes: 1, journal: () => {} });
+  const compte = await service.verifierTous();
+  assert.equal(compte.tombes, 1);
+  const ordre = base.appels.map((a) => a.nom);
+  assert.ok(ordre.indexOf('mettreAJourFiche') >= 0);
+});

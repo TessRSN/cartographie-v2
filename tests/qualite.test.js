@@ -72,7 +72,7 @@ test('mots-clés en double : même écriture à la casse, aux accents et à la p
     saine({ id: 'f3', nom: 'C', motsCles: ['Genomique'] }),
     saine({ id: 'f4', nom: 'D', motsCles: ['genomique'], statutFiche: 'Écartée' }),
   ]), 'doublons');
-  assert.deepEqual(liste, [{ sujet: 'doublons', cle: 'motsCles', garder: 'génomique', retirer: 'Genomique', fiches: { garder: 1, retirer: 2 }, toutes: { garder: 1, retirer: 2 } }]);
+  assert.deepEqual(liste, [{ sujet: 'doublons', cle: 'motsCles', garder: 'génomique', retirer: 'Genomique', fiches: { garder: 1, retirer: 2 }, toutes: { garder: 1, retirer: 2 }, sur: true }]);
 });
 
 test('normes en double : une norme contenue dans une autre (quatre lettres au moins) ; l\'écriture la plus longue est proposée', () => {
@@ -82,7 +82,7 @@ test('normes en double : une norme contenue dans une autre (quatre lettres au mo
     saine({ id: 'f3', nom: 'C', normes: ['CS', 'OMOP CDM'] }),
     saine({ id: 'f4', nom: 'D', normes: ['fhir'], statutFiche: 'Écartée' }),
   ]), 'doublons');
-  assert.deepEqual(liste, [{ sujet: 'doublons', cle: 'normes', garder: 'HL7 FHIR', retirer: 'fhir', fiches: { garder: 1, retirer: 1 }, toutes: { garder: 1, retirer: 2 } }]);
+  assert.deepEqual(liste, [{ sujet: 'doublons', cle: 'normes', garder: 'HL7 FHIR', retirer: 'fhir', fiches: { garder: 1, retirer: 1 }, toutes: { garder: 1, retirer: 2 }, sur: false }]);
 });
 
 test('porteurs peut-être en double : même nom une fois réduit ; un nom vide ne compte pas', () => {
@@ -140,7 +140,7 @@ test('l\'écran Qualité : la liste calculée sur les bases, les compteurs, et a
   assert.deepEqual(compteurs, { points: points.length, porteursAPlacer: 3 });
   assert.deepEqual([...new Set(points.map((p) => p.sujet))], ['liens', 'doublons', 'valeursNouvelles']);
   assert.deepEqual(points.find((p) => p.sujet === 'liens'), { sujet: 'liens', fiche: { id: 'delta', nom: 'Delta' }, lien: 'https://delta.exemple.org', depuis: '2026-11-18' });
-  assert.deepEqual(points.find((p) => p.sujet === 'doublons'), { sujet: 'doublons', cle: 'motsCles', garder: 'fhir', retirer: 'FHIR', fiches: { garder: 2, retirer: 2 }, toutes: { garder: 3, retirer: 2 } });
+  assert.deepEqual(points.find((p) => p.sujet === 'doublons'), { sujet: 'doublons', cle: 'motsCles', garder: 'fhir', retirer: 'FHIR', fiches: { garder: 2, retirer: 2 }, toutes: { garder: 3, retirer: 2 }, sur: true });
   assert.deepEqual(points.find((p) => p.sujet === 'valeursNouvelles').proposition, { id: 'prop-1', nom: 'Alpha' });
   assert.ok(!JSON.stringify(points).includes('id-notion'));
   assert.equal(b.ecritures(), 0, 'rien n\'est enregistré : tout est calculé');
@@ -200,4 +200,15 @@ test('essayer de nouveau : le seul lien de la fiche est revisité, et la colonne
   assert.equal((await b.qualite.revisiterLien({ repere: 'inconnue', par: TESS })).code, 'introuvable');
   assert.equal((await b.qualite.revisiterLien({ repere: 'alpha', par: LEA })).code, 'non-approbateur');
   assert.equal(b.de('mettreAJourFiche').length, 2);
+});
+
+test('une norme contenue dans une autre n\'est qu\'une ressemblance à vérifier, jamais une identité', () => {
+  const paires = [['CIM-10', 'CIM-10-CA'], ['FHIR', 'FHIR R4'], ['DICOM', 'DICOMweb'], ['OMOP', 'OMOP CDM']];
+  for (const [a, b] of paires) {
+    const [point] = points([saine({ id: 'f1', nom: 'A', normes: [a] }), saine({ id: 'f2', nom: 'B', normes: [b] })]).filter((x) => x.sujet === 'doublons');
+    assert.ok(point, `${a} / ${b}`);
+    assert.equal(point.sur, false, `${a} / ${b}`);
+  }
+  const [meme] = points([saine({ id: 'f1', nom: 'A', normes: ['hl7-fhir'] }), saine({ id: 'f2', nom: 'B', normes: ['HL7 FHIR'] })]).filter((x) => x.sujet === 'doublons');
+  assert.equal(meme.sur, true);
 });

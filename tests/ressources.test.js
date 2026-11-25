@@ -468,3 +468,13 @@ test('ajouter une ressource qui ressemble à une fiche existante demande confirm
   assert.equal(force.ok, true);
   assert.equal(b.de('creerFiche').length, 1);
 });
+
+test('changer le lien principal d\'une fiche efface sa date de panne : elle ne vaut plus pour le nouveau lien', async () => {
+  const b = banc({ fiches: [brute({ lienEnPanneDepuis: '2026-11-18' })] });
+  const retour = await enregistrer(b, { lien: 'https://nouveau.cohorte-x.org' }, { lien: 'https://cohorte-x.org' });
+  assert.equal(retour.ok, true);
+  assert.deepEqual(b.de('mettreAJourFiche')[0].proprietes[PROP.lienEnPanneDepuis], { date: null });
+  const autre = banc({ fiches: [brute({ lienEnPanneDepuis: '2026-11-18' })] });
+  await enregistrer(autre, { phrase: 'Autre.' }, { phrase: 'Une phrase.' });
+  assert.ok(!(PROP.lienEnPanneDepuis in autre.de('mettreAJourFiche')[0].proprietes));
+});

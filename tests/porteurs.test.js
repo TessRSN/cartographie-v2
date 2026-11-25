@@ -215,11 +215,13 @@ test('fusion : chaque fiche est changée sous son verrou ; une fiche occupée ar
   assert.deepEqual(await fusion(d), { ok: true, faites: 2, historique: true, archive: true });
 });
 
-test('fusion : une version qui ne s\'écrit pas arrête le geste et le dit ; sans base des versions, la fusion se fait et le dit', async () => {
+test('fusion : une version qui ne s\'écrit pas remet la fiche comme avant, pour que la relance refasse les deux ; sans base des versions, la fusion se fait et le dit', async () => {
   const b = banc({ pannesVersions: { 'pages.create': true } });
   const r = await fusion(b);
-  assert.deepEqual(r, { ok: false, code: 'interrompue', faites: 1, restantes: 2, sansVersion: true });
-  assert.equal(b.de('mettreAJourFiche').length, 1);
+  assert.deepEqual(r, { ok: false, code: 'interrompue', faites: 0, restantes: 3, sansVersion: true });
+  // La fiche a été écrite, puis remise à ses porteurs d'avant.
+  assert.equal(b.de('mettreAJourFiche').length, 2);
+  assert.deepEqual(b.fiches.find((f) => f.id === 'id-notion-a').porteurIds, ['id-notion-doublon']);
   assert.equal(b.de('archiverPorteur').length, 0);
   const { NOTION_DB_VERSIONS, ...sansVersions } = b.env;
   const c = banc({ env: sansVersions });
@@ -252,4 +254,21 @@ test('fusionner un porteur sans fiche : il va simplement à la corbeille', async
   assert.deepEqual(r, { ok: true, faites: 0, historique: true, archive: true });
   assert.deepEqual(b.de('archiverPorteur'), ['id-notion-vide']);
   assert.equal(FICHES().length, b.fiches.length);
+});
+
+// ─── Constats de la relecture ───
+test('fusion : si le porteur gardé a disparu entre la lecture et le geste, rien n\'est rattaché ni mis à la corbeille', async () => {
+  let fait = false;
+  const b = banc({
+    avant: async (nom, args, base) => {
+      // Juste avant la première lecture d'une fiche sous verrou, une autre personne a mis le porteur gardé à la corbeille.
+      if (nom === 'lirePorteur' && !fait) { fait = true; const i = base.porteurs.findIndex((p) => p.id === 'id-notion-chum'); if (i >= 0) base.porteurs.splice(i, 1); }
+    },
+  });
+  const doublon = await repereDe(b, 'C.H.U.M.'); const garde = await repereDe(b, 'CHUM');
+  const r = await b.porteursService.fusionner({ doublon, garde, par: TESS });
+  assert.equal(r.code, 'introuvable');
+  assert.equal(b.de('mettreAJourFiche').length, 0);
+  assert.equal(b.de('archiverPorteur').length, 0);
+  assert.deepEqual(b.fiches.find((f) => f.id === 'id-notion-a').porteurIds, ['id-notion-doublon']);
 });
