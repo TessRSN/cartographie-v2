@@ -139,7 +139,14 @@ function egales(a, b) {
     const [x, y] = [tri(a), tri(b)];
     return x.every((v, i) => v === y[i]);
   }
+  // Deux textes qui ne diffèrent que par des espaces superflus sont le même texte ;
+  // les sauts de ligne, eux, comptent (paragraphes d'une description).
+  if (typeof a === 'string' && typeof b === 'string') return aplatir(a) === aplatir(b);
   return a === b;
+}
+
+function aplatir(texte) {
+  return texte.replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').replace(/\n{2,}/g, '\n\n').trim();
 }
 
 // Seulement les champs dont la valeur diffère de la fiche. Sans fiche (nouvelle ressource) :
@@ -174,7 +181,7 @@ function fusionner(changements, corrections = {}) {
   return { ...valeurs, ...corrections };
 }
 
-const api = { CHAMPS, OBLIGATOIRES, LIENS_AVEC_RESSOURCE, nettoyer, calculerChangements, champsBouscules, fusionner, estVide };
+const api = { CHAMPS, OBLIGATOIRES, LIENS_AVEC_RESSOURCE, nettoyer, calculerChangements, champsBouscules, fusionner, estVide, egales };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else racine.Champs = api;
 })(typeof window !== 'undefined' ? window : globalThis);

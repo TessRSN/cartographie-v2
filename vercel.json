@@ -1,27 +1,79 @@
 {
   "functions": {
-    "api/export.js": { "maxDuration": 30 },
-    "api/ressource.js": { "includeFiles": "public/gabarit.html", "maxDuration": 30 }
+    "api/export.js": {
+      "maxDuration": 30
+    },
+    "api/ressource.js": {
+      "includeFiles": "public/gabarit.html",
+      "maxDuration": 30
+    },
+    "api/lien.js": {
+      "maxDuration": 30
+    },
+    "api/proposition.js": {
+      "maxDuration": 30
+    }
   },
   "rewrites": [
-    { "source": "/", "destination": "/api/ressource?vue=accueil" },
-    { "source": "/ressource/:adresse", "destination": "/api/ressource?vue=page&adresse=:adresse" },
-    { "source": "/sitemap.xml", "destination": "/api/ressource?vue=plan" },
-    { "source": "/robots.txt", "destination": "/api/ressource?vue=robots" }
+    {
+      "source": "/",
+      "destination": "/api/ressource?vue=accueil"
+    },
+    {
+      "source": "/ressource/:adresse",
+      "destination": "/api/ressource?vue=page&adresse=:adresse"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/ressource?vue=plan"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/ressource?vue=robots"
+    },
+    {
+      "source": "/proposer",
+      "destination": "/proposer.html"
+    }
   ],
   "headers": [
     {
+      "source": "/(proposer|proposer.html|api/lien|api/proposition)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    },
+    {
       "source": "/logos/(.*)",
       "headers": [
-        { "key": "Content-Security-Policy", "value": "default-src 'none'; style-src 'unsafe-inline'; sandbox" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Cache-Control", "value": "public, max-age=86400" }
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
       ]
     },
     {
       "source": "/(.*).html",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, must-revalidate"
+        }
       ]
     }
   ]

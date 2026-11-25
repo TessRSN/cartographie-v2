@@ -22,6 +22,16 @@ function reecrire(chemin) {
   return null;
 }
 
+// Corps JSON d'une requête POST (100 ko au plus), comme Vercel le fournit dans req.body.
+function lireCorps(req) {
+  return new Promise((resoudre) => {
+    let brut = ''; let trop = false;
+    req.on('data', (morceau) => { brut += morceau; if (brut.length > 100000) trop = true; });
+    req.on('end', () => { try { resoudre(trop ? null : JSON.parse(brut)); } catch (err) { resoudre(null); } });
+    req.on('error', () => resoudre(null));
+  });
+}
+
 function enrichir(res) {
   res.status = (code) => { res.statusCode = code; return res; };
   res.json = (objet) => { res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.end(JSON.stringify(objet)); return res; };
@@ -37,9 +47,12 @@ http.createServer(async (req, res) => {
       const fichier = path.join(RACINE, 'api', `${cible.fonction}.js`);
       if (!fs.existsSync(fichier)) { res.statusCode = 404; return res.end('Fonction introuvable'); }
       req.query = { ...Object.fromEntries(url.searchParams), ...cible.query };
+      if (req.method === 'POST') req.body = await lireCorps(req);
       return await require(fichier)(req, enrichir(res));
     }
-    const relatif = decodeURIComponent(url.pathname.slice(1));
+    // Mêmes réécritures de pages que vercel.json.
+    const PAGES = { '/proposer': 'proposer.html', '/admin': 'admin.html' };
+    const relatif = PAGES[url.pathname] || decodeURIComponent(url.pathname.slice(1));
     // Comme sous Vercel, seuls les fichiers du dossier public sont servis.
     const PUBLIC = path.join(RACINE, 'public');
     const fichier = path.join(PUBLIC, relatif);
