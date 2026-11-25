@@ -84,7 +84,7 @@ test('proposition introuvable ou déjà tranchée', async () => {
 
 test('une nouvelle ressource est créée une fois, « Publiée » et « Actif »', async () => {
   const b = banc();
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X' });
   const [proprietes] = b.de('creerFiche');
   assert.equal(b.de('creerFiche').length, 1);
   assert.deepEqual(proprietes[PROP.statutFiche], { select: { name: 'Publiée' } });
@@ -112,7 +112,7 @@ test("si l'enregistrement de la décision échoue, une seconde tentative ne recr
   const b = banc({ pannes: { marquerDecision: () => { if (premier) { premier = false; return new Error('Notion en panne'); } return null; } } });
   assert.deepEqual(await approuver(b), { ok: false, code: 'notion' });
   assert.equal(b.prop.statut, 'attente');
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X' });
   assert.equal(b.de('creerFiche').length, 1);
 });
 
@@ -134,7 +134,7 @@ test("si l'écriture de la fiche échoue, la proposition reste en attente", asyn
 
 test('une modification met à jour la fiche visée, seulement pour les champs proposés', async () => {
   const b = banc({ proposition: { genre: 'modification', ficheId: 'fiche-1', titre: 'Modification : Cohorte X', contenu: { propose: { contact: { avant: 'a@b.org', apres: 'c@d.org' } }, applique: null, porteursNouveaux: {} } } });
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-1', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-1', courriel: true, genre: 'modification', nom: 'Cohorte X' });
   const [{ id, p }] = b.de('mettreAJourFiche');
   assert.equal(id, 'fiche-1');
   assert.deepEqual(Object.keys(p).sort(), [PROP.contact, PROP.statutFiche].sort());
@@ -225,7 +225,7 @@ test('fiche visée disparue : erreur claire, aucune écriture', async () => {
 });
 
 test('courriel en échec : la décision tient, la réponse le signale', async () => {
-  assert.deepEqual(await approuver(banc({ pannes: { courriel: true } })), { ok: true, ficheId: 'fiche-neuve', courriel: false });
+  assert.deepEqual(await approuver(banc({ pannes: { courriel: true } })), { ok: true, ficheId: 'fiche-neuve', courriel: false, genre: 'nouvelle', nom: 'Outil X' });
 });
 
 test('un refus exige un commentaire, enregistre la décision et prévient le proposant', async () => {
@@ -233,7 +233,7 @@ test('un refus exige un commentaire, enregistre la décision et prévient le pro
   assert.equal((await sans.approbation.refuser({ propositionId: 'prop-1', commentaire: '   ', approbateur: APPROBATEUR })).code, 'invalide');
   assert.equal(sans.de('marquerDecision').length, 0);
   const b = banc();
-  assert.deepEqual(await b.approbation.refuser({ propositionId: 'prop-1', commentaire: ' Hors du périmètre. ', approbateur: APPROBATEUR }), { ok: true, courriel: true });
+  assert.deepEqual(await b.approbation.refuser({ propositionId: 'prop-1', commentaire: ' Hors du périmètre. ', approbateur: APPROBATEUR }), { ok: true, courriel: true, genre: 'nouvelle', titre: 'Nouvelle : Outil X' });
   assert.deepEqual(b.de('marquerDecision')[0], { id: 'prop-1', statut: 'refusee', approbateur: APPROBATEUR, commentaire: 'Hors du périmètre.' });
   assert.deepEqual(b.de('courriel.refusee')[0], { a: 'p@exemple.org', titre: 'Nouvelle : Outil X', commentaire: 'Hors du périmètre.' });
   assert.equal(b.de('creerFiche').length + b.de('mettreAJourFiche').length + b.de('trouverFiche').length, 0);
@@ -269,7 +269,7 @@ test("une panne de lecture ne laisse pas la proposition verrouillée", async () 
   let premier = true;
   const b = banc({ pannes: { lireProposition: () => { if (premier) { premier = false; return new Error('Notion en panne'); } return null; } } });
   assert.deepEqual(await approuver(b), { ok: false, code: 'notion' });
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X' });
 });
 
 // Verrou partagé factice, comme celui du stockage clé-valeur.
@@ -327,7 +327,7 @@ test('seconde tentative avec un nom corrigé : la fiche déjà créée est mise 
   let premier = true;
   const b = banc({ pannes: { marquerDecision: () => { if (premier) { premier = false; return new Error('panne'); } return null; } } });
   assert.equal((await approuver(b)).code, 'notion');
-  assert.deepEqual(await approuver(b, { corrections: { nom: 'Outil X corrigé' } }), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b, { corrections: { nom: 'Outil X corrigé' } }), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X corrigé' });
   assert.equal(b.de('creerFiche').length, 1);
   const [{ id, p }] = b.de('mettreAJourFiche');
   assert.equal(id, 'fiche-neuve');
@@ -427,7 +427,7 @@ test('une personne en lecture seule ne peut faire aucun geste, même en appelant
 test('demander un second regard : la proposition passe en vérification, rien d\'autre ne bouge', async () => {
   const verrous = verrousPartages();
   const b = banc({ verrous });
-  assert.deepEqual(await enVerification(b), { ok: true });
+  assert.deepEqual(await enVerification(b), { ok: true, genre: 'nouvelle', titre: 'Nouvelle : Outil X' });
   assert.deepEqual(b.de('marquerVerification'), ['prop-1']);
   assert.equal(b.prop.statut, 'verification');
   assert.equal(ecritures(b), 1, 'ni fiche, ni décision, ni courriel');
@@ -436,7 +436,7 @@ test('demander un second regard : la proposition passe en vérification, rien d\
 
 test('second regard : déjà en vérification, rien n\'est réécrit ; tranchée ou introuvable, refusé', async () => {
   const deja = banc({ proposition: { statut: 'verification' } });
-  assert.deepEqual(await enVerification(deja), { ok: true });
+  assert.deepEqual(await enVerification(deja), { ok: true, inchangee: true });
   assert.equal(ecritures(deja), 0);
   for (const statut of ['approuvee', 'refusee', null]) {
     const b = banc({ proposition: { statut } });
@@ -530,12 +530,12 @@ test('si Notion échoue pendant l\'avis : code « notion », verrou rendu', asyn
 
 test('une proposition en vérification s\'approuve et se refuse comme une proposition en attente', async () => {
   const b = banc({ proposition: { statut: 'verification' } });
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X' });
   assert.equal(b.de('creerFiche').length, 1);
   assert.equal(b.de('marquerDecision')[0].statut, 'approuvee');
   assert.deepEqual(await approuver(b), { ok: false, code: 'deja-tranchee' }, 'pas appliquée deux fois');
   const c = banc({ proposition: { statut: 'verification' } });
-  assert.deepEqual(await c.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Doublon.', approbateur: APPROBATEUR }), { ok: true, courriel: true });
+  assert.deepEqual(await c.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Doublon.', approbateur: APPROBATEUR }), { ok: true, courriel: true, genre: 'nouvelle', titre: 'Nouvelle : Outil X' });
   assert.equal(c.de('marquerDecision')[0].statut, 'refusee');
 });
 
@@ -623,4 +623,251 @@ test('la fiche visée est verrouillée pendant l\'approbation : occupée, rien n
   await verrous.rendreVerrou('fiche:fiche-1');
   assert.equal((await approuver(b)).ok, true);
   assert.equal(await verrous.prendreVerrou('fiche:fiche-1'), true, 'le verrou de la fiche est rendu');
+});
+
+// ─── Modifications de l'équipe : l'Administration seule tranche, sans courriel ───
+const MAXIME = 'maxime@exemple.ca';
+const DE_L_EQUIPE = {
+  genre: 'equipe', ficheId: 'fiche-1', courriel: MAXIME, nomProposant: 'Maxime Lafrenière', lienAvecRessource: 'aucun', titre: "Modification de l'équipe : Cohorte X",
+  contenu: { propose: { contact: { avant: 'a@b.org', apres: 'c@d.org' } }, applique: null, porteursNouveaux: {} },
+};
+const EQUIPE_4A = [{ nom: 'Tess Berthier', courriel: APPROBATEUR, role: 'administration' }, { nom: 'Maxime Lafrenière', courriel: MAXIME, role: 'approbation' }];
+const bancEquipe = (options = {}) => banc({ proposition: DE_L_EQUIPE, approbateurs: [APPROBATEUR, MAXIME], equipe: EQUIPE_4A, avecVersions: true, ...options });
+
+test('une modification de l\'équipe : une personne en Approbation ne peut ni l\'approuver ni la refuser, rien n\'est écrit', async () => {
+  const b = bancEquipe();
+  assert.deepEqual(await approuver(b, { approbateur: MAXIME }), { ok: false, code: 'role' });
+  assert.deepEqual(await b.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Non.', approbateur: MAXIME }), { ok: false, code: 'role' });
+  for (const nom of ['mettreAJourFiche', 'versions.ecrire', 'marquerDecision', 'courriel.approuvee', 'courriel.refusee']) assert.equal(b.de(nom).length, 0, nom);
+  assert.equal(b.prop.statut, 'attente');
+  // Le verrou est rendu : l'Administration peut trancher ensuite.
+  assert.equal((await approuver(b)).ok, true);
+});
+
+test('une modification de l\'équipe approuvée par l\'Administration : fiche changée, version « Proposition », aucun courriel, jamais « Vérifiée »', async () => {
+  const b = bancEquipe();
+  const retour = await approuver(b);
+  assert.equal(retour.ok, true);
+  assert.equal(retour.courriel, false);
+  assert.equal(retour.historique, true);
+  const [ecrit] = b.de('mettreAJourFiche');
+  assert.equal(ecrit.id, 'fiche-1');
+  assert.deepEqual(ecrit.p[PROP.contact], { email: 'c@d.org' });
+  assert.ok(!Object.hasOwn(ecrit.p, PROP.verifieeLe) && !Object.hasOwn(ecrit.p, PROP.verifieePar));
+  assert.deepEqual(b.de('versions.ecrire'), [{
+    ficheId: 'fiche-1', nom: 'Cohorte X', source: 'proposition', par: APPROBATEUR, propositionId: 'prop-1',
+    changements: { contact: { avant: 'a@b.org', apres: 'c@d.org' } },
+  }]);
+  assert.equal(b.de('marquerDecision')[0].statut, 'approuvee');
+  assert.equal(b.de('marquerDecision')[0].approbateur, APPROBATEUR);
+  assert.equal(b.de('courriel.approuvee').length + b.de('courriel.refusee').length, 0);
+  assert.equal(b.de('creerFiche').length, 0);
+});
+
+test('une modification de l\'équipe ne marque jamais la fiche « vérifiée », même si elle se dit « responsable »', async () => {
+  for (const lienAvecRessource of ['responsable', 'jy-travaille']) {
+    const b = bancEquipe({ proposition: { ...DE_L_EQUIPE, lienAvecRessource, courriel: 'dehors@exemple.org' } });
+    assert.equal((await approuver(b)).ok, true);
+    const [ecrit] = b.de('mettreAJourFiche');
+    assert.ok(!Object.hasOwn(ecrit.p, PROP.verifieeLe) && !Object.hasOwn(ecrit.p, PROP.verifieePar), lienAvecRessource);
+    assert.equal(b.de('courriel.approuvee').length, 0);
+  }
+});
+
+test('une modification de l\'équipe refusée par l\'Administration : commentaire obligatoire et gardé, aucun courriel', async () => {
+  const b = bancEquipe();
+  const sans = await b.approbation.refuser({ propositionId: 'prop-1', commentaire: '  ', approbateur: APPROBATEUR });
+  assert.equal(sans.code, 'invalide');
+  assert.ok(sans.erreurs.commentaire);
+  const retour = await b.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Le contact est le bon.', approbateur: APPROBATEUR });
+  assert.equal(retour.ok, true);
+  assert.equal(retour.courriel, false);
+  assert.deepEqual(b.de('marquerDecision').map((d) => [d.statut, d.commentaire]), [['refusee', 'Le contact est le bon.']]);
+  assert.equal(b.de('courriel.refusee').length + b.de('courriel.approuvee').length, 0);
+  assert.equal(b.de('mettreAJourFiche').length, 0);
+});
+
+test('une modification de l\'équipe : le second regard et les avis restent ouverts au rôle Approbation', async () => {
+  const b = bancEquipe();
+  assert.equal((await b.approbation.mettreEnVerification({ propositionId: 'prop-1', par: MAXIME })).ok, true);
+  assert.equal(b.prop.statut, 'verification');
+  assert.equal((await b.approbation.donnerAvis({ propositionId: 'prop-1', par: MAXIME, sens: 'favorable', commentaire: '' })).ok, true);
+  assert.equal(b.de('ecrireAvis').length, 1);
+});
+
+test('une modification de l\'équipe sur une fiche disparue ou écartée ne s\'approuve pas', async () => {
+  const b = bancEquipe({ fiche: { id: 'fiche-1', nom: 'Cohorte X', statutFiche: 'Écartée', porteurIds: [] } });
+  assert.equal((await approuver(b)).code, 'fiche-introuvable');
+  assert.equal(b.de('mettreAJourFiche').length, 0);
+});
+
+test('les propositions du public ne changent pas : une personne en Approbation les tranche, et le courriel part', async () => {
+  const publique = { ...DE_L_EQUIPE, genre: 'modification', courriel: 'pat@exemple.org', nomProposant: 'Pat', titre: 'Modification : Cohorte X' };
+  const b = bancEquipe({ proposition: publique });
+  const retour = await approuver(b, { approbateur: MAXIME });
+  assert.equal(retour.ok, true);
+  assert.equal(retour.courriel, true);
+  assert.deepEqual(b.de('courriel.approuvee').map((m) => m.a), ['pat@exemple.org']);
+  const c = bancEquipe({ proposition: publique });
+  const refus = await c.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Non.', approbateur: MAXIME });
+  assert.equal(refus.ok, true);
+  assert.equal(refus.courriel, true);
+  assert.deepEqual(c.de('courriel.refusee').map((m) => m.a), ['pat@exemple.org']);
+});
+
+test('les gestes réussis disent sur quoi ils portaient, pour le journal de l\'équipe', async () => {
+  const b = bancEquipe();
+  assert.deepEqual(await b.approbation.mettreEnVerification({ propositionId: 'prop-1', par: MAXIME }), { ok: true, genre: 'equipe', titre: "Modification de l'équipe : Cohorte X" });
+  const retour = await approuver(b);
+  assert.equal(retour.genre, 'equipe');
+  assert.equal(retour.nom, 'Cohorte X');
+  const c = bancEquipe();
+  const refus = await c.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Non.', approbateur: APPROBATEUR });
+  assert.equal(refus.genre, 'equipe');
+  assert.equal(refus.titre, "Modification de l'équipe : Cohorte X");
+});
+
+// ─── Relecture du lot 4a : ce qu'une personne en Approbation peut approuver ───
+const PUBLIQUE = { ...DE_L_EQUIPE, genre: 'modification', courriel: 'pat@exemple.org', nomProposant: 'Pat', titre: 'Modification : Cohorte X' };
+const AUCUNE_ECRITURE = ['mettreAJourFiche', 'creerFiche', 'creerPorteur', 'versions.ecrire', 'marquerDecision', 'lierFiche', 'courriel.approuvee', 'courriel.refusee'];
+const rienEcrit = (b) => { for (const nom of AUCUNE_ECRITURE) assert.equal(b.de(nom).length, 0, nom); };
+
+test('une personne en Approbation corrige ce qui est proposé, mais ne complète aucun autre champ : refus, rien d\'écrit', async () => {
+  const b = bancEquipe({ proposition: PUBLIQUE });
+  const refus = await approuver(b, { approbateur: MAXIME, corrections: { contact: 'e@f.org', phrase: 'Une phrase de plus.' } });
+  assert.equal(refus.ok, false);
+  assert.equal(refus.code, 'invalide');
+  assert.deepEqual(Object.keys(refus.erreurs), ['phrase']);
+  assert.match(refus.erreurs.phrase, /Administration/);
+  rienEcrit(b);
+  assert.equal(b.prop.statut, 'attente');
+  // Une clé hors du catalogue est une clé de plus, elle aussi.
+  assert.equal((await approuver(b, { approbateur: MAXIME, corrections: { notesInternes: 'x' } })).code, 'invalide');
+  rienEcrit(b);
+  // Corriger le champ proposé reste permis, et le verrou a été rendu.
+  const retour = await approuver(b, { approbateur: MAXIME, corrections: { contact: 'e@f.org' } });
+  assert.equal(retour.ok, true);
+  assert.deepEqual(b.de('mettreAJourFiche')[0].p[PROP.contact], { email: 'e@f.org' });
+  assert.deepEqual(b.de('marquerDecision')[0].applique, { contact: 'e@f.org' });
+});
+
+test('l\'Administration garde les corrections libres, et une personne absente de l\'équipe lue n\'a pas plus de droits qu\'en Approbation', async () => {
+  const b = bancEquipe({ proposition: PUBLIQUE });
+  const retour = await approuver(b, { corrections: { phrase: 'Une phrase de plus.' } });
+  assert.equal(retour.ok, true);
+  assert.deepEqual(b.de('marquerDecision')[0].applique, { contact: 'c@d.org', phrase: 'Une phrase de plus.' });
+  const c = bancEquipe({ proposition: PUBLIQUE, equipe: [] });
+  assert.equal((await approuver(c, { approbateur: MAXIME, corrections: { phrase: 'Une phrase de plus.' } })).code, 'invalide');
+  rienEcrit(c);
+});
+
+test('une fiche « à remplir par le RSN » : une personne en Approbation complète ce que l\'approbation exige, rien de plus', async () => {
+  const rsn = { genre: 'rsn', ficheId: null, courriel: 'pat@exemple.org', contenu: { propose: { nom: { apres: 'Outil X' } }, applique: null, porteursNouveaux: {} } };
+  const b = bancEquipe({ proposition: rsn });
+  const trop = await approuver(b, { approbateur: MAXIME, corrections: { typePrincipal: 'Logiciel ou application', phrase: 'Une phrase.', lien: 'https://x.org', etat: 'Archivé' } });
+  assert.equal(trop.code, 'invalide');
+  assert.deepEqual(Object.keys(trop.erreurs), ['etat']);
+  rienEcrit(b);
+  const retour = await approuver(b, { approbateur: MAXIME, corrections: { typePrincipal: 'Logiciel ou application', phrase: 'Une phrase.', lien: 'https://x.org' } });
+  assert.equal(retour.ok, true);
+  assert.equal(b.de('creerFiche').length, 1);
+  // La liste est la même que celle de la page.
+  const page = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'public', 'js', 'admin.js'), 'utf8');
+  const { A_COMPLETER_RSN } = require('../lib/approbation');
+  assert.deepEqual(JSON.parse(/const A_COMPLETER_RSN = (\[[^\]]+\]);/.exec(page)[1].replace(/'/g, '"')), A_COMPLETER_RSN);
+});
+
+test('une personne en Approbation n\'approuve pas sa propre proposition : refus « role », rien d\'écrit, aucun courriel', async () => {
+  const sienne = { ...PUBLIQUE, courriel: ' Maxime@Exemple.CA ' };
+  const b = bancEquipe({ proposition: sienne });
+  assert.deepEqual(await approuver(b, { approbateur: MAXIME }), { ok: false, code: 'role' });
+  rienEcrit(b);
+  assert.equal(b.prop.statut, 'attente');
+  // L'Administration approuve la proposition de Maxime, et la sienne aussi.
+  assert.equal((await approuver(b)).ok, true);
+  const c = bancEquipe({ proposition: { ...PUBLIQUE, courriel: APPROBATEUR } });
+  assert.equal((await approuver(c)).ok, true);
+  assert.equal(c.de('mettreAJourFiche').length, 1);
+});
+
+test('une proposition dont le genre lu de Notion est inconnu ne s\'approuve ni ne se refuse : rien d\'écrit, aucun courriel', async () => {
+  for (const genre of [null, undefined, 'autre']) {
+    const b = bancEquipe({ proposition: { ...PUBLIQUE, genre } });
+    const approuvee = await approuver(b);
+    assert.equal(approuvee.ok, false);
+    assert.equal(approuvee.code, 'invalide', String(genre));
+    assert.match(approuvee.erreurs._, /colonne « Genre » dans Notion/);
+    const refusee = await b.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Non.', approbateur: APPROBATEUR });
+    assert.equal(refusee.code, 'invalide', String(genre));
+    assert.match(refusee.erreurs._, /colonne « Genre » dans Notion/);
+    rienEcrit(b);
+    assert.equal(b.prop.statut, 'attente');
+    // Le verrou est rendu : une fois le genre corrigé dans Notion, la proposition se tranche.
+    b.prop.genre = 'modification';
+    assert.equal((await approuver(b)).ok, true);
+  }
+});
+
+// ─── Relecture du lot 4a : approuver une modification de l'équipe, comme un enregistrement direct ───
+const equipeQuiPropose = (propose, options = {}) => bancEquipe({ proposition: { ...DE_L_EQUIPE, contenu: { propose, applique: null, porteursNouveaux: {} } }, ...options });
+
+test('modification de l\'équipe : un porteur qui n\'est pas dans le catalogue est refusé, aucun porteur créé', async () => {
+  const porteurs = [{ id: 'porteur-chum', nom: 'CHUM' }];
+  const b = equipeQuiPropose({ porteurs: { avant: [], apres: ['chum ', 'Institut inconnu'] } }, { porteurs });
+  const refus = await approuver(b, { porteursNouveaux: { 'Institut inconnu': '1 rue X' } });
+  assert.equal(refus.code, 'invalide');
+  assert.match(refus.erreurs.porteurs, /Institut inconnu/);
+  rienEcrit(b);
+  assert.equal(b.de('geocoder').length, 0);
+  // Un porteur du catalogue est rattaché comme avant.
+  const c = equipeQuiPropose({ porteurs: { avant: [], apres: ['chum '] } }, { porteurs });
+  assert.equal((await approuver(c)).ok, true);
+  assert.deepEqual(c.de('mettreAJourFiche')[0].p[PROP.porteurs], { relation: [{ id: 'porteur-chum' }] });
+  assert.equal(c.de('creerPorteur').length, 0);
+  // Une proposition du public peut toujours amener un nouveau porteur.
+  const d = bancEquipe({ proposition: { ...PUBLIQUE, contenu: { propose: { porteurs: { avant: [], apres: ['Institut inconnu'] } }, applique: null, porteursNouveaux: {} } }, porteurs });
+  assert.equal((await approuver(d)).ok, true);
+  assert.equal(d.de('creerPorteur').length, 1);
+});
+
+test('modification de l\'équipe : vider l\'adresse du logo ne retire pas l\'image déposée, une nouvelle adresse la remplace', async () => {
+  const vide = equipeQuiPropose({ logo: { avant: 'https://exemple.org/l.png', apres: null } });
+  assert.equal((await approuver(vide)).ok, true);
+  const [ecrit] = vide.de('mettreAJourFiche');
+  assert.deepEqual(ecrit.p[PROP.logo], { url: null });
+  assert.ok(!Object.hasOwn(ecrit.p, PROP.logoFichier), 'l\'image déposée reste');
+  const neuve = equipeQuiPropose({ logo: { avant: null, apres: 'https://exemple.org/nouveau.png' } });
+  assert.equal((await approuver(neuve)).ok, true);
+  assert.deepEqual(neuve.de('mettreAJourFiche')[0].p[PROP.logoFichier], { files: [] });
+});
+
+test('toute approbation qui change le lien principal remet à vide « Lien en panne depuis », si elle était remplie', async () => {
+  const enPanne = { id: 'fiche-1', nom: 'Cohorte X', contact: 'a@b.org', porteurIds: [], lien: 'https://ancien.org', lienEnPanneDepuis: '2026-11-18' };
+  const lien = { lien: { avant: 'https://ancien.org', apres: 'https://nouveau.org' } };
+  for (const proposition of [DE_L_EQUIPE, PUBLIQUE]) {
+    const b = bancEquipe({ fiche: { ...enPanne }, proposition: { ...proposition, contenu: { propose: lien, applique: null, porteursNouveaux: {} } } });
+    assert.equal((await approuver(b)).ok, true);
+    assert.deepEqual(b.de('mettreAJourFiche')[0].p[PROP.lienEnPanneDepuis], { date: null }, proposition.genre);
+    // Sans date de panne, ou sans changement du lien, la colonne n'est pas touchée.
+    const sansPanne = bancEquipe({ fiche: { ...enPanne, lienEnPanneDepuis: null }, proposition: { ...proposition, contenu: { propose: lien, applique: null, porteursNouveaux: {} } } });
+    assert.equal((await approuver(sansPanne)).ok, true);
+    assert.ok(!Object.hasOwn(sansPanne.de('mettreAJourFiche')[0].p, PROP.lienEnPanneDepuis));
+    const memeLien = bancEquipe({ fiche: { ...enPanne }, proposition: { ...proposition, contenu: { propose: { lien: { avant: 'https://ancien.org', apres: 'https://ancien.org' }, contact: { avant: 'a@b.org', apres: 'c@d.org' } }, applique: null, porteursNouveaux: {} } } });
+    assert.equal((await approuver(memeLien)).ok, true);
+    assert.ok(!Object.hasOwn(memeLien.de('mettreAJourFiche')[0].p, PROP.lienEnPanneDepuis));
+    const autreChamp = bancEquipe({ fiche: { ...enPanne }, proposition });
+    assert.equal((await approuver(autreChamp)).ok, true);
+    assert.ok(!Object.hasOwn(autreChamp.de('mettreAJourFiche')[0].p, PROP.lienEnPanneDepuis));
+  }
+});
+
+test('modification de l\'équipe : un lien d\'une fiche vers elle-même est refusé, rien d\'écrit', async () => {
+  const b = equipeQuiPropose({ reposeSur: { avant: [], apres: ['cartagene', 'cohorte-x'] } });
+  const refus = await approuver(b);
+  assert.equal(refus.code, 'invalide');
+  assert.match(refus.erreurs.reposeSur, /elle-même/);
+  rienEcrit(b);
+  const c = equipeQuiPropose({ reposeSur: { avant: [], apres: ['cartagene'] } });
+  assert.equal((await approuver(c)).ok, true);
+  assert.deepEqual(c.de('mettreAJourFiche')[0].p[PROP.reposeSur], { relation: [{ id: 'fiche-c' }] });
 });

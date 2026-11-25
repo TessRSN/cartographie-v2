@@ -6,6 +6,8 @@ const { banc, repereDe, porteur, FICHES, TESS, LEA } = require('./aides/banc-lot
 const { brute } = require('./aides/fausses-fiches');
 
 const relation = (b, id) => b.fiches.find((f) => f.id === id).porteurIds;
+// Une fusion réussie dit aussi les deux noms, pour le journal de l'équipe.
+const NOMS_FUSION = { nom: 'CHUM', nomDoublon: 'C.H.U.M.' };
 const fusion = async (b, par = TESS) => b.porteursService.fusionner({ doublon: await repereDe(b, 'C.H.U.M.'), garde: await repereDe(b, 'CHUM'), par });
 
 test('la liste des porteurs : ressources comptées, placé ou non, lien avec le bottin sans aucune lecture de plus', async () => {
@@ -76,7 +78,7 @@ test('modifier un porteur : seul ce qui change est écrit ; le renommer ne réé
   const b = banc();
   const repere = await repereDe(b, 'C.H.U.M.');
   const r = await b.porteursService.enregistrer({ repere, valeurs: { nom: 'Centre hospitalier', adresse: '', latitude: 45.5, longitude: -73.6 }, par: TESS });
-  assert.deepEqual(r, { ok: true, id: repere });
+  assert.deepEqual(r, { ok: true, id: repere, nom: 'Centre hospitalier' });
   assert.deepEqual(b.de('mettreAJourPorteur'), [{ id: 'id-notion-doublon', valeurs: { nom: 'Centre hospitalier', latitude: 45.5, longitude: -73.6 } }]);
   assert.equal(b.de('mettreAJourFiche').length, 0);
   assert.equal(b.faux.de('pages.create').length, 0);
@@ -130,7 +132,7 @@ test('une personne en lecture seule ne fait aucun geste sur les porteurs', async
 test('fusion complète : chaque fiche du doublon, publiée ou écartée, passe au porteur gardé sans doublon dans la relation, puis le doublon va à la corbeille', async () => {
   const b = banc();
   const r = await fusion(b);
-  assert.deepEqual(r, { ok: true, faites: 3, historique: true, archive: true });
+  assert.deepEqual(r, { ok: true, faites: 3, historique: true, archive: true, ...NOMS_FUSION });
   assert.deepEqual(relation(b, 'id-notion-a'), ['id-notion-chum']);
   assert.deepEqual(relation(b, 'id-notion-b'), ['id-notion-chum'], 'le porteur gardé n\'y est qu\'une fois');
   assert.deepEqual(relation(b, 'id-notion-c'), ['id-notion-chum', 'id-notion-justine'], 'la fiche écartée suit aussi');
@@ -174,7 +176,7 @@ test('fusion reprise : relancer termine le travail sans rien refaire', async () 
   await fusion(b);
   panne = false;
   const r = await fusion(b);
-  assert.deepEqual(r, { ok: true, faites: 2, historique: true, archive: true });
+  assert.deepEqual(r, { ok: true, faites: 2, historique: true, archive: true, ...NOMS_FUSION });
   assert.deepEqual(b.de('mettreAJourFiche').map((a) => a.id), ['id-notion-a', 'id-notion-b', 'id-notion-b', 'id-notion-c'], 'la fiche déjà faite n\'est pas réécrite');
   assert.deepEqual(b.versionsEcrites().map((v) => v.fiche), ['id-notion-a', 'id-notion-b', 'id-notion-c'], 'une seule version par fiche');
   assert.deepEqual(b.de('archiverPorteur'), ['id-notion-doublon']);
@@ -194,7 +196,7 @@ test('le doublon n\'est pas mis à la corbeille tant qu\'une fiche, même écart
   assert.deepEqual(r, { ok: false, code: 'interrompue', faites: 3, restantes: 1 });
   assert.equal(c.de('archiverPorteur').length, 0);
   assert.ok(c.porteurs.some((p) => p.id === 'id-notion-doublon'));
-  assert.deepEqual(await fusion(c), { ok: true, faites: 1, historique: true, archive: true });
+  assert.deepEqual(await fusion(c), { ok: true, faites: 1, historique: true, archive: true, ...NOMS_FUSION });
 });
 
 test('fusion : chaque fiche est changée sous son verrou ; une fiche occupée arrête le geste sans rien perdre', async () => {
@@ -212,7 +214,7 @@ test('fusion : chaque fiche est changée sous son verrou ; une fiche occupée ar
   assert.deepEqual(await fusion(d), { ok: false, code: 'occupee', faites: 1, restantes: 2 });
   assert.equal(d.de('archiverPorteur').length, 0);
   await d.verrous.rendreVerrou('fiche:id-notion-b');
-  assert.deepEqual(await fusion(d), { ok: true, faites: 2, historique: true, archive: true });
+  assert.deepEqual(await fusion(d), { ok: true, faites: 2, historique: true, archive: true, ...NOMS_FUSION });
 });
 
 test('fusion : une version qui ne s\'écrit pas remet la fiche comme avant, pour que la relance refasse les deux ; sans base des versions, la fusion se fait et le dit', async () => {
@@ -225,7 +227,7 @@ test('fusion : une version qui ne s\'écrit pas remet la fiche comme avant, pour
   assert.equal(b.de('archiverPorteur').length, 0);
   const { NOTION_DB_VERSIONS, ...sansVersions } = b.env;
   const c = banc({ env: sansVersions });
-  assert.deepEqual(await fusion(c), { ok: true, faites: 3, historique: false, archive: true });
+  assert.deepEqual(await fusion(c), { ok: true, faites: 3, historique: false, archive: true, ...NOMS_FUSION });
 });
 
 test('fusion : le temps compté arrête proprement, et la suite se relance', async () => {
@@ -234,7 +236,7 @@ test('fusion : le temps compté arrête proprement, et la suite se relance', asy
   assert.deepEqual(await fusion(b), { ok: false, code: 'a-poursuivre', faites: 2, restantes: 1 });
   assert.equal(b.de('archiverPorteur').length, 0);
   t = 0;
-  assert.deepEqual(await fusion(b), { ok: true, faites: 1, historique: true, archive: true });
+  assert.deepEqual(await fusion(b), { ok: true, faites: 1, historique: true, archive: true, ...NOMS_FUSION });
 });
 
 test('fusion refusée : un porteur dans lui-même, un porteur inconnu, une fusion déjà en cours', async () => {
@@ -251,7 +253,7 @@ test('fusion refusée : un porteur dans lui-même, un porteur inconnu, une fusio
 test('fusionner un porteur sans fiche : il va simplement à la corbeille', async () => {
   const b = banc();
   const r = await b.porteursService.fusionner({ doublon: await repereDe(b, 'Porteur sans fiche'), garde: await repereDe(b, 'CHUM'), par: TESS });
-  assert.deepEqual(r, { ok: true, faites: 0, historique: true, archive: true });
+  assert.deepEqual(r, { ok: true, faites: 0, historique: true, archive: true, nom: 'CHUM', nomDoublon: 'Porteur sans fiche' });
   assert.deepEqual(b.de('archiverPorteur'), ['id-notion-vide']);
   assert.equal(FICHES().length, b.fiches.length);
 });

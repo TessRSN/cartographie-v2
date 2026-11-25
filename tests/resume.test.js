@@ -9,14 +9,15 @@ const ENV = { CONTRIBUTIONS: 'oui', CRON_SECRET: 'secret-du-cron', SITE_URL: 'ht
 const requete = (headers = {}, method = 'GET') => ({ method, query: {}, headers: { host: 'carto.exemple', ...headers } });
 const autorise = { authorization: 'Bearer secret-du-cron' };
 
-function banc({ env = ENV, enAttente = [{ titre: 'Nouvelle : X', proposeLe: '2026-11-20T15:00:00.000Z' }], destinataires = ['a@exemple.org', 'b@exemple.org'], panne = null } = {}) {
+// equipe : les personnes actives, avec leur rôle et leur réglage du résumé ; par défaut, les destinataires, en Approbation.
+function banc({ env = ENV, enAttente = [{ titre: 'Nouvelle : X', proposeLe: '2026-11-20T15:00:00.000Z' }], destinataires = ['a@exemple.org', 'b@exemple.org'], equipe = destinataires.map((courriel) => ({ nom: '', courriel, role: 'approbation', resume: true })), panne = null } = {}) {
   const envois = [];
   const deps = {
     env, journal: () => {},
     limites: {},
     propositions: {
       async listerPropositions({ statut }) { assert.equal(statut, 'ouvertes', 'nouvelles et en vérification'); if (panne === 'notion') throw new Error('Notion en panne'); return enAttente; },
-      async approbateursAPrevenir() { return destinataires; },
+      async equipe() { return equipe; },
     },
     courriels: { async resumeHebdomadaire(m) { envois.push(m); if (panne === m.a) return { envoye: false }; return { envoye: true }; } },
   };
@@ -78,4 +79,39 @@ test('autre méthode que GET : 405', async () => {
   const b = banc();
   const res = await appeler(b.gestionnaire, requete(autorise, 'POST'));
   assert.equal(res.code, 405);
+});
+
+// ─── Modifications de l'équipe : annoncées à l'Administration seulement ───
+const ADMIN = 'admin@exemple.org'; const APPRO = 'appro@exemple.org'; const LECTRICE = 'lectrice@exemple.org'; const ADMIN_SANS = 'sans@exemple.org';
+const EQUIPE = [
+  { nom: 'A', courriel: ADMIN, role: 'administration', resume: true },
+  { nom: 'B', courriel: APPRO, role: 'approbation', resume: true },
+  { nom: 'C', courriel: LECTRICE, role: 'lecture', resume: true },
+  { nom: 'D', courriel: ADMIN_SANS, role: 'administration', resume: false },
+];
+const DU_PUBLIC = { genre: 'modification', titre: 'Modification : Cohorte X', proposeLe: '2026-11-20T15:00:00.000Z' };
+const DE_L_EQUIPE = { genre: 'equipe', titre: "Modification de l'équipe : Outil Y", proposeLe: '2026-11-21T15:00:00.000Z' };
+const titres = (m) => m.propositions.map((p) => p.titre);
+
+test('une modification de l\'équipe n\'est annoncée qu\'aux personnes en Administration ; les autres ne voient que les propositions du public', async () => {
+  const b = banc({ equipe: EQUIPE, enAttente: [DU_PUBLIC, DE_L_EQUIPE] });
+  const res = await appeler(b.gestionnaire, requete(autorise));
+  assert.deepEqual(res.corps, { ok: true, enAttente: 2, envoyes: 3 });
+  assert.deepEqual(b.envois.map((m) => m.a), [ADMIN, APPRO, LECTRICE], 'un courriel par personne, aucun à qui a arrêté le résumé');
+  assert.deepEqual(titres(b.envois[0]), [DU_PUBLIC.titre, DE_L_EQUIPE.titre]);
+  assert.deepEqual(titres(b.envois[1]), [DU_PUBLIC.titre]);
+  assert.deepEqual(titres(b.envois[2]), [DU_PUBLIC.titre]);
+  assert.deepEqual(b.envois[0].propositions[1], { titre: DE_L_EQUIPE.titre, proposeLe: DE_L_EQUIPE.proposeLe }, 'la même forme qu\'avant');
+});
+
+test('s\'il n\'y a que des modifications de l\'équipe, seules les personnes en Administration reçoivent le résumé', async () => {
+  const b = banc({ equipe: EQUIPE, enAttente: [DE_L_EQUIPE] });
+  const res = await appeler(b.gestionnaire, requete(autorise));
+  assert.deepEqual(res.corps, { ok: true, enAttente: 1, envoyes: 1 });
+  assert.deepEqual(b.envois.map((m) => m.a), [ADMIN]);
+  assert.deepEqual(titres(b.envois[0]), [DE_L_EQUIPE.titre]);
+  // Sans personne en Administration à prévenir : aucun courriel.
+  const c = banc({ equipe: EQUIPE.filter((x) => x.courriel !== ADMIN), enAttente: [DE_L_EQUIPE] });
+  assert.deepEqual((await appeler(c.gestionnaire, requete(autorise))).corps, { ok: true, enAttente: 1, envoyes: 0 });
+  assert.equal(c.envois.length, 0);
 });

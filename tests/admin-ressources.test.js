@@ -43,7 +43,7 @@ function requete(method, action, { body, query = {}, headers = {}, cookie = temo
 // Le vrai module des ressources et le vrai module des versions, sur de fausses bases Notion.
 function banc({ env = ENV, pannes = {}, pannesVersions = {} } = {}) {
   const equipe = [
-    { nom: 'Tess Berthier', courriel: TESS, role: 'approbation', resume: true },
+    { nom: 'Tess Berthier', courriel: TESS, role: 'administration', resume: true },
     { nom: 'Léa Lecture', courriel: LEA, role: 'lecture', resume: true },
   ];
   const base = fausseBase({
