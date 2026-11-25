@@ -9,7 +9,7 @@ const OPTIONS = { typePrincipal: ['Logiciel ou application'], secondType: [], et
 const NOUVELLE = { nom: { apres: 'Outil X' }, typePrincipal: { apres: 'Logiciel ou application' }, phrase: { apres: 'Une phrase.' }, lien: { apres: 'https://x.org' } };
 
 // Banc d'essai : tout ce qui touche Notion, les courriels et le géocodage est factice et noté.
-function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', contact: 'a@b.org', porteurIds: [] }, pannes = {}, approbateurs = [APPROBATEUR], fichesExistantes = {}, porteurs = [], lent = 0, verrous, partage } = {}) {
+function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', contact: 'a@b.org', porteurIds: [] }, pannes = {}, approbateurs = [APPROBATEUR], lecteurs = [], equipe = [{ nom: 'Tess Berthier', courriel: APPROBATEUR, role: 'administration' }], fichesExistantes = {}, porteurs = [], lent = 0, verrous, partage } = {}) {
   const appels = partage ? partage.appels : [];
   const noter = (nom, args) => { appels.push({ nom, args }); if (pannes[nom]) { const e = pannes[nom]; if (typeof e === 'function') { const r = e(); if (r) throw r; } else throw e; } };
   const prop = partage ? partage.prop : {
@@ -26,7 +26,17 @@ function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', con
     async creerPorteur(p) { noter('creerPorteur', p); return `porteur-${p.nom}`; },
   };
   const propositions = {
-    async estApprobateur(c) { return approbateurs.includes(c); },
+    // Toute personne active de l'équipe, lecture seule comprise ; seuls les autres rôles décident.
+    async estApprobateur(c) { return approbateurs.includes(c) || lecteurs.includes(c); },
+    async peutDecider(c) { return approbateurs.includes(c); },
+    async equipe() { return equipe; },
+    async marquerVerification(id) { noter('marquerVerification', id); prop.statut = 'verification'; },
+    async ecrireAvis(id, avis) {
+      if (lent) await new Promise((r) => setTimeout(r, lent));
+      noter('ecrireAvis', { id, ...avis });
+      prop.contenu = { ...prop.contenu, avis: [...((prop.contenu && prop.contenu.avis) || []).filter((a) => a.courriel !== avis.courriel), avis] };
+      return prop.contenu.avis;
+    },
     async lireProposition(id) { noter('lireProposition', id); return id === prop.id ? { ...prop } : null; },
     async marquerDecision(id, d) { noter('marquerDecision', { id, ...d }); prop.statut = d.statut; },
     async lierFiche(id, ficheId) { noter('lierFiche', { id, ficheId }); prop.ficheId = ficheId; },
@@ -48,6 +58,7 @@ function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', con
     maintenant: () => Date.UTC(2026, 10, 24, 15),
     journal: () => {},
     verrous,
+    attendre: () => new Promise((r) => setTimeout(r, 5)),
   });
   const de = (nom) => appels.filter((a) => a.nom === nom).map((a) => a.args);
   return { approbation, appels, de, prop };
@@ -389,4 +400,148 @@ test('modifier un lien entre fiches garde les liens vers des fiches qui ne sont 
   const ecrit = b.de('mettreAJourFiche')[0].p;
   assert.deepEqual(ecrit[PROP.reposeSur], { relation: [{ id: 'fiche-c' }, { id: 'fiche-neuve' }, { id: 'fiche-cachee' }] });
   assert.ok(!(PROP.faitPartieDe in ecrit));
+});
+
+// ─── Lot 1 du nouveau panneau : second regard, avis, rôles ───
+const MAX = 'max@exemple.ca';
+const CAM = 'cam@exemple.ca';
+const EQUIPE = [{ nom: 'Tess Berthier', courriel: APPROBATEUR, role: 'administration' }, { nom: 'Max Lafrenière', courriel: MAX, role: 'approbation' }, { nom: 'Cam', courriel: CAM, role: 'lecture' }];
+const enVerification = (b, extra = {}) => b.approbation.mettreEnVerification({ propositionId: 'prop-1', par: APPROBATEUR, ...extra });
+const avis = (b, extra = {}) => b.approbation.donnerAvis({ propositionId: 'prop-1', par: APPROBATEUR, sens: 'favorable', commentaire: '', ...extra });
+const ecritures = (b) => ['creerFiche', 'mettreAJourFiche', 'marquerDecision', 'marquerVerification', 'ecrireAvis', 'lierFiche', 'courriel.approuvee', 'courriel.refusee'].reduce((n, nom) => n + b.de(nom).length, 0);
+
+test('une personne en lecture seule ne peut faire aucun geste, même en appelant le module directement', async () => {
+  const b = banc({ lecteurs: [CAM], equipe: EQUIPE });
+  const refus = { ok: false, code: 'non-approbateur' };
+  assert.deepEqual(await approuver(b, { approbateur: CAM }), refus);
+  assert.deepEqual(await b.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Non', approbateur: CAM }), refus);
+  assert.deepEqual(await enVerification(b, { par: CAM }), refus);
+  assert.deepEqual(await avis(b, { par: CAM }), refus);
+  assert.deepEqual(await enVerification(b, { par: 'intrus@exemple.org' }), refus);
+  assert.deepEqual(await avis(b, { par: 'intrus@exemple.org' }), refus);
+  assert.equal(b.appels.length, 0);
+});
+
+test('demander un second regard : la proposition passe en vérification, rien d\'autre ne bouge', async () => {
+  const verrous = verrousPartages();
+  const b = banc({ verrous });
+  assert.deepEqual(await enVerification(b), { ok: true });
+  assert.deepEqual(b.de('marquerVerification'), ['prop-1']);
+  assert.equal(b.prop.statut, 'verification');
+  assert.equal(ecritures(b), 1, 'ni fiche, ni décision, ni courriel');
+  assert.equal(await verrous.prendreVerrou('proposition:prop-1'), true, 'le verrou est rendu');
+});
+
+test('second regard : déjà en vérification, rien n\'est réécrit ; tranchée ou introuvable, refusé', async () => {
+  const deja = banc({ proposition: { statut: 'verification' } });
+  assert.deepEqual(await enVerification(deja), { ok: true });
+  assert.equal(ecritures(deja), 0);
+  for (const statut of ['approuvee', 'refusee', null]) {
+    const b = banc({ proposition: { statut } });
+    assert.deepEqual(await enVerification(b), { ok: false, code: 'deja-tranchee' }, String(statut));
+    assert.equal(ecritures(b), 0);
+  }
+  assert.deepEqual(await enVerification(banc(), { propositionId: 'autre' }), { ok: false, code: 'introuvable' });
+  const panne = banc({ pannes: { marquerVerification: new Error('Notion en panne') } });
+  assert.deepEqual(await enVerification(panne), { ok: false, code: 'notion' });
+});
+
+test('second regard et approbation en même temps sur deux instances : un seul geste passe', async () => {
+  const verrous = verrousPartages();
+  const a = banc({ lent: 20, verrous });
+  const b = banc({ verrous, partage: a });
+  const resultats = await Promise.all([approuver(a), enVerification(b)]);
+  assert.deepEqual(resultats.map((r) => r.ok), [true, false]);
+  assert.equal(resultats[1].code, 'occupee');
+  assert.equal(a.de('marquerVerification').length, 0);
+});
+
+test('donner un avis : enregistré au nom de la personne, sur une proposition en attente ou en vérification', async () => {
+  for (const statut of ['attente', 'verification']) {
+    const b = banc({ proposition: { statut }, approbateurs: [APPROBATEUR, MAX], equipe: EQUIPE });
+    const retour = await avis(b, { par: MAX, sens: 'defavorable', commentaire: '  Le lien   est mort.  ' });
+    assert.equal(retour.ok, true, statut);
+    const attendu = { courriel: MAX, nom: 'Max Lafrenière', sens: 'defavorable', commentaire: 'Le lien est mort.', le: '2026-11-24T15:00:00.000Z' };
+    assert.deepEqual(b.de('ecrireAvis'), [{ id: 'prop-1', ...attendu }]);
+    assert.deepEqual(retour.avis, [attendu]);
+    assert.equal(b.prop.statut, statut, 'un avis ne décide rien');
+    assert.equal(ecritures(b), 1);
+  }
+});
+
+test('un nouvel avis de la même personne remplace le sien, sans effacer celui des autres', async () => {
+  const b = banc({ approbateurs: [APPROBATEUR, MAX], equipe: EQUIPE });
+  await avis(b);
+  await avis(b, { par: MAX, sens: 'defavorable' });
+  const retour = await avis(b, { sens: 'defavorable', commentaire: 'Finalement non.' });
+  assert.deepEqual(retour.avis.map((a) => [a.courriel, a.sens, a.commentaire]), [[MAX, 'defavorable', ''], [APPROBATEUR, 'defavorable', 'Finalement non.']]);
+});
+
+test('aucun avis sur une proposition approuvée, refusée ou introuvable', async () => {
+  for (const statut of ['approuvee', 'refusee']) {
+    const b = banc({ proposition: { statut } });
+    assert.deepEqual(await avis(b), { ok: false, code: 'deja-tranchee' }, statut);
+    assert.equal(ecritures(b), 0);
+  }
+  assert.deepEqual(await avis(banc(), { propositionId: 'autre' }), { ok: false, code: 'introuvable' });
+});
+
+test('un avis sans sens reconnu, ou un commentaire trop long, est refusé sans écriture ni verrou gardé', async () => {
+  const verrous = verrousPartages();
+  const b = banc({ verrous });
+  for (const sens of ['', 'peut-être', null, undefined, ['favorable']]) {
+    const retour = await avis(b, { sens });
+    assert.equal(retour.ok, false);
+    assert.equal(retour.code, 'invalide');
+  }
+  const long = await avis(b, { commentaire: 'x'.repeat(1001) });
+  assert.equal(long.code, 'invalide');
+  assert.ok(long.erreurs.commentaire);
+  assert.equal(ecritures(b), 0);
+  assert.equal(await verrous.prendreVerrou('proposition:prop-1'), true);
+});
+
+test('deux avis donnés en même temps sur deux instances : les deux sont gardés', async () => {
+  const verrous = verrousPartages();
+  const a = banc({ lent: 15, verrous, approbateurs: [APPROBATEUR, MAX], equipe: EQUIPE });
+  const b = banc({ lent: 15, verrous, approbateurs: [APPROBATEUR, MAX], equipe: EQUIPE, partage: a });
+  const resultats = await Promise.all([avis(a), avis(b, { par: MAX, sens: 'defavorable' })]);
+  assert.deepEqual(resultats.map((r) => r.ok), [true, true]);
+  assert.deepEqual(a.prop.contenu.avis.map((x) => x.courriel).sort(), [MAX, APPROBATEUR].sort());
+  assert.equal(await verrous.prendreVerrou('proposition:prop-1'), true);
+});
+
+test('un avis donné pendant un geste qui dure : « occupee » après quelques essais, rien d\'écrit', async () => {
+  const verrous = verrousPartages();
+  await verrous.prendreVerrou('proposition:prop-1');
+  const b = banc({ verrous });
+  assert.deepEqual(await avis(b), { ok: false, code: 'occupee' });
+  assert.equal(ecritures(b), 0);
+});
+
+test('si Notion échoue pendant l\'avis : code « notion », verrou rendu', async () => {
+  const verrous = verrousPartages();
+  const b = banc({ verrous, pannes: { ecrireAvis: new Error('Notion en panne') } });
+  assert.deepEqual(await avis(b), { ok: false, code: 'notion' });
+  assert.equal(await verrous.prendreVerrou('proposition:prop-1'), true);
+});
+
+test('une proposition en vérification s\'approuve et se refuse comme une proposition en attente', async () => {
+  const b = banc({ proposition: { statut: 'verification' } });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.equal(b.de('creerFiche').length, 1);
+  assert.equal(b.de('marquerDecision')[0].statut, 'approuvee');
+  assert.deepEqual(await approuver(b), { ok: false, code: 'deja-tranchee' }, 'pas appliquée deux fois');
+  const c = banc({ proposition: { statut: 'verification' } });
+  assert.deepEqual(await c.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Doublon.', approbateur: APPROBATEUR }), { ok: true, courriel: true });
+  assert.equal(c.de('marquerDecision')[0].statut, 'refusee');
+});
+
+test('examiner signale aussi les champs bousculés d\'une proposition en vérification', async () => {
+  const fiche = { id: 'fiche-1', nom: 'Cohorte X', contact: 'autre@b.org', porteurIds: [], statutFiche: 'Publiée' };
+  const contenu = { propose: { contact: { avant: 'a@b.org', apres: 'c@d.org' } }, applique: null, porteursNouveaux: {} };
+  const b = banc({ fiche, proposition: { genre: 'modification', ficheId: 'fiche-1', statut: 'verification', contenu } });
+  assert.deepEqual((await b.approbation.examiner('prop-1')).bouscules, ['contact']);
+  const tranchee = banc({ fiche, proposition: { genre: 'modification', ficheId: 'fiche-1', statut: 'approuvee', contenu } });
+  assert.deepEqual((await tranchee.approbation.examiner('prop-1')).bouscules, []);
 });

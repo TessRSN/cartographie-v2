@@ -62,7 +62,7 @@ test('une proposition créée se relit telle quelle, en attente', async () => {
   assert.deepEqual(lue, {
     id, genre: 'modification', ficheId: 'fiche-1', courriel: 'p@exemple.org', nomProposant: 'Pat', lienAvecRessource: 'responsable',
     titre: 'Modification : Cohorte X', proposeLe: '2026-11-24T15:30:00.000Z', statut: 'attente',
-    decidePar: null, decideLe: null, commentaire: '', logoPropose: null, contenu: base.contenu,
+    verificationLe: null, decidePar: null, decideLe: null, commentaire: '', logoPropose: null, contenu: base.contenu,
   });
 });
 
@@ -144,7 +144,11 @@ test('listerPropositions filtre par statut, trie par date et ne renvoie pas le c
   assert.deepEqual(client.derniereRequete.filter, { property: COLONNES.statut, select: { equals: STATUTS.attente } });
   assert.deepEqual(client.derniereRequete.sorts, [{ property: COLONNES.proposeLe, direction: 'ascending' }]);
   await propositions.listerPropositions({ statut: 'tranchees' });
-  assert.deepEqual(client.derniereRequete.filter, { property: COLONNES.statut, select: { does_not_equal: STATUTS.attente } });
+  // Tranchées : ni « En attente » ni « En vérification ».
+  assert.deepEqual(client.derniereRequete.filter, { and: [
+    { property: COLONNES.statut, select: { does_not_equal: STATUTS.attente } },
+    { property: COLONNES.statut, select: { does_not_equal: STATUTS.verification } },
+  ] });
   assert.deepEqual(client.derniereRequete.sorts, [{ property: COLONNES.decideLe, direction: 'descending' }]);
 });
 
@@ -154,8 +158,9 @@ test('enAttenteSur interroge les propositions en attente de la fiche', async () 
   assert.equal(await propositions.enAttenteSur('fiche-1'), false);
   await propositions.creerProposition(base);
   assert.equal(await propositions.enAttenteSur('fiche-1'), true);
+  // Une proposition en vérification attend encore une décision : elle compte aussi.
   assert.deepEqual(client.derniereRequete.filter, { and: [
-    { property: COLONNES.statut, select: { equals: STATUTS.attente } },
+    { or: [{ property: COLONNES.statut, select: { equals: STATUTS.attente } }, { property: COLONNES.statut, select: { equals: STATUTS.verification } }] },
     { property: COLONNES.ficheVisee, relation: { contains: 'fiche-1' } },
   ] });
 });
@@ -197,4 +202,175 @@ test('le résumé hebdomadaire va aux approbateurs actifs qui ne l\'ont pas refu
   const { client } = fauxNotion({ approbateurs: [approbateur('a@exemple.ca'), approbateur('b@exemple.ca', true, true), approbateur('c@exemple.ca', true, false), approbateur('d@exemple.ca', false)] });
   const propositions = creerPropositions(client, env);
   assert.deepEqual(await propositions.approbateursAPrevenir(), ['a@exemple.ca', 'c@exemple.ca']);
+});
+
+// ─── Lot 1 du nouveau panneau : état « En vérification », rôles, équipe, avis ───
+const { ROLES, COLONNES_APPROBATEUR, avisDe } = require('../lib/propositions');
+const membre = ({ nom = '', courriel, actif = true, role, sansResume = false }) => ({ id: String(courriel), properties: {
+  Nom: { title: nom ? [{ plain_text: nom }] : [] }, Courriel: { email: courriel }, Actif: { checkbox: actif },
+  'Sans résumé hebdomadaire': { checkbox: sansResume }, 'Rôle': { select: role ? { name: role } : null },
+} });
+
+test('les libellés Notion du lot 1 : statut, date de mise en vérification, rôles', () => {
+  assert.equal(STATUTS.verification, 'En vérification');
+  assert.equal(COLONNES.verificationLe, 'Mise en vérification le');
+  assert.equal(COLONNES_APPROBATEUR.role, 'Rôle');
+  assert.deepEqual(ROLES, { administration: 'Administration', approbation: 'Approbation', lecture: 'Lecture seule' });
+});
+
+test('marquerVerification passe la proposition « En vérification » et date le passage', async () => {
+  const { client, pages } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  const id = await propositions.creerProposition(base);
+  await propositions.marquerVerification(id);
+  assert.equal(pages.get(id).properties[COLONNES.statut].select.name, 'En vérification');
+  const lue = await propositions.lireProposition(id);
+  assert.equal(lue.statut, 'verification');
+  assert.equal(lue.verificationLe, '2026-11-24T15:30:00.000Z');
+  assert.equal(lue.decidePar, null);
+  assert.deepEqual(lue.contenu, base.contenu, 'le contenu ne bouge pas');
+});
+
+test('roleDe : le rôle de la ligne, « approbation » sans rôle, null si absente ou inactive', async () => {
+  const { client } = fauxNotion({ approbateurs: [
+    membre({ nom: 'Tess B', courriel: ' Tess@Exemple.ca ', role: 'Administration' }),
+    membre({ nom: 'Max', courriel: 'max@exemple.ca', role: 'Approbation' }),
+    membre({ nom: 'Cam', courriel: 'cam@exemple.ca', role: 'Lecture seule' }),
+    membre({ nom: 'Sans rôle', courriel: 'sans@exemple.ca' }),
+    membre({ nom: 'Partie', courriel: 'partie@exemple.ca', actif: false, role: 'Administration' }),
+    membre({ nom: 'Bizarre', courriel: 'bizarre@exemple.ca', role: 'Super-pouvoirs' }),
+    membre({ nom: 'Sans courriel', courriel: null, role: 'Administration' }),
+  ] });
+  const propositions = creerPropositions(client, env);
+  assert.equal(await propositions.roleDe('TESS@exemple.ca '), 'administration');
+  assert.equal(await propositions.roleDe('max@exemple.ca'), 'approbation');
+  assert.equal(await propositions.roleDe('cam@exemple.ca'), 'lecture');
+  assert.equal(await propositions.roleDe('sans@exemple.ca'), 'approbation');
+  assert.equal(await propositions.roleDe('partie@exemple.ca'), null);
+  assert.equal(await propositions.roleDe('inconnue@exemple.ca'), null);
+  assert.equal(await propositions.roleDe(''), null);
+  assert.equal(await propositions.roleDe(null), null);
+  // Un rôle que le code ne connaît pas donne le moins de droits possible.
+  assert.equal(await propositions.roleDe('bizarre@exemple.ca'), 'lecture');
+});
+
+test('peutDecider : approbation et administration seulement ; estApprobateur : toute personne active', async () => {
+  const { client } = fauxNotion({ approbateurs: [
+    membre({ courriel: 'tess@exemple.ca', role: 'Administration' }), membre({ courriel: 'max@exemple.ca' }),
+    membre({ courriel: 'cam@exemple.ca', role: 'Lecture seule' }), membre({ courriel: 'partie@exemple.ca', actif: false, role: 'Approbation' }),
+  ] });
+  const propositions = creerPropositions(client, env);
+  assert.equal(await propositions.peutDecider('tess@exemple.ca'), true);
+  assert.equal(await propositions.peutDecider('max@exemple.ca'), true);
+  assert.equal(await propositions.peutDecider('cam@exemple.ca'), false);
+  assert.equal(await propositions.peutDecider('partie@exemple.ca'), false);
+  assert.equal(await propositions.peutDecider('autre@exemple.ca'), false);
+  assert.equal(await propositions.estApprobateur('cam@exemple.ca'), true);
+  assert.equal(await propositions.estApprobateur('partie@exemple.ca'), false);
+});
+
+test("equipe : les personnes actives, avec nom, courriel, rôle et résumé", async () => {
+  const { client } = fauxNotion({ approbateurs: [
+    membre({ nom: 'Tess Berthier', courriel: 'Tess@exemple.ca', role: 'Administration' }),
+    membre({ courriel: 'max@exemple.ca', sansResume: true }),
+    membre({ nom: 'Partie', courriel: 'partie@exemple.ca', actif: false }),
+  ] });
+  const propositions = creerPropositions(client, env);
+  assert.deepEqual(await propositions.equipe(), [
+    { nom: 'Tess Berthier', courriel: 'tess@exemple.ca', role: 'administration', resume: true },
+    { nom: '', courriel: 'max@exemple.ca', role: 'approbation', resume: false },
+  ]);
+});
+
+const AVIS_TESS = { courriel: 'tess@exemple.ca', nom: 'Tess Berthier', sens: 'favorable', commentaire: 'Bien.', le: '2026-11-24T15:30:00.000Z' };
+const AVIS_MAX = { courriel: 'max@exemple.ca', nom: 'Max', sens: 'defavorable', commentaire: '', le: '2026-11-24T16:00:00.000Z' };
+
+test('ecrireAvis ajoute un avis dans le bloc JSON, sous la clé « avis », sans toucher au reste', async () => {
+  const { client } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  const id = await propositions.creerProposition(base);
+  assert.deepEqual(await propositions.ecrireAvis(id, AVIS_TESS), [AVIS_TESS]);
+  assert.deepEqual(await propositions.ecrireAvis(id, AVIS_MAX), [AVIS_TESS, AVIS_MAX]);
+  const lue = await propositions.lireProposition(id);
+  assert.deepEqual(lue.contenu, { ...base.contenu, avis: [AVIS_TESS, AVIS_MAX] });
+  assert.equal(lue.statut, 'attente');
+});
+
+test('un seul avis par personne : le nouvel avis remplace le sien, pas celui des autres', async () => {
+  const { client } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  const id = await propositions.creerProposition(base);
+  await propositions.ecrireAvis(id, AVIS_TESS);
+  await propositions.ecrireAvis(id, AVIS_MAX);
+  const second = { ...AVIS_TESS, courriel: ' TESS@exemple.ca', sens: 'defavorable', commentaire: 'Finalement non.', le: '2026-11-25T09:00:00.000Z' };
+  const liste = await propositions.ecrireAvis(id, second);
+  assert.deepEqual(liste, [AVIS_MAX, { ...second, courriel: 'tess@exemple.ca' }]);
+});
+
+test('la décision garde les avis déjà donnés', async () => {
+  const { client } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  const id = await propositions.creerProposition(base);
+  await propositions.ecrireAvis(id, AVIS_TESS);
+  await propositions.marquerDecision(id, { statut: 'approuvee', approbateur: 'max@exemple.ca', applique: { contact: 'c@d.org' } });
+  const lue = await propositions.lireProposition(id);
+  assert.deepEqual(lue.contenu.avis, [AVIS_TESS]);
+  assert.deepEqual(lue.contenu.applique, { contact: 'c@d.org' });
+});
+
+test("ecrireAvis échoue si le bloc JSON est absent ou illisible, plutôt que d'écraser le contenu", async () => {
+  const { client, blocs } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  const id = await propositions.creerProposition(base);
+  blocs.get(id)[0].code.rich_text = [{ text: { content: '{ abîmé' } }];
+  await assert.rejects(() => propositions.ecrireAvis(id, AVIS_TESS));
+  blocs.set(id, []);
+  await assert.rejects(() => propositions.ecrireAvis(id, AVIS_TESS));
+});
+
+test('avisDe ne garde que les avis bien formés', () => {
+  assert.deepEqual(avisDe(null), []);
+  assert.deepEqual(avisDe({ avis: 'texte' }), []);
+  assert.deepEqual(avisDe({ avis: [AVIS_TESS, null, 'x', { courriel: 'a@b.ca', sens: 'peut-être' }, { sens: 'favorable' }, { courriel: 'm@b.ca', sens: 'defavorable', commentaire: 42, nom: ['x'], le: 7 }] }), [
+    AVIS_TESS, { courriel: 'm@b.ca', nom: '', sens: 'defavorable', commentaire: '', le: null },
+  ]);
+});
+
+test('listerPropositions sait rendre chacun des quatre états, les ouvertes et toutes', async () => {
+  const { client } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  await propositions.creerProposition(base);
+  const egal = (statut) => ({ property: COLONNES.statut, select: { equals: STATUTS[statut] } });
+  for (const statut of ['attente', 'verification']) {
+    await propositions.listerPropositions({ statut });
+    assert.deepEqual(client.derniereRequete.filter, egal(statut), statut);
+    assert.deepEqual(client.derniereRequete.sorts, [{ property: COLONNES.proposeLe, direction: 'ascending' }]);
+  }
+  for (const statut of ['approuvee', 'refusee']) {
+    await propositions.listerPropositions({ statut });
+    assert.deepEqual(client.derniereRequete.filter, egal(statut), statut);
+    assert.deepEqual(client.derniereRequete.sorts, [{ property: COLONNES.decideLe, direction: 'descending' }]);
+  }
+  await propositions.listerPropositions({ statut: 'ouvertes' });
+  assert.deepEqual(client.derniereRequete.filter, { or: [egal('attente'), egal('verification')] });
+  const toutes = await propositions.listerPropositions({ statut: 'toutes' });
+  assert.equal(client.derniereRequete.filter, undefined);
+  assert.equal(toutes.length, 1);
+  assert.equal(toutes[0].verificationLe, null);
+  assert.ok(!('contenu' in toutes[0]));
+  // Un statut inconnu retombe sur « attente », comme avant.
+  await propositions.listerPropositions({ statut: 'nimporte' });
+  assert.deepEqual(client.derniereRequete.filter, egal('attente'));
+});
+
+test('lireContenus rend le contenu de chaque proposition demandée, null si le bloc est illisible', async () => {
+  const { client, blocs } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  const ids = [];
+  for (let i = 0; i < 7; i++) ids.push(await propositions.creerProposition({ ...base, contenu: { propose: { nom: { apres: `N${i}` } } } }));
+  blocs.get(ids[3])[0].code.rich_text = [{ text: { content: 'pas du JSON' } }];
+  const contenus = await propositions.lireContenus(ids);
+  assert.equal(contenus.size, 7);
+  assert.deepEqual(contenus.get(ids[6]), { propose: { nom: { apres: 'N6' } } });
+  assert.equal(contenus.get(ids[3]), null);
 });
