@@ -4,6 +4,7 @@ const { creerApprobation } = require('../lib/approbation');
 const { PROP } = require('../lib/notion');
 
 const APPROBATEUR = 'tess@exemple.ca';
+const PNG_ESSAI = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 const OPTIONS = { typePrincipal: ['Logiciel ou application'], secondType: [], etat: ['Actif', 'Archivé'], portee: ['Le Québec'] };
 const NOUVELLE = { nom: { apres: 'Outil X' }, typePrincipal: { apres: 'Logiciel ou application' }, phrase: { apres: 'Une phrase.' }, lien: { apres: 'https://x.org' } };
 
@@ -37,6 +38,11 @@ function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', con
   const approbation = creerApprobation({
     notion, propositions, courriels,
     geocoder: async (adresse) => { noter('geocoder', adresse); return { latitude: 45.5, longitude: -73.5 }; },
+    fichiers: {
+      async telecharger(url) { noter('telecharger', url); return PNG_ESSAI; },
+      async deposer(f) { noter('deposer', f.nom); return 'depot-9'; },
+      proprieteFichier: (id, nom) => ({ files: [{ type: 'file_upload', file_upload: { id }, name: nom }] }),
+    },
     viderMemoire: () => noter('viderMemoire'),
     idParAdresse: async () => ({ 'cohorte-x': 'fiche-1', 'outil-x': 'fiche-neuve', cartagene: 'fiche-c' }),
     maintenant: () => Date.UTC(2026, 10, 24, 15),
@@ -336,4 +342,33 @@ test('un porteur nommé comme une méthode d\'objet ne reçoit pas une adresse f
   await approuver(b);
   assert.deepEqual(b.de('creerPorteur'), [{ nom: 'constructor', adresse: '' }]);
   assert.equal(b.de('geocoder').length, 0);
+});
+
+test('le logo proposé est recopié dans la fiche à l\'approbation', async () => {
+  const b = banc({ proposition: { logoPropose: { nom: 'logo.png', url: 'https://notion.exemple/x' } } });
+  assert.equal((await approuver(b)).ok, true);
+  assert.deepEqual(b.de('telecharger'), ['https://notion.exemple/x']);
+  assert.deepEqual(b.de('creerFiche')[0][PROP.logoFichier], { files: [{ type: 'file_upload', file_upload: { id: 'depot-9' }, name: 'logo.png' }] });
+});
+
+test('une modification qui ne porte que sur le logo est approuvable', async () => {
+  const b = banc({ proposition: { genre: 'modification', ficheId: 'fiche-1', logoPropose: { nom: 'logo.png', url: 'https://notion.exemple/x' }, contenu: { propose: {}, applique: null, porteursNouveaux: {}, logoFichier: 'logo.png' } } });
+  assert.equal((await approuver(b)).ok, true);
+  assert.ok(PROP.logoFichier in b.de('mettreAJourFiche')[0].p);
+});
+
+test("l'approbateur peut écarter le logo proposé ; sans logo, rien n'est téléchargé", async () => {
+  const b = banc({ proposition: { logoPropose: { nom: 'logo.png', url: 'https://notion.exemple/x' } } });
+  await approuver(b, { sansLogo: true });
+  assert.equal(b.de('telecharger').length, 0);
+  assert.ok(!(PROP.logoFichier in b.de('creerFiche')[0]));
+  const sans = banc();
+  await approuver(sans);
+  assert.equal(sans.de('telecharger').length, 0);
+});
+
+test('un logo illisible fait échouer l\'approbation sans écrire la fiche', async () => {
+  const b = banc({ proposition: { logoPropose: { nom: 'logo.png', url: 'https://notion.exemple/x' } }, pannes: { telecharger: new Error('adresse expirée') } });
+  assert.deepEqual(await approuver(b), { ok: false, code: 'notion' });
+  assert.equal(b.de('creerFiche').length + b.de('marquerDecision').length, 0);
 });

@@ -49,6 +49,7 @@ function banc({ env = ENV, approbateurs = [], autorise = true, pannes = {}, fich
       async lirePorteurs() { return [{ id: 'p1', nom: 'CHUM' }]; },
     },
     source: async () => ({ ressources: [{ nom: 'Cohorte X', adresse: 'cohorte-x' }], porteurs: [{ nom: 'CHUM' }], idParAdresse: { 'cohorte-x': 'fiche-1' } }),
+    fichiers: { async deposer(f) { noter('deposer', { nom: f.nom, type: f.type, taille: f.octets.length }); return 'depot-1'; } },
     approbation: { async approuver(a) { noter('approuver', a); return { ok: true, ficheId: 'fiche-9', courriel: true }; } },
   };
   const de = (nom) => appels.filter((a) => a.nom === nom).map((a) => a.args);
@@ -320,4 +321,44 @@ test("une panne en lisant les approbateurs n'empêche pas de prévenir l'équipe
   const res = await appeler(b.proposition, envoi(jeton('proposer', { courriel: 'pat@exemple.org' })));
   assert.deepEqual(res.corps, { ok: true, approuvee: false, courriel: true });
   assert.equal(b.de('nouvelleProposition').length, 1);
+});
+
+const PNG64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+test('un logo joint à la proposition est contrôlé, déposé dans Notion et attaché', async () => {
+  const b = banc();
+  const res = await appeler(b.proposition, envoi(jeton('proposer', { courriel: 'pat@exemple.org' }), { logoFichier: { nom: 'mon logo.PNG', donnees: PNG64 } }));
+  assert.equal(res.code, 200);
+  assert.deepEqual(b.de('deposer')[0], { nom: 'logo.png', type: 'image/png', taille: 70 });
+  const cree = b.de('creerProposition')[0];
+  assert.deepEqual(cree.logoDepot, { id: 'depot-1', nom: 'logo.png' });
+  assert.equal(cree.contenu.logoFichier, 'logo.png');
+});
+
+test('un fichier qui n\'est pas une image est refusé sans brûler le lien ni rien déposer', async () => {
+  const b = banc();
+  const res = await appeler(b.proposition, envoi(jeton('proposer', { courriel: 'pat@exemple.org' }), { logoFichier: { nom: 'x.png', donnees: Buffer.from('<html></html>').toString('base64') } }));
+  assert.equal(res.code, 400);
+  assert.ok(res.corps.erreurs.logo);
+  assert.equal(b.de('deposer').length + b.de('consommerJeton').length + b.de('creerProposition').length, 0);
+});
+
+test('changer seulement le logo compte comme une modification', async () => {
+  const b = banc();
+  const j = jeton('modifier', { courriel: 'pat@exemple.org', ficheId: 'fiche-1' });
+  const res = await appeler(b.proposition, envoi(j, { genre: 'modification', valeurs: {}, logoFichier: { nom: 'l.png', donnees: PNG64 } }));
+  assert.equal(res.code, 200);
+  assert.deepEqual(b.de('creerProposition')[0].contenu.propose, {});
+  assert.equal(b.de('creerProposition')[0].contenu.logoFichier, 'logo.png');
+});
+
+test('pas de logo en genre « à remplir par le RSN », et un dépôt en panne rend le lien', async () => {
+  const rsn = banc();
+  await appeler(rsn.proposition, envoi(jeton('proposer', { courriel: 'pat@exemple.org' }), { genre: 'rsn', valeurs: { nom: 'Outil X' }, logoFichier: { nom: 'l.png', donnees: PNG64 } }));
+  assert.equal(rsn.de('deposer').length, 0);
+  const panne = banc({ pannes: { deposer: true } });
+  const res = await appeler(panne.proposition, envoi(jeton('proposer', { courriel: 'pat@exemple.org' }), { logoFichier: { nom: 'l.png', donnees: PNG64 } }));
+  assert.equal(res.code, 502);
+  assert.equal(panne.de('libererJeton').length, 1);
+  assert.equal(panne.de('creerProposition').length, 0);
 });

@@ -7,6 +7,7 @@
 const { verifier } = require('../lib/jetons');
 const { valeursDepuisFiche } = require('../lib/notion');
 const { CHAMPS, LIENS_AVEC_RESSOURCE, nettoyer, calculerChangements } = require('../public/js/champs.js');
+const { verifierImage } = require('../lib/images');
 const { ouvertes, origineSure, memeOrigine, corpsDe, dependances } = require('../lib/contributions');
 
 const STATUT_ECARTEE = 'Écartée';
@@ -89,6 +90,13 @@ function creerGestionnaire(donnees) {
       const { valeurs, erreurs } = nettoyer(corps.valeurs, { role: 'proposant', options, genre });
       if (Object.keys(erreurs).length) return res.status(400).json({ erreurs });
 
+      // Logo joint : contrôlé ici, déposé dans Notion seulement quand tout le reste est valide.
+      let image = null;
+      if (corps.logoFichier && genre !== 'rsn') {
+        image = verifierImage(corps.logoFichier);
+        if (!image.ok) return res.status(400).json({ erreurs: { logo: image.erreur } });
+      }
+
       let avant = null; let nomFiche = valeurs.nom;
       if (modification) {
         const actuelle = await valeursActuelles(d, charge.ficheId);
@@ -96,7 +104,7 @@ function creerGestionnaire(donnees) {
         avant = actuelle.valeurs; nomFiche = actuelle.nom;
       }
       const propose = calculerChangements(avant, valeurs);
-      if (!Object.keys(propose).length) return res.status(400).json({ code: 'aucun-changement', erreur: "Vous n'avez rien modifié." });
+      if (!Object.keys(propose).length && !image) return res.status(400).json({ code: 'aucun-changement', erreur: "Vous n'avez rien modifié." });
 
       const existants = ((await d.source()).porteurs || []).map((p) => p.nom);
       const porteursNouveaux = adressesNouvelles(corps.porteursNouveaux, propose.porteurs && propose.porteurs.apres, existants);
@@ -107,11 +115,13 @@ function creerGestionnaire(donnees) {
       const titre = `${PREFIXES[genre]} : ${nomFiche}`;
       let propositionId;
       try {
+        const logoDepot = image ? { id: await d.fichiers.deposer(image), nom: image.nom } : null;
         propositionId = await d.propositions.creerProposition({
+          ...(logoDepot ? { logoDepot } : {}),
           genre, ficheId: modification ? charge.ficheId : null, courriel: charge.courriel,
           nomProposant: typeof corps.nomProposant === 'string' ? corps.nomProposant.replace(/\s+/g, ' ').trim().slice(0, 200) : '',
           lienAvecRessource: LIENS_AVEC_RESSOURCE.includes(corps.lienAvecRessource) ? corps.lienAvecRessource : 'aucun',
-          titre, contenu: { propose, applique: null, porteursNouveaux },
+          titre, contenu: { propose, applique: null, porteursNouveaux, ...(image ? { logoFichier: image.nom } : {}) },
         });
       } catch (err) {
         // Rien n'a été enregistré : le lien est rendu pour que la personne puisse réessayer.

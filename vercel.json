@@ -12,6 +12,9 @@
     },
     "api/proposition.js": {
       "maxDuration": 30
+    },
+    "api/logo.js": {
+      "maxDuration": 15
     }
   },
   "rewrites": [

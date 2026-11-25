@@ -38,6 +38,7 @@ const CHAMPS_RSN = ['nom', 'lien', 'description'];
 const etat = {
   donnees: null, genre: null, etape: 0, valeurs: {}, porteursNouveaux: {},
   nomProposant: '', lienAvecRessource: 'aucun', conditions: false,
+  logoFichier: null, // { nom, donnees (base64), apercu } : gardé le temps de la page seulement
   erreurs: {}, avis: null, envoi: false,
 };
 
@@ -111,6 +112,17 @@ function htmlPorteursNeufs() {
       <input type="text" maxlength="300" data-adresse-porteur="${e(nom)}" value="${e(etat.porteursNouveaux[nom] || '')}" autocomplete="off"></label></div>`).join('');
 }
 
+// Dépôt d'une image de logo, au-dessus du champ d'adresse.
+function htmlDepotLogo() {
+  const f = etat.logoFichier;
+  return `<div class="f-logo">
+    <input type="file" id="fichierLogo" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>
+    ${f ? `<span class="f-logo-apercu"><img src="${e(f.apercu)}" alt=""><span>${e(f.nom)}</span></span>` : ''}
+    <button type="button" class="f-bouton" id="choisirLogo">${e(f ? T.logoChanger : T.logoChoisir)}</button>
+    ${f ? `<button type="button" class="f-bouton lien" id="retirerLogo">${e(T.logoRetirer)}</button>` : `<span class="aide">${e(T.logoFormats)}</span>`}
+  </div><p class="aide f-logo-ou">${e(T.logoOu)}</p>`;
+}
+
 function htmlChamp(cle) {
   const champ = PAR_CLE[cle];
   const t = texteDuChamp(cle);
@@ -151,7 +163,7 @@ function htmlChamp(cle) {
     const type = champ.saisie === 'url' ? 'url' : champ.saisie === 'courriel' ? 'email' : 'text';
     controle = `<input type="${type}" id="${id}" data-cle="${cle}" maxlength="${champ.max}" value="${e(v || '')}" ${champ.saisie === 'url' ? 'placeholder="https://" inputmode="url"' : ''} autocomplete="off" ${decrit}>`;
   }
-  return `<div class="${classe}" data-champ="${cle}"><label for="${id}">${e(t.libelle)}${oblig}</label>${aide}${controle}${pied}</div>`;
+  return `<div class="${classe}" data-champ="${cle}"><label for="${id}">${e(t.libelle)}${oblig}</label>${aide}${cle === 'logo' && etat.genre !== 'rsn' ? htmlDepotLogo() : ''}${controle}${pied}</div>`;
 }
 
 function htmlGroupe(titre, cles) {
@@ -253,6 +265,22 @@ function rafraichirListe(cle) {
   garder();
 }
 
+// Lit l'image choisie : contrôle de taille, puis lecture en base64 pour l'envoi et l'aperçu.
+function lireLogo(fichier) {
+  const redessiner = () => { const bloc = racine.querySelector('[data-champ="logo"]'); if (bloc) bloc.outerHTML = htmlChamp('logo'); };
+  if (!fichier) return;
+  if (fichier.size > 2 * 1024 * 1024) { etat.erreurs.logo = T.logoTropGros; return redessiner(); }
+  const lecteur = new FileReader();
+  lecteur.onload = () => {
+    const apercu = String(lecteur.result || '');
+    etat.logoFichier = { nom: fichier.name, apercu, donnees: apercu.slice(apercu.indexOf(',') + 1) };
+    delete etat.erreurs.logo;
+    redessiner();
+  };
+  lecteur.onerror = () => { etat.erreurs.logo = T.logoIllisible; redessiner(); };
+  lecteur.readAsDataURL(fichier);
+}
+
 // Valide les champs de l'étape en cours ; renvoie vrai si elle peut être quittée.
 function validerEtape(nom) {
   const cles = champsDeLEtape(nom);
@@ -286,13 +314,14 @@ async function envoyer() {
   etat.erreurs = {};
   if (!etat.conditions) { etat.erreurs.conditions = TEXTES.contribuer.obligatoire.replace(/^./, (c) => c.toUpperCase()) + '.'; return afficher(); }
   const valeurs = valeursAEnvoyer();
-  if (etat.donnees.fiche && !Object.keys(valeurs).length) { etat.avis = { sorte: 'alerte', texte: T.aucunChangement }; return afficher({ haut: true }); }
+  const logoFichier = etat.logoFichier && etat.genre !== 'rsn' ? { nom: etat.logoFichier.nom, donnees: etat.logoFichier.donnees } : undefined;
+  if (etat.donnees.fiche && !Object.keys(valeurs).length && !logoFichier) { etat.avis = { sorte: 'alerte', texte: T.aucunChangement }; return afficher({ haut: true }); }
   etat.envoi = true; etat.avis = null; afficher();
   let reponse; let corps = {};
   try {
     reponse = await fetch('/api/proposition', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jeton, genre: etat.genre, valeurs, porteursNouveaux: etat.porteursNouveaux, nomProposant: etat.nomProposant, lienAvecRessource: etat.genre === 'rsn' ? 'aucun' : etat.lienAvecRessource, conditions: true }),
+      body: JSON.stringify({ jeton, genre: etat.genre, valeurs, logoFichier, porteursNouveaux: etat.porteursNouveaux, nomProposant: etat.nomProposant, lienAvecRessource: etat.genre === 'rsn' ? 'aucun' : etat.lienAvecRessource, conditions: true }),
     });
     corps = await reponse.json().catch(() => ({}));
   } catch (err) { reponse = null; }
@@ -363,6 +392,9 @@ racine.addEventListener('input', (evenement) => {
   else if (cible.name === 'lienAvecRessource') { etat.lienAvecRessource = cible.value; garder(); }
   else if (cible.id === 'conditions') etat.conditions = cible.checked;
 });
+racine.addEventListener('change', (evenement) => {
+  if (evenement.target.id === 'fichierLogo') lireLogo(evenement.target.files[0]);
+});
 racine.addEventListener('keydown', (evenement) => {
   // Entrée dans une liste ouverte ajoute la valeur au lieu d'envoyer le formulaire.
   if (evenement.key === 'Enter' && evenement.target.dataset.ajout) { evenement.preventDefault(); ajouterValeur(evenement.target.dataset.ajout); }
@@ -370,6 +402,8 @@ racine.addEventListener('keydown', (evenement) => {
 racine.addEventListener('click', (evenement) => {
   const cible = evenement.target.closest('button');
   if (!cible || cible.type === 'submit') return;
+  if (cible.id === 'choisirLogo') return document.getElementById('fichierLogo').click();
+  if (cible.id === 'retirerLogo') { etat.logoFichier = null; racine.querySelector('[data-champ="logo"]').outerHTML = htmlChamp('logo'); return; }
   if (cible.dataset.ajouter) return ajouterValeur(cible.dataset.ajouter);
   if (cible.dataset.retirer) {
     const cle = cible.dataset.retirer;

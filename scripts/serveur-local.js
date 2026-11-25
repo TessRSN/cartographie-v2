@@ -22,11 +22,11 @@ function reecrire(chemin) {
   return null;
 }
 
-// Corps JSON d'une requête POST (100 ko au plus), comme Vercel le fournit dans req.body.
+// Corps JSON d'une requête POST (4 Mo au plus, pour un logo joint), comme Vercel le fournit dans req.body.
 function lireCorps(req) {
   return new Promise((resoudre) => {
     let brut = ''; let trop = false;
-    req.on('data', (morceau) => { brut += morceau; if (brut.length > 100000) trop = true; });
+    req.on('data', (morceau) => { brut += morceau; if (brut.length > 4000000) trop = true; });
     req.on('end', () => { try { resoudre(trop ? null : JSON.parse(brut)); } catch (err) { resoudre(null); } });
     req.on('error', () => resoudre(null));
   });
