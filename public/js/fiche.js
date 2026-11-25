@@ -87,10 +87,10 @@ function htmlCarteFiche(r) {
   const tousReperes = (r.normes || []).filter(Boolean).map((v) => ['norme', v]).concat((r.outils || []).filter(Boolean).map((v) => ['outil', v]));
   const reperes = tousReperes.slice(0, 4).map(([genre, v]) => `<span class="axe-chip ${genre}">${e(v)}</span>`).join('')
     + (tousReperes.length > 4 ? `<span class="chip-more" title="${e(tousReperes.slice(4).map((x) => x[1]).join(' · '))}">+${tousReperes.length - 4}</span>` : '');
-  // Onglet de type, dans le coin haut gauche : il épouse l'arrondi de la carte.
+  // Bandeau de type sur toute la largeur ; le corps de la carte remonte dessus avec deux coins arrondis.
   const cleDuType = r.typePrincipal ? o.cleType(r.typePrincipal) : null;
   const bandeau = cleDuType
-    ? `<div class="card-onglet type-${cleDuType}" title="${e(r.typePrincipal)}">${o.iconeType(cleDuType)}<span>${e(cleDuType === 'autre' ? r.typePrincipal : o.TEXTES.typesCourts[cleDuType])}</span></div>` : '';
+    ? `<div class="card-bandeau type-${cleDuType}" title="${e(r.typePrincipal)}">${o.iconeType(cleDuType)}<span>${e(cleDuType === 'autre' ? r.typePrincipal : o.TEXTES.typesCourts[cleDuType])}</span></div>` : '';
   return `<article class="member-card">
     ${bandeau}
     <div class="card-top">${htmlLogo(r)}<div class="card-id"><h3 class="card-name" title="${e(r.nom)}">${e(r.nom)}</h3>${porteursHtml ? `<div class="card-institution" title="${e(porteurs.join(' · '))}">${porteursHtml}</div>` : ''}</div></div>

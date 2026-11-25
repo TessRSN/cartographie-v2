@@ -367,7 +367,7 @@ test('la mention du bas dit seulement d\'où vient la fiche', () => {
   assert.equal(TEXTES.fiche.nonConfirmee, "Fiche préparée par l'équipe du RSN à partir de sources publiques.");
 });
 
-test('la carte porte un onglet de type, avec son icône', () => {
+test('la carte porte un bandeau de type, avec son icône', () => {
   const html = htmlCarteFiche(fiche('X', { typePrincipal: 'Logiciel ou application' }));
-  assert.match(html, /<div class="card-onglet type-logiciel" title="Logiciel ou application"><svg class="icone-type"/);
+  assert.match(html, /<div class="card-bandeau type-logiciel" title="Logiciel ou application"><svg class="icone-type"/);
 });
