@@ -186,7 +186,7 @@ test('une nouvelle ressource entre dans la file et les courriels partent', async
     contenu: { propose: { typePrincipal: { apres: 'Logiciel ou application' }, nom: { apres: 'Outil X' }, phrase: { apres: 'Une phrase.' }, lien: { apres: 'https://x.org' } }, applique: null, porteursNouveaux: {} },
   });
   assert.equal(b.de('propositionRecue')[0].a, 'pat@exemple.org');
-  assert.deepEqual(b.de('nouvelleProposition')[0], { a: ['tess@exemple.ca'], titre: 'Nouvelle : Outil X', lienPanneau: 'https://carto.exemple/admin' });
+  assert.equal(b.de('nouvelleProposition').length, 0, 'aucun courriel aux approbateurs à chaque proposition : ils reçoivent un résumé hebdomadaire');
   assert.equal(b.de('approuver').length, 0);
 });
 
@@ -280,7 +280,7 @@ test("la proposition d'un approbateur entre dans la file comme les autres, sans 
   const res = await appeler(b.proposition, envoi(jeton('proposer', { courriel: 'tess@exemple.ca' })));
   assert.deepEqual(res.corps, { ok: true, approuvee: false, courriel: true });
   assert.equal(b.de('approuver').length, 0, 'rien ne change sur le site sans passer par le panneau');
-  assert.equal(b.de('nouvelleProposition').length, 1, "l'équipe est prévenue comme pour toute proposition");
+  assert.equal(b.de('nouvelleProposition').length, 0);
 });
 
 test('Notion en panne à la création : 502, sans détail', async () => {
@@ -314,13 +314,6 @@ test('si Notion échoue à la création, le lien est rendu et peut resservir', a
   assert.equal(b.de('libererJeton').length, 1);
   assert.equal(b.de('libererJeton')[0], b.de('consommerJeton')[0]);
   void liberes; void deps;
-});
-
-test("une panne en lisant les approbateurs n'empêche pas de prévenir l'équipe", async () => {
-  const b = banc({ approbateurs: ['tess@exemple.ca'], pannes: { estApprobateur: true } });
-  const res = await appeler(b.proposition, envoi(jeton('proposer', { courriel: 'pat@exemple.org' })));
-  assert.deepEqual(res.corps, { ok: true, approuvee: false, courriel: true });
-  assert.equal(b.de('nouvelleProposition').length, 1);
 });
 
 const PNG64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

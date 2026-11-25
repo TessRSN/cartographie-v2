@@ -38,6 +38,7 @@ Des pages HTML sans cadriciel ni étape de compilation, et des fonctions héberg
 | `api/proposition.js` | `/api/proposition` : lit et enregistre une proposition |
 | `api/admin.js` | `/api/admin` : la file des propositions, approuver, corriger, refuser |
 | `api/logo.js` | `/api/logo` : sert le logo déposé pour une fiche |
+| `api/resume.js` | `/api/resume` : le résumé hebdomadaire des propositions en attente, envoyé aux approbateurs le lundi |
 | `lib/jetons.js` | les liens signés, valables un temps limité |
 | `lib/courriels.js` | les courriels, envoyés par Resend |
 | `lib/limites.js` | les limites d'envoi de liens et l'usage unique d'un lien |
@@ -67,6 +68,7 @@ Variables d'environnement, dans `.env.local` en local et dans le projet Vercel e
 | `JWT_SECRET` | signe les liens envoyés par courriel |
 | `NOTION_DB_PROPOSITIONS` | identifiant de la base « Propositions » |
 | `NOTION_DB_APPROBATEURS` | identifiant de la base « Approbateurs » |
+| `CRON_SECRET` | protège le déclenchement du résumé hebdomadaire ; Vercel le joint lui-même à l'appel planifié |
 | `RESEND_API_KEY` | envoi des courriels ; sans elle, rien ne part et le lien est écrit dans le journal du serveur |
 | `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME` | expéditeur des courriels (facultatives) |
 | `EMAIL_TEST_MODE`, `EMAIL_TEST_RECIPIENT` | mode d'essai : tous les courriels vont à une seule adresse |
