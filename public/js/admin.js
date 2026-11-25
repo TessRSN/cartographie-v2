@@ -1,6 +1,7 @@
 /**
  * Page /admin : le panneau d'administration de la cartographie. Lot 1 : accueil et propositions.
  * Lot 2 : ressources (tableau des fiches, modification, historique des versions, export).
+ * Lot 3 : porteurs (colonnes, volet avec la carte du site, fusion) et qualité des données.
  * On y entre par un lien reçu par courriel (?jeton=…), qui ouvre une session de sept jours.
  * La structure, les classes et les fonctions de rendu viennent de la maquette validée ; les données
  * viennent de /api/admin. Le rôle est celui de la personne connectée : l'affichage masque ce qu'il
@@ -21,7 +22,7 @@ const $ = (selecteur, racine) => (racine || document).querySelector(selecteur);
 
 const ETATS = ['attente', 'verification', 'approuvee', 'refusee'];
 const OUVERTS = ['attente', 'verification'];
-const ROUTES = ['accueil', 'propositions', 'ressources'];
+const ROUTES = ['accueil', 'propositions', 'ressources', 'porteurs', 'qualite'];
 const TYPES = ['jeu', 'catalogue', 'plateforme', 'logiciel', 'service'];
 const RELATIONS = ['faitPartieDe', 'reposeSur', 'donneAccesA', 'remplace'];
 // Ce qu'il faut compléter pour une fiche que la personne a laissée à l'équipe.
@@ -39,9 +40,16 @@ const etat = {
   filtresR: { q: '', type: '', statut: '' },
   r: null,              // la fenêtre d'une fiche, quand elle est ouverte (voir ficheNeuve)
   csv: null,            // la fenêtre d'export, quand elle est ouverte : { toutes }
+  porteurs: null,       // dernière lecture des porteurs
+  cleCarte: '',         // la clé du fond de carte du site, donnée avec les porteurs
+  vueP: 'colonnes',     // les porteurs en colonnes ou en liste
+  o: null,              // le volet d'un porteur, quand il est ouvert (voir voletNeuf)
+  points: null,         // dernière lecture de la qualité des données
+  compteurs: null,      // pastilles de la barre latérale : { points, porteursAPlacer }
+  q: { confirmation: null, enCours: null }, // écran Qualité : la fusion à confirmer, le geste en cours
 };
-// Une seule fenêtre à la fois : celle d'une proposition, celle d'une fiche ou celle de l'export.
-const fenetreOuverte = () => !!(etat.f || etat.r || etat.csv);
+// Une seule fenêtre à la fois : une proposition, une fiche, l'export ou le volet d'un porteur.
+const fenetreOuverte = () => !!(etat.f || etat.r || etat.csv || etat.o);
 
 // ─── Appels au serveur ───
 async function appel(action, { query = {}, corps } = {}) {
@@ -101,6 +109,8 @@ const ICONES = {
   accueil: '<path d="M3 11 12 4l9 7v9H3z"/><path d="M9 20v-6h6v6"/>',
   propositions: '<path d="M4 13 6.5 5h11L20 13v6H4z"/><path d="M4 13h4.5l1 2.5h5l1-2.5H20"/>',
   ressources: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+  porteurs: '<path d="M3 20h18M5 20V9l7-5 7 5v11M9 20v-6h6v6"/>',
+  qualite: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
   favorable: '<path d="M7 10v11"/><path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9z"/>',
   defavorable: '<path d="M17 14V3"/><path d="M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H20a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/>',
 };
@@ -130,7 +140,9 @@ function dessinerBandeau() {
 }
 function dessinerNav() {
   const ici = route();
-  $('#nav').innerHTML = ROUTES.map((r) => `<a href="#${r}"${r === ici ? ' aria-current="page"' : ''}>${icone(r)}<span>${e(T.routes[r])}</span>${r === 'propositions' && etat.nouvelles ? `<span class="count">${Number(etat.nouvelles)}</span>` : ''}</a>`).join('');
+  const c = etat.compteurs || {};
+  const pastilles = { propositions: etat.nouvelles, porteurs: c.porteursAPlacer, qualite: c.points };
+  $('#nav').innerHTML = ROUTES.map((r) => `<a href="#${r}"${r === ici ? ' aria-current="page"' : ''}>${icone(r)}<span>${e(T.routes[r])}</span>${pastilles[r] ? `<span class="count">${Number(pastilles[r])}</span>` : ''}</a>`).join('');
 }
 function montrerCoque(avecNav) {
   $('#coque').classList.toggle('seule', !avecNav);
@@ -141,6 +153,7 @@ function montrerCoque(avecNav) {
 function afficherEntree(avertissement) {
   etat.moi = null; etat.accueil = null; etat.liste = null; etat.nouvelles = null; etat.f = null;
   etat.fiches = null; etat.r = null; etat.csv = null;
+  etat.porteurs = null; etat.o = null; etat.points = null; etat.compteurs = null; etat.q = { confirmation: null, enCours: null };
   dessinerBandeau(); montrerCoque(false); dessinerFenetre();
   $('#main').innerHTML = `<div class="card entree">
     <h1>${e(T.titre)}</h1>
@@ -272,18 +285,18 @@ let demande = 0; // numéro de la dernière lecture d'écran : une réponse plus
 
 function rendre() {
   dessinerBandeau(); montrerCoque(true); dessinerNav();
-  $('#main').innerHTML = { accueil: ecranAccueil, propositions: ecranPropositions, ressources: ecranRessources }[route()]();
+  $('#main').innerHTML = { accueil: ecranAccueil, propositions: ecranPropositions, ressources: ecranRessources, porteurs: ecranPorteurs, qualite: ecranQualite }[route()]();
 }
 // Redessine ce qui dépend des données sans toucher à la recherche en cours de frappe.
 function rafraichir() {
   const ici = route();
-  const corps = ici === 'propositions' ? $('#mbody') : ici === 'ressources' ? $('#rbody') : null;
+  const corps = { propositions: $('#mbody'), ressources: $('#rbody'), porteurs: $('#pbody'), qualite: $('#qbody') }[ici];
   if (!corps) return rendre();
-  corps.innerHTML = ici === 'propositions' ? corpsPropositions() : corpsRessources();
+  corps.innerHTML = { propositions: corpsPropositions, ressources: corpsRessources, porteurs: corpsPorteurs, qualite: corpsQualite }[ici]();
   if (ici === 'ressources') $('#rintro').textContent = introRessources();
   dessinerNav();
 }
-const ACTION_DE_ROUTE = { accueil: 'accueil', propositions: 'file', ressources: 'ressources' };
+const ACTION_DE_ROUTE = { accueil: 'accueil', propositions: 'file', ressources: 'ressources', porteurs: 'porteurs', qualite: 'qualite' };
 async function charger() {
   const moi = ++demande;
   const ici = route();
@@ -295,11 +308,16 @@ async function charger() {
     return afficherEntree(null);
   }
   if (!r.ok) {
-    if ({ accueil: etat.accueil, propositions: etat.liste, ressources: etat.fiches }[ici]) message(T.indisponible); else afficherPanne();
+    if ({ accueil: etat.accueil, propositions: etat.liste, ressources: etat.fiches, porteurs: etat.porteurs, qualite: etat.points }[ici]) message(T.indisponible); else afficherPanne();
     return;
   }
   if (ici === 'accueil') { etat.accueil = r.donnees; etat.nouvelles = r.donnees.compteurs.nouvelles; }
   else if (ici === 'ressources') { etat.fiches = r.donnees.ressources || []; etat.historique = r.donnees.historique !== false; }
+  else if (ici === 'porteurs') {
+    etat.porteurs = r.donnees.porteurs || [];
+    etat.cleCarte = (r.donnees.carte && typeof r.donnees.carte.cle === 'string') ? r.donnees.carte.cle : '';
+    etat.compteurs = { ...(etat.compteurs || {}), porteursAPlacer: etat.porteurs.filter((o) => !o.place).length };
+  } else if (ici === 'qualite') { etat.points = r.donnees.points || []; etat.compteurs = r.donnees.compteurs || null; }
   else { etat.liste = r.donnees.propositions || []; etat.nouvelles = etat.liste.filter((p) => p.statut === 'attente').length; }
   rafraichir();
 }
@@ -333,7 +351,7 @@ const nomValeur = (cle, v) => (PAR_CLE[cle].saisie === 'fiches' ? nomDeFiche(v) 
 // Les corrections : tout champ dont la valeur diffère de son point de départ.
 function corrections() { return etat.f && etat.f.d ? correctionsPanneau(etat.f.valeurs, etat.f.depart) : {}; }
 // Vrai s'il y a une saisie qui serait perdue en fermant la fenêtre (proposition ou fiche).
-function saisieEnCours() { return saisieProposition() || saisieFiche(); }
+function saisieEnCours() { return saisieProposition() || saisieFiche() || saisiePorteur(); }
 function saisieProposition() {
   const f = etat.f;
   if (!f || !f.d || !ouverte(f.d.proposition) || !peut()) return false;
@@ -593,8 +611,11 @@ function contenuFenetre() {
 // Redessine la fenêtre en gardant sa hauteur de défilement.
 function dessinerFenetre() {
   const calque = $('#layer');
-  const ancienne = $('.modal', calque);
+  const ancienne = $('.modal, .drawer', calque);
   const haut = ancienne ? ancienne.scrollTop : 0;
+  // La carte du volet d'un porteur est gardée d'un dessin à l'autre : seul ce qui l'entoure est refait.
+  const carteGardee = carteP && carteP.pour === etat.o ? carteP.zone : null;
+  if (!carteGardee) demonterCarte();
   // L'élément qui a le focus dans la fenêtre, pour le retrouver après le redessin.
   const actif = ancienne && ancienne.contains(document.activeElement) ? document.activeElement : null;
   const repere = actif ? { id: actif.id, act: actif.dataset.act, k: actif.dataset.k, v: actif.dataset.v } : null;
@@ -603,9 +624,17 @@ function dessinerFenetre() {
   let titre; let contenu;
   if (etat.f) { titre = T.fenetre(etat.f.d ? etat.f.d.proposition.nom : ''); contenu = contenuFenetre(); }
   else if (etat.r) { titre = etat.r.nouvelle ? T.ressources.ajouterTitre : T.ressources.fenetre(etat.r.d ? etat.r.d.fiche.nom : ''); contenu = contenuFiche(); }
+  else if (etat.o) { titre = etat.o.nouvelle ? P.ajouter : P.fenetre(etat.o.d ? etat.o.d.porteur.nom : ''); contenu = contenuPorteur(); }
   else { titre = T.ressources.csv.titre; contenu = contenuCsv(); }
-  calque.innerHTML = `<div class="veil" data-act="fermer"></div><div class="modal${etat.csv ? '' : ' wide'}" role="dialog" aria-modal="true" tabindex="-1" aria-label="${e(titre)}">${contenu}</div>`;
-  const neuve = $('.modal', calque);
+  calque.innerHTML = etat.o
+    ? `<div class="veil" data-act="fermer"></div><aside class="drawer" role="dialog" aria-modal="true" tabindex="-1" aria-label="${e(titre)}">${contenu}</aside>`
+    : `<div class="veil" data-act="fermer"></div><div class="modal${etat.csv ? '' : ' wide'}" role="dialog" aria-modal="true" tabindex="-1" aria-label="${e(titre)}">${contenu}</div>`;
+  const neuve = $('.modal, .drawer', calque);
+  if (etat.o) {
+    const place = $('#carteP', calque);
+    if (carteGardee && place) { place.replaceWith(carteGardee); carteP.carte.invalidateSize(); }
+    else { if (carteGardee) demonterCarte(); monterCarte(); }
+  }
   if (ancienne) neuve.scrollTop = haut;
   if (repere) {
     const pareil = (x) => (repere.id ? x.id === repere.id : x.dataset.act === repere.act && x.dataset.k === repere.k && x.dataset.v === repere.v);
@@ -617,7 +646,7 @@ function dessinerFenetre() {
   if (cadre) cadre.addEventListener('load', () => { try { cadre.style.height = `${cadre.contentDocument.documentElement.scrollHeight + 2}px`; } catch (err) { /* hauteur par défaut */ } });
 }
 function noter(sorte, texte) {
-  const f = etat.f || etat.r;
+  const f = etat.f || etat.r || etat.o;
   if (f && !f.chargement) {
     f.note = { sorte, texte };
     dessinerFenetre();
@@ -629,12 +658,13 @@ function noter(sorte, texte) {
 // Fermer la fenêtre ; avec une saisie en cours, seulement après confirmation.
 function fermerFenetre({ force = false } = {}) {
   if (!fenetreOuverte()) return true;
-  const f = etat.f || etat.r;
+  const f = etat.f || etat.r || etat.o;
   if (f && f.enCours) return false;
   if (!force && saisieEnCours() && !window.confirm(T.quitter)) return false;
   // Le focus revient à la carte, à la ligne ou au bouton d'où l'on venait.
-  const retour = etat.f ? { act: 'ouvrir', id: etat.f.id } : etat.r ? (etat.r.nouvelle ? { act: 'nouvelle-fiche' } : { act: 'ouvrir-fiche', id: etat.r.id }) : { act: 'csv' };
-  etat.f = null; etat.r = null; etat.csv = null;
+  const retour = etat.f ? { act: 'ouvrir', id: etat.f.id } : etat.r ? (etat.r.nouvelle ? { act: 'nouvelle-fiche' } : { act: 'ouvrir-fiche', id: etat.r.id })
+    : etat.o ? (etat.o.nouvelle ? { act: 'nouveau-porteur' } : { act: 'ouvrir-porteur', id: etat.o.id }) : { act: 'csv' };
+  etat.f = null; etat.r = null; etat.csv = null; etat.o = null;
   dessinerFenetre();
   const origine = [...document.querySelectorAll(`#main [data-act="${retour.act}"]`)].find((x) => !retour.id || x.dataset.id === retour.id);
   if (origine) origine.focus({ preventScroll: true });
@@ -1061,6 +1091,7 @@ function titreVersion(v) {
   if (v.source === 'creation') return p ? H.creationProposee(p.nomProposant || T.anonyme, qui) : H.creation(qui);
   if (v.source === 'proposition') return p ? H.proposition(p.nomProposant || T.anonyme, (T.liens[p.lien] || T.liens.aucun).toLowerCase(), qui) : H.propositionSans(qui);
   if (v.source === 'retablissement') return H.retablissement(v.note || H.retour, qui);
+  if (v.source === 'qualite') return H.qualite(v.note, qui);
   return H.panneau(qui);
 }
 function ongletHistorique() {
@@ -1280,6 +1311,451 @@ function gesteFenetreFiche(act, cible) {
   }
 }
 
+// ─── Porteurs : les colonnes et la liste ───
+const P = T.porteurs;
+const Q = T.qualite;
+function cartePorteur(o) {
+  const id = e(o.id);
+  return `<div class="mcard" role="button" tabindex="0" data-act="ouvrir-porteur" data-id="${id}"><b>${e(o.nom || T.sansNom)}</b>
+    <span class="muted small">${e(o.adresse || P.sansAdresse)}</span>
+    <span class="muted small num">${e(P.portees(Number(o.ressources), Number(o.ecartees)))}</span>
+    ${o.bottin ? `<span class="pill p-info">${e(P.lieBottin)}</span>` : ''}
+    ${o.place || !peut() ? '' : `<span class="row"><button type="button" class="btn sm primary" data-act="ouvrir-porteur" data-id="${id}">${e(P.placer)}</button></span>`}</div>`;
+}
+function corpsPorteurs() {
+  if (!etat.porteurs) return `<p class="muted" role="status">${e(T.chargement)}</p>`;
+  if (!etat.porteurs.length) return `<div class="card"><p class="muted">${e(P.aucun)}</p></div>`;
+  if (etat.vueP === 'colonnes') {
+    return `<div class="cols c2">${[[false, P.colonnes.aPlacer], [true, P.colonnes.places]].map(([place, titre]) => {
+      const cartes = etat.porteurs.filter((o) => !!o.place === place);
+      return `<section class="col"><header><h3>${e(titre)}</h3><span class="pill p-mute num">${cartes.length}</span></header>${cartes.map(cartePorteur).join('') || `<p class="muted small" style="padding:.4rem .2rem">${e(T.rienIci)}</p>`}</section>`;
+    }).join('')}</div><p class="muted small">${e(peut() ? P.aideColonnes : P.aideColonnesLecture)}</p>`;
+  }
+  const C = P.tableau;
+  return `<div class="scroll"><table><thead><tr><th>${e(C.porteur)}</th><th>${e(C.adresse)}</th><th>${e(C.carte)}</th><th>${e(C.bottin)}</th><th>${e(C.ressources)}</th></tr></thead><tbody>${etat.porteurs.map((o) => `
+    <tr data-act="ouvrir-porteur" data-id="${e(o.id)}" tabindex="0"><td><b>${e(o.nom || T.sansNom)}</b></td><td>${e(o.adresse) || `<span class="muted">${e(P.aucune)}</span>`}</td>
+      <td>${o.place ? `<span class="pill p-ok">${e(P.place)}</span>` : `<span class="pill p-warn">${e(P.aPlacer)}</span>`}</td>
+      <td>${o.bottin ? `<span class="pill p-info">${e(P.lie)}</span>` : ''}</td><td class="num">${Number(o.ressources)}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function ecranPorteurs() {
+  const vue = (cle, nom) => `<button type="button" data-act="vue-porteurs" data-v="${cle}" aria-pressed="${etat.vueP === cle}">${e(nom)}</button>`;
+  return `<div class="head"><div><h1>${e(T.routes.porteurs)}</h1><p>${e(P.intro)}</p></div>
+      <div class="row"><span class="seg" role="group" aria-label="${e(T.affichage)}">${vue('colonnes', T.enColonnes)}${vue('liste', T.enListe)}</span>${peut() ? `<button type="button" class="btn primary" data-act="nouveau-porteur">${e(P.ajouter)}</button>` : ''}</div></div>
+    <div id="pbody">${corpsPorteurs()}</div>`;
+}
+
+// ─── Volet d'un porteur : nom, adresse, place sur la carte, ressources, fusion ───
+const CHAMPS_PORTEUR = ['nom', 'adresse', 'latitude', 'longitude'];
+function voletNeuf(id) {
+  return {
+    id, nouvelle: id === null, d: null, chargement: true,
+    valeurs: {}, depart: {},      // ce qui est écrit dans les quatre champs, en texte
+    fusionVers: '', confirmation: false, erreurs: {}, note: null, enCours: false,
+    carte: 'attente',             // 'attente', 'prete' ou 'absente' (la bibliothèque ne s'est pas chargée)
+  };
+}
+const texteCoordonnee = (n) => (typeof n === 'number' ? String(Math.round(n * 1e6) / 1e6) : '');
+function poserPorteur(d) {
+  const o = etat.o; const p = d.porteur;
+  o.d = d; o.chargement = false;
+  if (p.id) o.id = p.id;
+  o.depart = { nom: p.nom || '', adresse: p.adresse || '', latitude: texteCoordonnee(p.latitude), longitude: texteCoordonnee(p.longitude) };
+  o.valeurs = { ...o.depart };
+  o.erreurs = {}; o.confirmation = false;
+  if (d.carte && typeof d.carte.cle === 'string') etat.cleCarte = d.carte.cle;
+}
+// Une coordonnée écrite en chiffres : un nombre, null si le champ est vide, NaN si ce n'est pas un nombre.
+function coordonnee(texte) {
+  const propre = String(texte || '').trim().replace(',', '.');
+  if (!propre) return null;
+  return /^-?\d+(\.\d+)?$/.test(propre) ? Number(propre) : NaN;
+}
+// Le lieu écrit dans le volet : [latitude, longitude], ou null s'il n'y en a pas (ou pas de valable).
+function lieuSaisi(o) {
+  const latitude = coordonnee(o.valeurs.latitude); const longitude = coordonnee(o.valeurs.longitude);
+  const valable = typeof latitude === 'number' && typeof longitude === 'number' && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+  return valable ? [latitude, longitude] : null;
+}
+function saisiePorteur() {
+  const o = etat.o;
+  if (!o || !o.d || !peut()) return false;
+  return CHAMPS_PORTEUR.some((cle) => String(o.valeurs[cle]).trim() !== String(o.depart[cle]).trim());
+}
+
+// La carte du site : même bibliothèque, même version et même fond, chargés seulement à l'ouverture du volet.
+const LEAFLET = 'https://unpkg.com/leaflet@1.9.4/dist/';
+const MAUVE = '#a855f7';
+let chargementLeaflet = null;
+let carteP = null; // la carte montée : { pour : le volet, carte, zone, repere }
+function chargerLeaflet() {
+  if (window.L && window.L.map) return Promise.resolve();
+  if (!chargementLeaflet) {
+    chargementLeaflet = new Promise((reussir, echouer) => {
+      const feuille = document.createElement('link');
+      // Empreintes de Leaflet 1.9.4 : un fichier altéré en route n'est ni appliqué ni exécuté.
+      feuille.rel = 'stylesheet'; feuille.href = `${LEAFLET}leaflet.css`;
+      feuille.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY='; feuille.crossOrigin = 'anonymous';
+      const script = document.createElement('script');
+      script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo='; script.crossOrigin = 'anonymous';
+      script.src = `${LEAFLET}leaflet.js`;
+      script.onload = () => (window.L && window.L.map ? reussir() : echouer(new Error('Leaflet absent')));
+      script.onerror = () => echouer(new Error('Leaflet non chargé'));
+      setTimeout(() => echouer(new Error('Leaflet trop lent')), 10000);
+      document.head.appendChild(feuille); document.head.appendChild(script);
+    });
+    // Un échec n'est pas gardé : le prochain volet réessaie.
+    chargementLeaflet.catch(() => { chargementLeaflet = null; });
+  }
+  return chargementLeaflet;
+}
+function coucheDuSite(cle) {
+  // CARTO Voyager avec la clé du site, sinon OpenStreetMap : comme la carte publique.
+  if (cle) {
+    return window.L.tileLayer(`https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(cle)}`, {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>', maxZoom: 19,
+    });
+  }
+  return window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19,
+  });
+}
+function demonterCarte() {
+  if (!carteP) return;
+  try { carteP.carte.remove(); } catch (err) { /* déjà retirée */ }
+  carteP = null;
+}
+// Met le repère là où le volet le dit ; sans lieu valable, pas de repère.
+function placerRepere({ centrer = false } = {}) {
+  const o = etat.o;
+  if (!carteP || carteP.pour !== o) return;
+  const lieu = lieuSaisi(o);
+  if (!lieu) { if (carteP.repere) { carteP.repere.remove(); carteP.repere = null; } return; }
+  if (carteP.repere) carteP.repere.setLatLng(lieu);
+  else carteP.repere = window.L.circleMarker(lieu, { radius: 9, color: '#ffffff', weight: 2, fillColor: MAUVE, fillOpacity: 0.9, interactive: false }).addTo(carteP.carte);
+  if (centrer) carteP.carte.setView(lieu, Math.max(carteP.carte.getZoom(), 14));
+}
+// Écrit des coordonnées dans le volet (clic sur la carte, adresse retrouvée), sans redessiner.
+function poserCoordonnees(latitude, longitude, options) {
+  const o = etat.o;
+  o.valeurs.latitude = texteCoordonnee(latitude); o.valeurs.longitude = texteCoordonnee(longitude);
+  for (const cle of ['latitude', 'longitude']) { const champ = document.getElementById(`o-${cle}`); if (champ) champ.value = o.valeurs[cle]; }
+  placerRepere(options);
+}
+async function monterCarte() {
+  const o = etat.o;
+  if (!o || o.chargement || o.carte === 'absente' || (carteP && carteP.pour === o)) return;
+  try { await chargerLeaflet(); } catch (err) {
+    // Sans carte, le volet reste utilisable : coordonnées en chiffres et adresse retrouvée.
+    if (etat.o === o) { o.carte = 'absente'; dessinerFenetre(); }
+    return;
+  }
+  const zone = document.getElementById('carteP');
+  if (etat.o !== o || !zone || (carteP && carteP.pour === o)) return;
+  demonterCarte();
+  try {
+    zone.textContent = '';
+    const lieu = lieuSaisi(o);
+    // Dans un volet qui défile, la molette ne zoome pas : les boutons de zoom suffisent.
+    const carte = window.L.map(zone, { scrollWheelZoom: false }).setView(lieu || [47.0, -71.5], lieu ? 13 : 6);
+    coucheDuSite(etat.cleCarte).addTo(carte);
+    carteP = { pour: o, carte, zone, repere: null };
+    carte.on('click', (evenement) => {
+      if (etat.o !== o || o.enCours || !peut()) return;
+      poserCoordonnees(evenement.latlng.lat, evenement.latlng.lng);
+    });
+    o.carte = 'prete';
+    placerRepere();
+  } catch (err) {
+    demonterCarte(); o.carte = 'absente'; dessinerFenetre();
+  }
+}
+
+function blocFusion() {
+  const o = etat.o; const F = P.fusion;
+  const fige = o.enCours ? ' disabled' : '';
+  const autres = o.d.autres || [];
+  const vers = autres.find((x) => x.id === o.fusionVers);
+  const total = o.d.ressources.length; const ecartees = o.d.ressources.filter((r) => r.statut === 'ecartee').length;
+  return `<div class="sep"><h3 style="margin-bottom:.4rem">${e(F.titre)}</h3>
+    <div class="row"><select id="fusionVers" aria-label="${e(F.garder)}" style="flex:1 1 220px;width:auto"${fige}><option value="">${e(F.choisir)}</option>${autres.map((x) => option(x.id, o.fusionVers, x.nom)).join('')}</select>
+      <button type="button" class="btn sm" data-act="o-fusion-demander"${fige}>${e(F.bouton)}</button></div>
+    ${o.confirmation && vers ? `<div class="confirm" id="confirmationFusion" style="margin-top:.6rem"><span>${e(F.confirmer(o.d.porteur.nom, vers.nom, total, ecartees))}</span><button type="button" class="btn sm" data-act="o-fusion-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="o-fusionner"${fige}>${e(o.enCours ? T.enCours : F.bouton)}</button></div>` : ''}
+    <p class="muted small" style="margin-top:.5rem">${e(F.aide)}</p></div>`;
+}
+function contenuPorteur() {
+  const o = etat.o;
+  const fermer = `<button type="button" class="btn sm x" data-act="fermer">${e(T.fermer)}</button>`;
+  if (o.chargement) return `<div class="row"><p class="muted" role="status">${e(T.chargement)}</p>${fermer}</div>`;
+  const p = o.d.porteur;
+  const fige = !peut() || o.enCours ? ' disabled' : '';
+  const note = o.note ? `<div class="note ${o.note.sorte}" id="noteFenetre" role="alert" tabindex="-1">${e(o.note.texte)}</div>` : '';
+  const erreur = (cle) => (o.erreurs[cle] ? `<span class="err" role="alert">${e(o.erreurs[cle])}</span>` : '');
+  const champ = (cle, nom, large, extra) => `<label class="f${large ? ' wide' : ''}" for="o-${cle}">${e(nom)}<input type="text" id="o-${cle}" data-o="${cle}" value="${e(o.valeurs[cle])}" autocomplete="off"${extra || ''}${fige}>${erreur(cle)}</label>`;
+  const bottin = p.bottin ? `<div class="f wide"><span>${e(p.bottin.nom ? P.bottin(p.bottin.nom) : P.lieBottin)}</span><span class="muted small" style="font-weight:400">${e(P.bottinAide)}</span></div>` : '';
+  const liste = o.d.ressources;
+  const ressources = o.nouvelle ? '' : `<div class="sep"><h3 style="margin-bottom:.4rem">${e(P.ressourcesPortees(liste.length))}</h3>${liste.length
+    ? `<div class="list">${liste.map((r) => `<div><button type="button" class="linkish grow" data-act="ouvrir-fiche" data-id="${e(r.id)}">${e(r.nom || T.sansNom)}</button>${r.statut === 'ecartee' ? `<span class="pill p-mute">${e(P.ecartee)}</span>` : ''}${pastilleType(r.typePrincipal)}</div>`).join('')}</div><p class="muted small" style="margin-top:.5rem">${e(P.renommerAide)}</p>`
+    : `<p class="muted small">${e(P.aucuneRessource)}</p>`}</div>`;
+  return `<div class="row" style="flex-wrap:nowrap;align-items:flex-start"><div style="min-width:0"><h2 id="titreFenetre">${e(o.nouvelle ? P.ajouter : p.nom || T.sansNom)}</h2>
+      ${o.nouvelle ? '' : `<span class="row" style="margin-top:.2rem">${p.place ? `<span class="pill p-ok">${e(P.placeSurLaCarte)}</span>` : `<span class="pill p-warn">${e(P.aPlacerSurLaCarte)}</span>`}</span>`}</div>${fermer}</div>
+    ${note}
+    <div class="fields">${champ('nom', P.nom, true, ' maxlength="200"')}${champ('adresse', P.adresse, true, ' maxlength="300"')}${bottin}
+      ${champ('latitude', P.latitude, false, ' inputmode="decimal" maxlength="24"')}${champ('longitude', P.longitude, false, ' inputmode="decimal" maxlength="24"')}
+      ${o.erreurs.coordonnees ? `<span class="err wide" role="alert">${e(o.erreurs.coordonnees)}</span>` : ''}</div>
+    ${o.carte === 'absente' ? `<div class="note warn">${e(P.carteAbsente)}</div>` : `<div class="map"><div class="carte-porteur" id="carteP" role="application" aria-label="${e(P.carteTitre)}">${e(P.carteChargement)}</div></div>`}
+    ${peut() ? `<div class="row"><button type="button" class="btn sm" data-act="o-retrouver"${fige}>${e(P.retrouver)}</button><span class="muted small">${e(o.carte === 'absente' ? P.retrouverAideSansCarte : P.retrouverAide)}</span></div>
+    <div class="row"><button type="button" class="btn primary" data-act="o-enregistrer"${fige}>${e(o.enCours ? T.enCours : o.nouvelle ? P.creer : P.enregistrer)}</button></div>` : ''}
+    ${ressources}${o.nouvelle || !peut() ? '' : blocFusion()}`;
+}
+
+let ouverturePorteur = 0;
+// id : le repère du porteur, ou null pour en ajouter un.
+async function ouvrirPorteur(id) {
+  if (fenetreOuverte() && !fermerFenetre()) return;
+  const moi = ++ouverturePorteur;
+  const o = voletNeuf(id);
+  etat.o = o;
+  if (id === null) {
+    poserPorteur({ porteur: { id: null, nom: '', adresse: '', latitude: null, longitude: null, place: false, bottin: null }, ressources: [], autres: [] });
+    dessinerFenetre();
+    const nom = document.getElementById('o-nom'); if (nom) nom.focus();
+    return;
+  }
+  dessinerFenetre();
+  const bouton = $('#layer .x'); if (bouton) bouton.focus();
+  const r = await appel('porteur', { query: { porteur: id } });
+  if (moi !== ouverturePorteur || etat.o !== o) return;
+  if (r.code === 401) return afficherEntree(null);
+  if (!r.ok) {
+    etat.o = null; dessinerFenetre();
+    message(r.code === 404 ? P.messages.introuvable : T.indisponible);
+    if (r.code === 404) charger();
+    return;
+  }
+  poserPorteur(r.donnees);
+  dessinerFenetre();
+  const fermer = $('#layer .x'); if (fermer) fermer.focus();
+}
+// Ce que le serveur a répondu à un geste qui n'a pas réussi : le volet et la saisie restent à l'écran.
+function echecPorteur(r) {
+  const o = etat.o; const code = r.donnees.code;
+  if (r.code === 401) return noter('warn', T.sessionExpiree);
+  if (r.code === 403) { noter('warn', T.roleInsuffisant); return relireMoi(); }
+  if ((code === 'invalide' || code === 'doublon') && r.donnees.erreurs) {
+    o.erreurs = { ...r.donnees.erreurs };
+    const E = o.erreurs;
+    return noter('bad', E._ || E.nom || E.adresse || E.coordonnees || T.erreursEnHaut);
+  }
+  if (code === 'introuvable') {
+    etat.o = null; dessinerFenetre();
+    message(P.messages.introuvable);
+    return charger();
+  }
+  if (code === 'occupee') return noter('warn', P.messages.occupee);
+  return noter('bad', T.indisponible);
+}
+async function enregistrerPorteur() {
+  const o = etat.o;
+  if (!o || !o.d || o.enCours || !peut()) return;
+  const nom = o.valeurs.nom.replace(/\s+/g, ' ').trim();
+  const latitude = coordonnee(o.valeurs.latitude); const longitude = coordonnee(o.valeurs.longitude);
+  const erreurs = {};
+  if (!nom) erreurs.nom = P.messages.nomRequis;
+  if ((latitude === null) !== (longitude === null) || Number.isNaN(latitude) || Number.isNaN(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) erreurs.coordonnees = P.messages.coordonnees;
+  if (Object.keys(erreurs).length) {
+    o.erreurs = erreurs; o.note = null; dessinerFenetre();
+    const fautif = document.getElementById(erreurs.nom ? 'o-nom' : 'o-latitude'); if (fautif) fautif.focus();
+    return;
+  }
+  if (!o.nouvelle && !saisiePorteur()) return message(P.messages.rien);
+  const valeurs = { nom, adresse: o.valeurs.adresse.replace(/\s+/g, ' ').trim(), latitude, longitude };
+  o.enCours = true; o.erreurs = {}; o.note = null; o.confirmation = false; dessinerFenetre();
+  const r = await appel(o.nouvelle ? 'creer-porteur' : 'enregistrer-porteur', { corps: o.nouvelle ? { valeurs } : { porteur: o.id, valeurs } });
+  if (etat.o !== o) return;
+  o.enCours = false;
+  if (!r.ok) return echecPorteur(r);
+  if (o.nouvelle) {
+    etat.o = null; dessinerFenetre();
+    message(P.messages.cree);
+    return charger();
+  }
+  // Ce qui vient d'être enregistré devient le point de départ de la saisie.
+  Object.assign(o.d.porteur, valeurs, { place: latitude !== null });
+  o.depart = { nom, adresse: valeurs.adresse, latitude: texteCoordonnee(latitude), longitude: texteCoordonnee(longitude) };
+  o.valeurs = { ...o.depart };
+  dessinerFenetre(); placerRepere();
+  message(r.donnees.inchange ? P.messages.inchange : latitude !== null ? P.messages.enregistrePlace : P.messages.enregistreAPlacer);
+  charger();
+}
+async function retrouverAdresse() {
+  const o = etat.o;
+  if (!o || !o.d || o.enCours || !peut()) return;
+  const adresse = o.valeurs.adresse.replace(/\s+/g, ' ').trim();
+  if (!adresse) { message(P.messages.adresseDabord); const champ = document.getElementById('o-adresse'); if (champ) champ.focus(); return; }
+  o.enCours = true; o.note = null; dessinerFenetre();
+  const r = await appel('geocoder', { corps: { adresse } });
+  if (etat.o !== o) return;
+  o.enCours = false;
+  if (r.ok) {
+    o.erreurs = {};
+    dessinerFenetre();
+    poserCoordonnees(Number(r.donnees.latitude), Number(r.donnees.longitude), { centrer: true });
+    return message(P.messages.adresseRetrouvee);
+  }
+  if (r.donnees.code === 'adresse-introuvable') return noter('warn', P.messages.adresseIntrouvable);
+  return echecPorteur(r);
+}
+// Un geste de masse : le serveur s'arrête quand son temps est compté, et la suite s'enchaîne ici.
+// Renvoie la dernière réponse et le nombre de fiches faites en tout.
+async function enchainer(action, corps, encore) {
+  let faites = 0; let r;
+  for (let tour = 0; tour < 15; tour++) {
+    r = await appel(action, { corps });
+    faites += Number(r.donnees.faites) || 0;
+    if (r.ok || r.donnees.code !== 'a-poursuivre' || !encore()) break;
+  }
+  return { r, faites };
+}
+const ARRETS = ['interrompue', 'occupee', 'a-poursuivre'];
+async function fusionnerPorteur() {
+  const o = etat.o;
+  if (!o || !o.d || o.nouvelle || o.enCours || !peut() || !o.fusionVers) return;
+  const vers = (o.d.autres.find((x) => x.id === o.fusionVers) || {}).nom || '';
+  o.enCours = true; o.note = null; dessinerFenetre();
+  const { r, faites } = await enchainer('fusionner-porteurs', { doublon: o.id, garde: o.fusionVers }, () => etat.o === o);
+  if (etat.o !== o) { charger(); return; }
+  o.enCours = false;
+  if (r.ok) {
+    etat.o = null; dessinerFenetre();
+    message(P.fusion.faite(faites, vers, r.donnees.historique !== false));
+    chargerCompteurs();
+    return charger();
+  }
+  if (ARRETS.includes(r.donnees.code)) {
+    // La confirmation reste ouverte : relancer reprend là où la fusion s'est arrêtée.
+    noter('warn', P.fusion.arretee(faites, Number(r.donnees.restantes) || 0) + (r.donnees.sansVersion ? P.fusion.sansVersion : ''));
+    charger();
+    // Les ressources encore rattachées sont relues, pour que la confirmation dise ce qui reste ; la saisie n'est pas touchée.
+    const relu = await appel('porteur', { query: { porteur: o.id } });
+    if (etat.o === o && relu.ok && !o.enCours) { o.d = relu.donnees; dessinerFenetre(); }
+    return undefined;
+  }
+  o.confirmation = false;
+  return echecPorteur(r);
+}
+// Les gestes du volet d'un porteur. Pendant un envoi, rien d'autre ne bouge.
+function gesteVolet(act) {
+  const o = etat.o;
+  if (!o.d || o.enCours || !peut()) return;
+  if (act === 'o-enregistrer') return enregistrerPorteur();
+  if (act === 'o-retrouver') return retrouverAdresse();
+  if (act === 'o-fusion-annuler') { o.confirmation = false; return dessinerFenetre(); }
+  if (act === 'o-fusionner') return fusionnerPorteur();
+  if (act === 'o-fusion-demander') {
+    if (!o.fusionVers) { message(P.fusion.choisirDabord); const choix = $('#fusionVers'); if (choix) choix.focus(); return; }
+    o.confirmation = true; dessinerFenetre();
+    const zone = $('#confirmationFusion');
+    if (zone) { zone.scrollIntoView({ block: 'center' }); const oui = zone.querySelector('.danger'); if (oui) oui.focus(); }
+  }
+}
+
+// ─── Qualité des données ───
+// La ligne d'un point : son texte et ses boutons. Chaque ligne mène à sa correction.
+function ligneQualite(p) {
+  const fige = !peut() || etat.q.enCours ? ' disabled' : '';
+  const ouvrirFiche = (fiche) => `<button type="button" class="btn sm" data-act="ouvrir-fiche" data-id="${e(fiche.id)}">${e(Q.ouvrirFiche)}</button>`;
+  const voir = (id) => `<button type="button" class="btn sm primary" data-act="ouvrir" data-id="${e(id)}">${e(Q.voirProposition)}</button>`;
+  const nom = (fiche) => fiche.nom || T.sansNom;
+  if (p.sujet === 'sansContact') return { texte: Q.sansContact(nom(p.fiche)), boutons: ouvrirFiche(p.fiche) };
+  if (p.sujet === 'sansPorteur') return { texte: Q.sansPorteur(nom(p.fiche)), boutons: ouvrirFiche(p.fiche) };
+  if (p.sujet === 'sansLogo') return { texte: Q.sansLogo(nom(p.fiche), !!p.proposition), boutons: (p.proposition ? voir(p.proposition) : '') + ouvrirFiche(p.fiche) };
+  if (p.sujet === 'liens') {
+    return { texte: Q.lien(nom(p.fiche), p.lien, jour(p.depuis)), boutons: `<button type="button" class="btn sm" data-act="q-revisiter" data-id="${e(p.fiche.id)}"${fige}>${e(etat.q.enCours === `lien:${p.fiche.id}` ? T.enCours : Q.revisiter)}</button>${ouvrirFiche(p.fiche)}` };
+  }
+  if (p.sujet === 'aVerifier') {
+    return { texte: p.verifieeLe ? Q.ancienne(nom(p.fiche), jour(p.verifieeLe)) : Q.jamais(nom(p.fiche)), boutons: `<button type="button" class="btn sm primary" data-act="q-verifier" data-id="${e(p.fiche.id)}"${fige}>${e(Q.verifier)}</button>${ouvrirFiche(p.fiche)}` };
+  }
+  if (p.sujet === 'doublons') {
+    const garder = (de, vers, principal) => `<button type="button" class="btn sm${principal ? ' primary' : ''}" data-act="q-garder" data-k="${e(p.cle)}" data-de="${e(de)}" data-vers="${e(vers)}"${fige}>${e(Q.garder(vers))}</button>`;
+    const c = etat.q.confirmation;
+    const demandee = c && c.cle === p.cle && [p.garder, p.retirer].includes(c.de) && [p.garder, p.retirer].includes(c.vers);
+    return {
+      // Deux écritures seulement proches (l'une contient l'autre) peuvent être deux normes : aucun bouton n'est mis en avant.
+      texte: (p.sur === false ? Q.proche : Q.doublon)(libelle(p.cle), Q.ecriture(p.retirer, Number(p.fiches.retirer)), Q.ecriture(p.garder, Number(p.fiches.garder))),
+      boutons: garder(p.retirer, p.garder, p.sur !== false) + garder(p.garder, p.retirer, false),
+      suite: demandee ? `<div class="confirm" id="confirmationQualite"><span>${e(Q.confirmer(c.de, c.vers, Number(p.toutes[c.de === p.garder ? 'garder' : 'retirer'])))}</span><button type="button" class="btn sm" data-act="q-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="q-remplacer"${fige}>${e(etat.q.enCours ? T.enCours : Q.remplacer)}</button></div>` : '',
+    };
+  }
+  if (p.sujet === 'porteursDoubles') return { texte: Q.porteurs(p.porteur.nom, p.autre.nom), boutons: `<button type="button" class="btn sm" data-act="ouvrir-porteur" data-id="${e(p.porteur.id)}">${e(Q.ouvrirPorteur)}</button>` };
+  if (p.sujet === 'valeursNouvelles') return { texte: Q.valeur(p.valeur, libelle(p.cle), p.proposition.nom || T.sansNom), boutons: `<button type="button" class="btn sm" data-act="ouvrir" data-id="${e(p.proposition.id)}">${e(Q.voirProposition)}</button>` };
+  return null;
+}
+function corpsQualite() {
+  if (!etat.points) return `<p class="muted" role="status">${e(T.chargement)}</p>`;
+  const sujets = Object.keys(Q.sujets).filter((sujet) => etat.points.some((p) => p.sujet === sujet));
+  if (!sujets.length) return `<section class="card"><p class="muted">${e(Q.rien)}</p></section>`;
+  return sujets.map((sujet) => {
+    const lignes = etat.points.filter((p) => p.sujet === sujet).map(ligneQualite).filter(Boolean);
+    const tete = `<h3>${e(Q.sujets[sujet])}</h3><span class="pill p-mute num">${lignes.length}</span>`;
+    const liste = `${sujet === 'liens' ? `<p class="muted small">${e(Q.liensAide)}</p>` : ''}
+      <div class="list">${lignes.map((l) => `<div><div class="grow">${e(l.texte)}</div><span class="row">${l.boutons}</span>${l.suite || ''}</div>`).join('')}</div>`;
+    // Les fiches à vérifier sont un état de fond, long au départ : le groupe arrive replié.
+    if (sujet === 'aVerifier') {
+      return `<section class="card"><details class="repli" data-repli="aVerifier"${etat.q.aVerifierOuvert ? ' open' : ''}><summary class="row" style="justify-content:space-between">${tete}</summary>
+        <p class="muted small">${e(Q.aVerifierAide)}</p>${liste}</details></section>`;
+    }
+    return `<section class="card"><div class="row" style="justify-content:space-between">${tete}</div>${liste}</section>`;
+  }).join('');
+}
+function ecranQualite() {
+  return `<div class="head"><div><h1>${e(T.routes.qualite)}</h1><p>${e(Q.intro)}</p></div></div><div id="qbody">${corpsQualite()}</div>`;
+}
+// Les compteurs de la barre latérale, lus sans rien bloquer : points de qualité et porteurs à placer.
+async function chargerCompteurs() {
+  const r = await appel('qualite');
+  if (!r.ok || !etat.moi) return;
+  etat.points = r.donnees.points || []; etat.compteurs = r.donnees.compteurs || null;
+  if (route() === 'qualite' && !etat.q.enCours) rafraichir(); else dessinerNav();
+}
+// Un geste de l'écran Qualité : un seul à la fois, les boutons sont figés pendant l'envoi.
+async function gesteQualite(cle, envoyer, reussite) {
+  if (!peut() || etat.q.enCours) return;
+  etat.q.enCours = cle; rafraichir();
+  const retour = await envoyer();
+  const r = retour.r || retour;
+  etat.q.enCours = null;
+  if (r.code === 401) return afficherEntree(null);
+  if (r.ok) { etat.q.confirmation = null; message(reussite(r.donnees, retour.faites)); return charger(); }
+  const code = r.donnees.code;
+  if (r.code === 403) { message(T.roleInsuffisant); rafraichir(); return relireMoi(); }
+  if (ARRETS.includes(code) && retour.r) message(Q.arretee(retour.faites, Number(r.donnees.restantes) || 0) + (r.donnees.sansVersion ? Q.sansVersion : ''));
+  else if (code === 'occupee') message(Q.occupee);
+  else if (code === 'introuvable') message(Q.introuvable);
+  else message((code === 'invalide' && r.donnees.erreurs && r.donnees.erreurs._) || T.indisponible);
+  return charger();
+}
+function gesteEcranQualite(act, cible) {
+  const { id } = cible.dataset;
+  if (!peut() || etat.q.enCours) return undefined;
+  if (act === 'q-verifier') return gesteQualite(`verifier:${id}`, () => appel('verifier', { corps: { fiche: id } }), () => Q.verifiee);
+  if (act === 'q-revisiter') {
+    return gesteQualite(`lien:${id}`, () => appel('revisiter-lien', { corps: { fiche: id } }), (d) => (d.etat === 'ignore' ? Q.lienIgnore : d.enPanne ? Q.lienToujours : Q.lienRevenu));
+  }
+  if (act === 'q-annuler') { etat.q.confirmation = null; return rafraichir(); }
+  if (act === 'q-garder') {
+    etat.q.confirmation = { cle: cible.dataset.k, de: cible.dataset.de, vers: cible.dataset.vers };
+    rafraichir();
+    const zone = $('#confirmationQualite');
+    if (zone) { zone.scrollIntoView({ block: 'center' }); const oui = zone.querySelector('.danger'); if (oui) oui.focus(); }
+    return undefined;
+  }
+  if (act === 'q-remplacer' && etat.q.confirmation) {
+    const { cle, de, vers } = etat.q.confirmation;
+    return gesteQualite(`valeurs:${cle}`, () => enchainer('fusionner-valeurs', { cle, de, vers }, () => route() === 'qualite'), (d, faites) => Q.fusionnee(de, vers, faites, d.historique !== false));
+  }
+  return undefined;
+}
+
 // ─── Export en CSV, à partir des fiches lues par le tableau ───
 function lignesCsv(liste) {
   // Une cellule qui commencerait par un signe de formule est neutralisée pour les tableurs.
@@ -1326,7 +1802,7 @@ document.addEventListener('click', async (evenement) => {
   if (!cible) return;
   if (cible.id === 'boutonTheme') return changerTheme();
   if (cible.id === 'deconnexion') {
-    if (etat.f && !fermerFenetre()) return;
+    if (fenetreOuverte() && !fermerFenetre()) return;
     await appel('deconnexion', { corps: {} });
     return afficherEntree(null);
   }
@@ -1352,8 +1828,14 @@ document.addEventListener('click', async (evenement) => {
     const bouton = $('#layer .x'); if (bouton) bouton.focus();
     return;
   }
+  // Porteurs et qualité des données.
+  if (act === 'ouvrir-porteur') { evenement.stopPropagation(); return ouvrirPorteur(id); }
+  if (act === 'nouveau-porteur') return peut() ? ouvrirPorteur(null) : undefined;
+  if (act === 'vue-porteurs') { etat.vueP = v === 'liste' ? 'liste' : 'colonnes'; return rendre(); }
+  if (act && act.startsWith('q-')) return gesteEcranQualite(act, cible);
   if (etat.csv) return gesteCsv(act, v);
   if (etat.r) return gesteFenetreFiche(act, cible);
+  if (etat.o) return gesteVolet(act);
 
   // Fenêtre : pendant un envoi, rien d'autre ne bouge.
   if (!f || !f.d || f.enCours) return;
@@ -1392,7 +1874,7 @@ document.addEventListener('keydown', (evenement) => {
   if (evenement.key === 'Escape' && fenetreOuverte()) return void fermerFenetre();
   // Tab tourne dans la fenêtre ouverte, sans sortir vers la page derrière.
   if (evenement.key === 'Tab' && fenetreOuverte()) {
-    const fenetre = $('#layer .modal');
+    const fenetre = $('#layer .modal, #layer .drawer');
     const atteignables = fenetre ? [...fenetre.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"]')].filter((x) => !x.disabled && x.offsetParent !== null) : [];
     if (!atteignables.length) return;
     const premier = atteignables[0]; const dernier = atteignables[atteignables.length - 1];
@@ -1410,6 +1892,13 @@ document.addEventListener('input', (evenement) => {
   const cible = evenement.target; const f = etat.f;
   if (cible.id === 'q') { etat.filtres.q = cible.value; return rafraichir(); }
   if (cible.id === 'rq') { etat.filtresR.q = cible.value; return rafraichir(); }
+  // Volet d'un porteur : chaque frappe est gardée, et le repère suit les coordonnées écrites.
+  const o = etat.o;
+  if (o && o.d) {
+    const cle = cible.dataset.o;
+    if (CHAMPS_PORTEUR.includes(cle)) { o.valeurs[cle] = cible.value; if (cle === 'latitude' || cle === 'longitude') placerRepere(); }
+    return;
+  }
   // Fenêtre d'une fiche : chaque frappe est gardée, sans redessiner.
   const r = etat.r;
   if (r && r.d) {
@@ -1431,6 +1920,7 @@ document.addEventListener('change', (evenement) => {
   if (cible.id === 'fType') { etat.filtres.type = cible.value; return rafraichir(); }
   if (cible.id === 'rType') { etat.filtresR.type = cible.value; return rafraichir(); }
   if (cible.id === 'rStatut') { etat.filtresR.statut = cible.value; return rafraichir(); }
+  if (cible.id === 'fusionVers' && etat.o && etat.o.d && !etat.o.enCours) { etat.o.fusionVers = cible.value; etat.o.confirmation = false; return dessinerFenetre(); }
   const r = etat.r;
   if (r && r.d) {
     if (r.enCours) return;
@@ -1482,13 +1972,20 @@ document.addEventListener('drop', (evenement) => {
   deplacer(evenement.dataTransfer.getData('text/plain'), c.dataset.drop);
 });
 
+// Un groupe replié de l'écran Qualité garde son état d'un redessin à l'autre.
+document.addEventListener('toggle', (evenement) => {
+  const cible = evenement.target;
+  if (cible && cible.dataset && cible.dataset.repli === 'aVerifier') etat.q.aVerifierOuvert = cible.open;
+}, true);
+
 // Fermer l'onglet ou recharger la page avec une saisie en cours : le navigateur demande confirmation.
 window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours()) { evenement.preventDefault(); evenement.returnValue = ''; } });
 
 // Changer d'écran. Une fenêtre avec une saisie en cours reste ouverte.
 window.addEventListener('hashchange', () => {
   if (!etat.moi) return;
-  if (fenetreOuverte() && !saisieEnCours()) { etat.f = null; etat.r = null; etat.csv = null; dessinerFenetre(); }
+  if (fenetreOuverte() && !saisieEnCours()) { etat.f = null; etat.r = null; etat.csv = null; etat.o = null; dessinerFenetre(); }
+  etat.q.confirmation = null;
   rendre(); window.scrollTo(0, 0);
   charger();
 });
@@ -1534,6 +2031,8 @@ async function demarrer() {
   etat.moi = r.donnees;
   rendre();
   charger();
+  // Les pastilles « Porteurs » et « Qualité des données » de la barre latérale.
+  if (route() !== 'qualite') chargerCompteurs();
 }
 demarrer();
 })();

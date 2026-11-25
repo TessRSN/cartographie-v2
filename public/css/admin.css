@@ -168,8 +168,6 @@ tbody tr:last-child td { border-bottom: 0; }
 .confirm .btn { color: var(--fg); }
 .sep { border-top: 1px solid var(--line); padding-top: 1rem; }
 pre.csv { margin: 0; padding: .7rem .8rem; background: var(--surface2); border-radius: 8px; overflow: auto; max-height: 190px; font-size: .78rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.map svg { width: 100%; height: auto; display: block; border-radius: 8px; border: 1px solid var(--line); cursor: crosshair; background: var(--land); }
-.map text { font-family: var(--font); font-size: 9px; fill: var(--muted); }
 
 /* Courriels */
 .mail { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 1rem; align-items: start; }
@@ -316,3 +314,15 @@ del { background: var(--bad-bg); color: var(--bad); text-decoration: line-throug
 .fields .f .note, .fields .f .muted.small { font-weight: 400; }
 .fields .f .chips .muted { align-self: center; }
 .tl .confirm { align-self: stretch; }
+
+/* Lot 3 : la carte du volet d'un porteur (celle du site, chargée à l'ouverture du volet) et les confirmations de l'écran Qualité */
+.map .carte-porteur { height: 280px; border-radius: 8px; border: 1px solid var(--line); background: var(--land); color: var(--muted); font-size: .88rem; display: flex; align-items: center; justify-content: center; cursor: crosshair; }
+.map .carte-porteur.leaflet-container { display: block; font-family: var(--font); }
+.fields .err.wide { grid-column: 1 / -1; }
+.list > div > .confirm { flex: 1 1 100%; }
+@media (max-width: 720px) { .map .carte-porteur { height: 230px; } }
+details.repli > summary { cursor: pointer; list-style: none; }
+details.repli > summary::-webkit-details-marker { display: none; }
+details.repli > summary h3::before { content: '▸ '; color: var(--muted); }
+details.repli[open] > summary h3::before { content: '▾ '; }
+details.repli[open] > summary { margin-bottom: .5rem; }

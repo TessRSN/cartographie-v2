@@ -17,8 +17,16 @@
  *   POST retablir     { fiche, numero }         → la fiche reprend les valeurs d'une version
  *   POST verifier | ecarter | republier { fiche }
  *   POST creer        { valeurs }               → ajoute une ressource
- * Une fiche est désignée par son adresse publique, ou par un repère opaque si elle est écartée :
- * jamais par son identifiant Notion.
+ *   GET  porteurs                               → tous les porteurs, et la clé du fond de carte
+ *   GET  porteur      ?porteur=                 → un porteur, ses ressources et les autres porteurs
+ *   POST enregistrer-porteur { porteur, valeurs } | creer-porteur { valeurs }
+ *   POST geocoder     { adresse }               → les coordonnées d'une adresse, sans rien écrire
+ *   POST fusionner-porteurs { doublon, garde }  → rattache les fiches du doublon au porteur gardé
+ *   GET  qualite                                → ce qui est à corriger dans les fiches publiées
+ *   POST fusionner-valeurs { cle, de, vers }    → une seule écriture pour un mot-clé ou une norme
+ *   POST revisiter-lien { fiche }               → revisite le lien principal d'une fiche
+ * Une fiche est désignée par son adresse publique, ou par un repère opaque si elle est écartée ;
+ * un porteur, toujours par un repère opaque : jamais par un identifiant Notion.
  * Hors « session » et « deconnexion », chaque appel exige un témoin de session valide ET une
  * personne toujours inscrite et active, dont le rôle, relu à chaque appel, suffit pour l'action.
  * Tout envoi doit venir du site lui-même.
@@ -29,6 +37,7 @@ const { avisDe } = require('../lib/propositions');
 const { verifierOctets } = require('../lib/images');
 const { ouvertes, origineSure, memeOrigineStricte, corpsDe, dependances } = require('../lib/contributions');
 const { repereValide } = require('../lib/ressources');
+const { reperePorteurValide } = require('../lib/porteurs');
 
 const TEMOIN = 'carto_session';
 const DUREE_SESSION_S = 7 * 24 * 3600;
@@ -43,6 +52,20 @@ const ACTIONS = {
   enregistrer: { methode: 'POST', role: 'approbation' }, retablir: { methode: 'POST', role: 'approbation' },
   verifier: { methode: 'POST', role: 'approbation' }, ecarter: { methode: 'POST', role: 'approbation' },
   republier: { methode: 'POST', role: 'approbation' }, creer: { methode: 'POST', role: 'approbation' },
+  porteurs: { methode: 'GET', role: 'lecture' }, porteur: { methode: 'GET', role: 'lecture' }, qualite: { methode: 'GET', role: 'lecture' },
+  'enregistrer-porteur': { methode: 'POST', role: 'approbation' }, 'creer-porteur': { methode: 'POST', role: 'approbation' },
+  geocoder: { methode: 'POST', role: 'approbation' }, 'fusionner-porteurs': { methode: 'POST', role: 'approbation' },
+  'fusionner-valeurs': { methode: 'POST', role: 'approbation' }, 'revisiter-lien': { methode: 'POST', role: 'approbation' },
+};
+// Les gestes du lot 3 : ce que le corps doit porter, puis l'appel, toujours au nom de la personne en session.
+const texteCourt = (v, max) => typeof v === 'string' && v.length <= max;
+const GESTES_LOT3 = {
+  'enregistrer-porteur': { lisible: (c) => reperePorteurValide(c.porteur) && estObjet(c.valeurs), faire: (d, c, par) => d.porteurs.enregistrer({ repere: c.porteur, valeurs: c.valeurs, par }) },
+  'creer-porteur': { lisible: (c) => estObjet(c.valeurs), faire: (d, c, par) => d.porteurs.creer({ valeurs: c.valeurs, par }) },
+  geocoder: { lisible: (c) => texteCourt(c.adresse, 300), faire: (d, c, par) => d.porteurs.geocoder({ adresse: c.adresse, par }) },
+  'fusionner-porteurs': { lisible: (c) => reperePorteurValide(c.doublon) && reperePorteurValide(c.garde), faire: (d, c, par) => d.porteurs.fusionner({ doublon: c.doublon, garde: c.garde, par }) },
+  'fusionner-valeurs': { lisible: (c) => texteCourt(c.cle, 40) && texteCourt(c.de, 200) && texteCourt(c.vers, 200), faire: (d, c, par) => d.qualite.fusionnerValeurs({ cle: c.cle, de: c.de, vers: c.vers, par }) },
+  'revisiter-lien': { lisible: (c) => repereValide(c.fiche), faire: (d, c, par) => d.qualite.revisiterLien({ repere: c.fiche, par }) },
 };
 // Les gestes qui portent sur une fiche existante.
 const GESTES_FICHE = ['enregistrer', 'retablir', 'verifier', 'ecarter', 'republier'];
@@ -56,7 +79,7 @@ const CONTENUS_TRANCHEES_MAX = 40;
 const ACTIVITE_MAX = 20;
 // Jour d'envoi du résumé hebdomadaire : celui du planificateur (« crons » dans vercel.json), vérifié par un essai.
 const JOUR_RESUME = 'lundi';
-const CODES = { 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
+const CODES = { 'adresse-introuvable': 404, 'a-poursuivre': 409, interrompue: 502, 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
 const CLES = new Set(CHAMPS.map((c) => c.cle));
 const idValide = (id) => typeof id === 'string' && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(id);
 const estObjet = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -272,6 +295,27 @@ function creerGestionnaire(donnees) {
           if (action === 'retablir') demande.numero = corps.numero;
           retour = await d.ressources[action](demande);
         }
+        if (retour.ok) return res.status(200).json(retour);
+        const { ok, code, ...detail } = retour;
+        return res.status(CODES[code] || 502).json({ code, ...detail });
+      }
+
+      // ─── Porteurs et qualité des données ───
+      if (action === 'porteurs') {
+        // La clé du fond de carte est déjà publique : c'est celle que le site donne avec ses fiches.
+        return res.status(200).json({ ...(await d.porteurs.lister()), carte: { cle: env.CARTO_BASEMAP_KEY || '' } });
+      }
+      if (action === 'porteur') {
+        if (!reperePorteurValide(req.query.porteur)) return illisible();
+        const vue = await d.porteurs.lire(req.query.porteur);
+        if (!vue) return res.status(404).json({ code: 'introuvable', erreur: 'Ce porteur est introuvable.' });
+        return res.status(200).json({ ...vue, carte: { cle: env.CARTO_BASEMAP_KEY || '' } });
+      }
+      if (action === 'qualite') return res.status(200).json(await d.qualite.lire());
+      if (Object.hasOwn(GESTES_LOT3, action)) {
+        const geste = GESTES_LOT3[action];
+        if (!geste.lisible(corps)) return illisible();
+        const retour = await geste.faire(d, corps, approbateur);
         if (retour.ok) return res.status(200).json(retour);
         const { ok, code, ...detail } = retour;
         return res.status(CODES[code] || 502).json({ code, ...detail });
