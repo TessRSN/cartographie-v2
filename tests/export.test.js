@@ -125,3 +125,18 @@ test("la réponse publique ne contient ni identifiant Notion ni table des adress
   assert.ok(!corps.includes('id-notion-1'));
   assert.ok(!corps.includes('idParAdresse'));
 });
+
+test('contributions suit la variable CONTRIBUTIONS, fermé par défaut', async () => {
+  const gestionnaire = creerGestionnaire({ source: creerSource({ lire: async () => donnees }) });
+  const avant = process.env.CONTRIBUTIONS;
+  delete process.env.CONTRIBUTIONS;
+  let res = reponse(); await gestionnaire({ method: 'GET' }, res);
+  assert.equal(res.corps.contributions, false);
+  process.env.CONTRIBUTIONS = 'non';
+  res = reponse(); await gestionnaire({ method: 'GET' }, res);
+  assert.equal(res.corps.contributions, false);
+  process.env.CONTRIBUTIONS = 'oui';
+  res = reponse(); await gestionnaire({ method: 'GET' }, res);
+  assert.equal(res.corps.contributions, true);
+  if (avant === undefined) delete process.env.CONTRIBUTIONS; else process.env.CONTRIBUTIONS = avant;
+});

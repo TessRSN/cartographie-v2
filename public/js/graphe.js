@@ -234,8 +234,16 @@ function installerCalme() {
 }
 // Un pas de respiration : déplace très légèrement l'équilibre. Les options de
 // la physique sont retouchées en place (vis-network 9.1.9 les relit à chaque pas).
+let enPause = false;       // vrai tant qu'une fenêtre est ouverte par-dessus le graphe
 function respirer() {
   if (!reseau || !calme || document.hidden || C.etat.vue !== 'connexions') return;
+  // Sous une fenêtre ouverte, le graphe se met en pause : le verre dépoli de la fenêtre
+  // n'a plus à se recalculer à chaque image, ce qui faisait clignoter ses boutons au survol.
+  if (document.querySelector('dialog[open]')) {
+    if (!enPause) { reseau.stopSimulation(); enPause = true; }
+    return;
+  }
+  if (enPause) { enPause = false; reseau.startSimulation(); }
   if (!calmeApplique) installerCalme();
   phase += RESPIRATION.pas;
   const options = reseau.physics && reseau.physics.options;
