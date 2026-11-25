@@ -379,6 +379,10 @@ body {
 .stats-band { background: var(--bar-bg); border-bottom: 1px solid var(--rsn-border); }
 .stats-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; width: 100%; min-height: 44px; padding: 0.3rem 2rem; border: 0; background: none; font: inherit; text-align: left; color: var(--ink); cursor: pointer; }
 .stats-head .t { font-size: 0.9rem; font-weight: 700; }
+/* Replié, le titre est une invitation : il prend la couleur des liens, avec son icône. */
+.stats-band.closed .stats-head .t, .stats-band.closed .stats-head > svg { color: var(--rsn-secondary); }
+[data-theme="dark"] .stats-band.closed .stats-head .t, [data-theme="dark"] .stats-band.closed .stats-head > svg { color: var(--rsn-accent); }
+.stats-band.closed .stats-head:hover .t { text-decoration: underline; }
 .stats-head .s { font-size: 0.8rem; color: var(--muted-strong); }
 .stats-head .s strong { color: var(--ink); }
 .stats-head .tog { margin-left: auto; display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; font-weight: 600; color: var(--rsn-secondary); }

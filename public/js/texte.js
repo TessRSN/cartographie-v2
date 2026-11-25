@@ -97,7 +97,7 @@ const TEXTES = {
     ressources: (n) => (n > 1 ? 'ressources' : 'ressource'),
     porteurs: (n) => (n > 1 ? 'porteurs' : 'porteur'),
     voir: 'Voir le portrait de la cartographie',
-    deplier: 'Déplier', replier: 'Replier',
+    deplier: 'Déplier les statistiques', replier: 'Replier',
     types: 'Types de ressources', typesAide: 'Type principal de chaque fiche',
     sujets: 'Principaux sujets', sujetsAide: 'Nombre de fiches',
     porteursTitre: 'Principaux porteurs', porteursAide: 'Nombre de fiches',
