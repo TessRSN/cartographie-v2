@@ -72,3 +72,18 @@ test('le titre d\'une page liée : lu quelle que soit sa colonne de titre ; une 
   assert.equal(await n.lireTitrePage('inst'), 'CHU de Québec');
   await assert.rejects(() => n.lireTitrePage('ferme'));
 });
+
+test('la marque « à revoir » et sa note sont lues de Notion, et ne sortent jamais dans les données publiques', () => {
+  const { PROP, ficheDepuisPage } = require('../lib/notion');
+  const { assembler } = require('../lib/fiches');
+  const page = { id: 'f1', properties: {
+    [PROP.nom]: { title: [{ plain_text: 'Cohorte X' }] }, [PROP.statutFiche]: { select: { name: 'Publiée' } },
+    [PROP.aRevoir]: { checkbox: true }, [PROP.noteARevoir]: { rich_text: [{ plain_text: 'Note interne secrète.' }] },
+  } };
+  const fiche = ficheDepuisPage(page);
+  assert.equal(fiche.aRevoir, true);
+  assert.equal(fiche.noteARevoir, 'Note interne secrète.');
+  assert.equal(ficheDepuisPage({ id: 'f2', properties: { [PROP.nom]: { title: [{ plain_text: 'Y' }] } } }).aRevoir, false);
+  const publiques = JSON.stringify(assembler([fiche], [], { logosCopies: {} }));
+  assert.ok(!/aRevoir|noteARevoir|secrète/.test(publiques), publiques.slice(0, 200));
+});

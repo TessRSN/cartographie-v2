@@ -356,6 +356,7 @@ const TEXTES = {
       aucune: 'aucune', place: 'Placé', aPlacer: 'À placer', lie: 'Lié',
       placeSurLaCarte: 'Placé sur la carte', aPlacerSurLaCarte: 'À placer sur la carte',
       nom: 'Nom', adresse: 'Adresse', latitude: 'Latitude', longitude: 'Longitude',
+      chercher: 'Chercher un porteur ou une adresse', aucunTrouve: 'Aucun porteur ne correspond à la recherche.',
       retrouver: 'Retrouver l’adresse sur la carte',
       retrouverAide: 'ou cliquez sur la carte pour déplacer le repère.',
       retrouverSous: 'Remplit la latitude et la longitude à partir de l’adresse.',
@@ -402,14 +403,16 @@ const TEXTES = {
       colonnes: { fiche: 'Fiche', manque: 'Ce qui manque' },
       aucuneFiche: 'Aucune fiche ne correspond à la recherche.', rienIci: 'Rien à corriger ici.',
       filtres: {
-        sansContact: 'Sans contact', sansPorteur: 'Sans porteur', sansLogo: 'Sans logo', liens: 'Lien à vérifier', aVerifier: 'À vérifier',
+        aRevoir: 'À revoir', sansContact: 'Sans contact', sansPorteur: 'Sans porteur', sansLogo: 'Sans logo', liens: 'Lien à vérifier', aVerifier: 'À vérifier',
         doublons: 'Doublons', porteursDoubles: 'Porteurs en double', valeursNouvelles: 'Valeurs nouvelles',
       },
       manque: {
+        aRevoir: (note) => (note ? `À revoir : ${note}` : 'À revoir'),
         sansContact: 'Contact', sansPorteur: 'Porteur', sansLogo: 'Logo', logoPropose: 'Logo (une proposition en apporte un)',
         liens: (jour) => `Lien à vérifier depuis le ${jour}`, jamais: 'Jamais vérifiée', ancienne: (jour) => `Vérifiée le ${jour}`,
       },
       sujets: {
+        aRevoir: 'Fiches marquées à revoir par l’équipe',
         sansContact: 'Fiches sans contact', sansPorteur: 'Fiches sans porteur', sansLogo: 'Fiches sans logo',
         liens: 'Lien principal qui ne répond pas à notre vérification',
         aVerifier: 'Fiches jamais vérifiées, ou vérifiées depuis plus d’un an',
@@ -477,6 +480,11 @@ const TEXTES = {
       enregistrer: 'Enregistrer les modifications', creer: 'Créer la fiche',
       enregistrerAide: 'Chaque enregistrement crée une nouvelle version dans l’historique.',
       verifier: 'Marquer vérifiée aujourd’hui', voirPublique: 'Voir la fiche publique',
+      revoir: {
+        bouton: 'Marquer à revoir', retirer: 'Retirer « à revoir »', pastille: 'À revoir', titre: 'À revoir', sansNote: 'Aucune note.',
+        question: 'Pourquoi cette fiche est-elle à revoir ?', aide: 'facultatif, pour l’équipe seulement : jamais montré sur le site',
+        confirmer: 'Marquer à revoir',
+      },
       republier: 'Republier la fiche',
       ecarter: {
         bouton: 'Écarter du catalogue', confirmer: 'Écarter',
@@ -541,6 +549,8 @@ const TEXTES = {
       creee: (historique) => `Fiche créée et publiée. Elle apparaît sur le site en quelques minutes.${historique ? '' : ' L’historique n’a pas pu être écrit.'}`,
       messages: {
         verifier: 'Fiche marquée vérifiée aujourd’hui.',
+        revoir: 'Fiche marquée à revoir. Elle apparaît dans « Qualité des données ». Rien ne change sur le site.',
+        'retirer-revoir': 'La marque « à revoir » est retirée.',
         ecarter: 'Fiche écartée : elle disparaît du site en quelques minutes.',
         republier: 'Fiche republiée : elle revient sur le site en quelques minutes.',
       },

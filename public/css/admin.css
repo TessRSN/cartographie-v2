@@ -329,3 +329,4 @@ del { background: var(--bad-bg); color: var(--bad); text-decoration: line-throug
 h2.qtitre { font-size: 1.05rem; font-weight: 700; color: var(--fg); text-transform: none; letter-spacing: 0; margin: .2rem 0 .6rem; }
 .card h2.qtitre { margin: 0; }
 table.qtable td { vertical-align: middle; }
+.row.gestes { margin: .2rem 0 .4rem; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); }

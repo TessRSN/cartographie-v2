@@ -65,7 +65,7 @@ test('une fiche ouverte : les champs du catalogue seulement, la version de dépa
   const b = banc({ propositions: [{ id: 'prop-1', statut: 'attente', ficheId: 'id-notion-outil', genre: 'modification', nomProposant: 'Pat', courriel: 'pat@exemple.org' }] });
   const d = await b.ressources.lire('outil-y');
   assert.deepEqual(Object.keys(d.valeurs), CLES);
-  assert.deepEqual(d.fiche, { id: 'outil-y', adresse: 'outil-y', nom: 'Outil Y', statut: 'publiee', verifieeLe: null, verifieePar: null, logo: d.fiche.logo, logoDepose: true });
+  assert.deepEqual(d.fiche, { id: 'outil-y', adresse: 'outil-y', nom: 'Outil Y', statut: 'publiee', verifieeLe: null, verifieePar: null, aRevoir: false, noteARevoir: '', logo: d.fiche.logo, logoDepose: true });
   assert.match(d.fiche.logo, /^\/api\/logo\?adresse=outil-y&v=[0-9a-f]+$/);
   assert.deepEqual(d.valeurs.reposeSur, ['cohorte-x'], 'un lien vers une fiche écartée n\'est pas montré');
   assert.deepEqual(d.versions.map((v) => [v.numero, v.source]), [[1, 'depart']]);
@@ -477,4 +477,33 @@ test('changer le lien principal d\'une fiche efface sa date de panne : elle ne v
   const autre = banc({ fiches: [brute({ lienEnPanneDepuis: '2026-11-18' })] });
   await enregistrer(autre, { phrase: 'Autre.' }, { phrase: 'Une phrase.' });
   assert.ok(!(PROP.lienEnPanneDepuis in autre.de('mettreAJourFiche')[0].proprietes));
+});
+
+// ─── Fiche « à revoir » ───
+test('marquer une fiche à revoir : une case et une note pour l\'équipe, sans version ; puis retirer la marque', async () => {
+  const b = banc();
+  const retour = await b.ressources.revoir({ repere: 'cohorte-x', actif: true, note: '  Le lien a changé,\n à confirmer.  ', par: TESS });
+  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', aRevoir: true, note: 'Le lien a changé, à confirmer.' });
+  const ecrit = b.de('mettreAJourFiche')[0].proprietes;
+  assert.deepEqual(Object.keys(ecrit).sort(), [PROP.aRevoir, PROP.noteARevoir].sort());
+  assert.deepEqual(ecrit[PROP.aRevoir], { checkbox: true });
+  assert.equal(pagesVersions(b).length, 0);
+  const d = await b.ressources.lire('cohorte-x');
+  assert.equal(d.fiche.aRevoir, true);
+  assert.equal(d.fiche.noteARevoir, 'Le lien a changé, à confirmer.');
+  assert.equal((await b.ressources.lister()).ressources.find((r) => r.id === 'cohorte-x').aRevoir, true);
+  // Retirer la marque efface aussi la note.
+  const retire = await b.ressources.revoir({ repere: 'cohorte-x', actif: false, note: 'ignorée', par: TESS });
+  assert.deepEqual(retire, { ok: true, id: 'cohorte-x', aRevoir: false, note: '' });
+  assert.equal(b.fiches[0].aRevoir, false);
+  assert.equal(b.fiches[0].noteARevoir, '');
+});
+
+test('à revoir : la note est bornée, et une personne en lecture seule ne marque rien', async () => {
+  const b = banc();
+  const longue = await b.ressources.revoir({ repere: 'cohorte-x', actif: true, note: 'x'.repeat(900), par: TESS });
+  assert.equal(longue.note.length, 500);
+  const ecritures = b.de('mettreAJourFiche').length;
+  assert.equal((await b.ressources.revoir({ repere: 'cohorte-x', actif: true, note: 'x', par: LECTRICE })).code, 'non-approbateur');
+  assert.equal(b.de('mettreAJourFiche').length, ecritures);
 });

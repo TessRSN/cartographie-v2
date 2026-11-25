@@ -15,13 +15,13 @@ const LEA = 'lea@exemple.ca';
 const PARTIE = 'partie@exemple.ca';
 const CLES = CHAMPS.map((c) => c.cle);
 const LECTURES = ['ressources', 'ressource'];
-const ECRITURES = ['enregistrer', 'retablir', 'verifier', 'ecarter', 'republier', 'creer'];
+const ECRITURES = ['enregistrer', 'retablir', 'verifier', 'revoir', 'ecarter', 'republier', 'creer'];
 const NEUVE = { nom: 'Plateforme Z', typePrincipal: 'Logiciel ou application', phrase: 'Elle calcule.', lien: 'https://z.org' };
 // Un corps valable pour chaque action d'écriture.
 const CORPS = {
   enregistrer: { fiche: 'cohorte-x', valeurs: { phrase: 'Une autre phrase.' }, depart: { phrase: 'Une phrase.' } },
   retablir: { fiche: 'cohorte-x', numero: 1 },
-  verifier: { fiche: 'cohorte-x' }, ecarter: { fiche: 'cohorte-x' }, republier: { fiche: 'cohorte-x' },
+  verifier: { fiche: 'cohorte-x' }, revoir: { fiche: 'cohorte-x', actif: true, note: 'À revoir.' }, ecarter: { fiche: 'cohorte-x' }, republier: { fiche: 'cohorte-x' },
   creer: { valeurs: NEUVE },
 };
 
