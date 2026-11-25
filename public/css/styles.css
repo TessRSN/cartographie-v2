@@ -1,7 +1,7 @@
 /* Cartographie du RSN.
    Feuille reprise du bottin des membres (index.html, styles d'origine et bloc
    « refonte » fusionnés), mêmes noms de classes. Retiré : adhésion, codes QR,
-   dépôt de CSV, photos, nouveautés. Ajouté : les six couleurs de type, le logo
+   dépôt de CSV, photos, nouveautés. Ajouté : les cinq couleurs de type, le logo
    des ressources, la fiche détaillée. */
 :root {
     --rsn-primary: #1a365d;
@@ -26,7 +26,7 @@
     --bar-bg: #ffffff;
     /* Mauve des ronds de la carte, comme dans le bottin. */
     --carte-rond: #a855f7;
-    /* Les six types de ressources, aux couleurs de la charte graphique du RSN :
+    /* Les cinq types de ressources, aux couleurs de la charte graphique du RSN :
        couleur pleine (pastilles, nœuds du graphe, légende, barre du bandeau) et
        couleur du texte posé dessus (contraste d'au moins 4,5:1, vérifié par un
        essai). graphe.js lit les couleurs pleines ici : c'est le seul endroit où les changer. */
@@ -35,7 +35,6 @@
     --type-plateforme: #00A759; --type-plateforme-sur: #00210d;
     --type-logiciel: #FFCC4E;   --type-logiciel-sur: #3d3009;
     --type-service: #EE3124;    --type-service-sur: #1a0300;
-    --type-initiative: #5E0000; --type-initiative-sur: #ffffff;
     --type-autre: #5a6577;      --type-autre-sur: #ffffff;
     /* Une teinte sobre par mode d'accès (fond clair, texte foncé de la même teinte), tirée de la charte. */
     --acces-ouvert-fond: #dff3e8;      --acces-ouvert-texte: #00431A;
@@ -67,7 +66,6 @@
     --bar-bg: var(--rsn-card-bg);
     /* Le bleu marine et le bordeaux de la charte sont illisibles sur fond foncé : variante plus claire de la même teinte. */
     --type-catalogue: #7FA8D9;  --type-catalogue-sur: #0b2440;
-    --type-initiative: #C2606A; --type-initiative-sur: #1f0004;
     --type-autre: #94a3b8;      --type-autre-sur: #1a202c;
     --acces-ouvert-fond: #0f3a24;      --acces-ouvert-texte: #9be3bd;
     --acces-inscription-fond: #12325a; --acces-inscription-texte: #a9cbee;
@@ -80,7 +78,6 @@
 .type-plateforme { --type: var(--type-plateforme); --type-sur: var(--type-plateforme-sur); }
 .type-logiciel   { --type: var(--type-logiciel);   --type-sur: var(--type-logiciel-sur); }
 .type-service    { --type: var(--type-service);    --type-sur: var(--type-service-sur); }
-.type-initiative { --type: var(--type-initiative); --type-sur: var(--type-initiative-sur); }
 .type-autre      { --type: var(--type-autre);      --type-sur: var(--type-autre-sur); }
 .acces-ouvert      { --acces-fond: var(--acces-ouvert-fond);      --acces-texte: var(--acces-ouvert-texte); }
 .acces-inscription { --acces-fond: var(--acces-inscription-fond); --acces-texte: var(--acces-inscription-texte); }

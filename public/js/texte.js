@@ -12,7 +12,7 @@ const TEXTES = {
   titre: 'Cartographie des ressources en santé numérique',
   titreOnglet: (nom) => `${nom} | Cartographie du RSN`,
   reseau: 'Réseau santé numérique',
-  sousTitre: 'Jeux de données, catalogues, plateformes, logiciels, services et initiatives ouverts aux équipes du Québec.',
+  sousTitre: 'Jeux de données, catalogues, plateformes, logiciels, et services ouverts aux équipes du Québec.',
   recherche: 'Rechercher une ressource, un sujet, un porteur…',
   rechercheNom: 'Rechercher une ressource',
   effacerRecherche: 'Effacer la recherche',
@@ -33,9 +33,9 @@ const TEXTES = {
   autresSujets: (n) => (n > 1 ? `${n} autres sujets` : '1 autre sujet'),
   autresPorteurs: (n) => (n > 1 ? `${n} autres porteurs` : '1 autre porteur'),
   // Nom court de chaque type, pour les pastilles, la légende et le bandeau.
-  typesCourts: { jeu: 'Jeu de données', catalogue: 'Catalogue', plateforme: 'Plateforme', logiciel: 'Logiciel', service: 'Service', initiative: 'Initiative', autre: 'Autre' },
+  typesCourts: { jeu: 'Jeu de données', catalogue: 'Catalogue', plateforme: 'Plateforme', logiciel: 'Logiciel', service: 'Service', autre: 'Autre' },
   // Ce qu'on trouve sous chaque type, en quelques mots (panneau des types).
-  typesAides: { jeu: 'Cohortes, biobanques', catalogue: 'Portails, entrepôts', plateforme: 'Calcul, analyse, stockage', logiciel: 'Outils, applications', service: 'Équipes, guichets', initiative: 'Regroupements, consortiums' },
+  typesAides: { jeu: 'Cohortes, biobanques', catalogue: 'Portails, entrepôts', plateforme: 'Calcul, analyse, stockage', logiciel: 'Outils, applications', service: 'Équipes, guichets' },
   compte: (n) => (n === 0 ? 'Aucune fiche' : n === 1 ? '1 fiche' : `${n} fiches`),
   affichees: (n) => (n > 1 ? 'ressources affichées' : 'ressource affichée'),
   aucunResultat: 'Aucune ressource ne correspond à cette recherche.',
@@ -137,6 +137,8 @@ const TEXTES = {
     licence: 'Licence',
     enBref: 'En bref',
     financePar: 'Financé par',
+    normes: 'Normes et formats',
+    outils: 'Outils et environnements',
     portee: 'Portée',
     langues: 'Langues',
     liens: 'Ressources liées',
@@ -286,14 +288,13 @@ function dateLongue(iso) {
   return `${jour === 1 ? '1er' : jour} ${MOIS[Number(m[2]) - 1]} ${m[1]}`;
 }
 
-// Classe de couleur d'un type (six types).
+// Classe de couleur d'un type (cinq types).
 const CLES_TYPE = {
   'Jeu de données, cohorte ou biobanque': 'jeu',
   'Catalogue ou entrepôt de données': 'catalogue',
   'Plateforme ou infrastructure': 'plateforme',
   'Logiciel ou application': 'logiciel',
   'Service ou accompagnement': 'service',
-  'Initiative ou regroupement': 'initiative',
 };
 function cleType(type) { return CLES_TYPE[type] || 'autre'; }
 
@@ -311,8 +312,6 @@ const TRACES_ICONES = {
   logiciel: ['M8 7l-5 5 5 5', 'M16 7l5 5-5 5', 'M13.5 5l-3 14'],
   // Une bouée : une équipe à qui l'on fait une demande.
   service: [rond(12, 12, 9), rond(12, 12, 3.5), 'M5.6 5.6l3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9'],
-  // Trois points reliés : un groupe qu'on peut rejoindre.
-  initiative: [rond(12, 5.5, 2.5), rond(5.5, 17.5, 2.5), rond(18.5, 17.5, 2.5), 'M10.8 7.7L6.7 15.3M13.2 7.7l4.1 7.6M8 17.5h8'],
   autre: [rond(12, 12, 4)],
 };
 function iconeType(cle) {

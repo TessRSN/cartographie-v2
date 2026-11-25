@@ -39,13 +39,13 @@ test('le calcul du contraste est juste', () => {
   assert.equal(contraste('#777777', '#777777'), 1);
 });
 
-test('les six types portent les couleurs de la charte du RSN', () => {
+test('les cinq types portent les couleurs de la charte du RSN', () => {
   assert.deepEqual(
-    { jeu: clair['--type-jeu'], catalogue: clair['--type-catalogue'], plateforme: clair['--type-plateforme'], logiciel: clair['--type-logiciel'], service: clair['--type-service'], initiative: clair['--type-initiative'] },
-    { jeu: '#0061AF', catalogue: '#003469', plateforme: '#00A759', logiciel: '#FFCC4E', service: '#EE3124', initiative: '#5E0000' });
-  // En mode sombre, seuls le bleu marine et le bordeaux reçoivent une variante plus claire.
+    { jeu: clair['--type-jeu'], catalogue: clair['--type-catalogue'], plateforme: clair['--type-plateforme'], logiciel: clair['--type-logiciel'], service: clair['--type-service'] },
+    { jeu: '#0061AF', catalogue: '#003469', plateforme: '#00A759', logiciel: '#FFCC4E', service: '#EE3124' });
+  // En mode sombre, seul le bleu marine reçoit une variante plus claire.
   for (const cle of ['jeu', 'plateforme', 'logiciel', 'service']) assert.equal(sombre[`--type-${cle}`], clair[`--type-${cle}`], cle);
-  for (const cle of ['catalogue', 'initiative']) assert.ok(luminance(sombre[`--type-${cle}`]) > luminance(clair[`--type-${cle}`]) * 4, cle);
+  for (const cle of ['catalogue']) assert.ok(luminance(sombre[`--type-${cle}`]) > luminance(clair[`--type-${cle}`]) * 4, cle);
   assert.equal(new Set(typesCles.map((c) => clair[`--type-${c}`])).size, typesCles.length, 'une couleur distincte par type');
 });
 

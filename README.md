@@ -1,6 +1,6 @@
 # Cartographie du RSN, version 2
 
-Catalogue des ressources en santé numérique au Québec : jeux de données, catalogues, plateformes, logiciels, services et initiatives. Pour chaque ressource : à quoi elle sert, comment y accéder, à qui écrire.
+Catalogue des ressources en santé numérique au Québec : jeux de données, catalogues, plateformes, logiciels et services. Pour chaque ressource : à quoi elle sert, comment y accéder, à qui écrire.
 
 Le site est en ligne à l'adresse https://cartographie.rsn.quebec
 

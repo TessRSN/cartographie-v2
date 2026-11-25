@@ -148,6 +148,8 @@ function htmlFiche(f) {
     ligne(T.financePar, puces(f.financePar)),
     ligne(T.portee, f.portee ? e(f.portee) : ''),
     ligne(T.langues, (f.langues || []).map(e).join(', ')),
+    ligne(T.normes, puces(f.normes)),
+    ligne(T.outils, puces(f.outils)),
   ].join('');
 
   const liens = (f.liens || []).map((l) =>
