@@ -223,3 +223,14 @@ test('le compteur de la barre latérale ne compte pas les fiches à vérifier : 
   assert.equal(compteurs.points, 1);
   assert.equal(compteurs.aVerifier, 1);
 });
+
+test('une fiche marquée « à revoir » sort dans la qualité avec sa note, et compte dans la pastille ; une fiche écartée non', () => {
+  const liste = points([
+    saine({ id: 'f1', nom: 'A', aRevoir: true, noteARevoir: 'Le lien a changé.' }),
+    saine({ id: 'f2', nom: 'B', aRevoir: true, noteARevoir: '', statutFiche: 'Écartée' }),
+    saine({ id: 'f3', nom: 'C' }),
+  ]).filter((p) => p.sujet === 'aRevoir');
+  assert.equal(liste.length, 1);
+  assert.equal(liste[0].note, 'Le lien a changé.');
+  assert.equal(liste[0].fiche.nom, 'A');
+});

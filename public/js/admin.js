@@ -43,6 +43,7 @@ const etat = {
   porteurs: null,       // dernière lecture des porteurs
   cleCarte: '',         // la clé du fond de carte du site, donnée avec les porteurs
   vueP: 'colonnes',     // les porteurs en colonnes ou en liste
+  rechP: '',            // la recherche dans les porteurs
   o: null,              // le volet d'un porteur, quand il est ouvert (voir voletNeuf)
   points: null,         // dernière lecture de la qualité des données
   compteurs: null,      // pastilles de la barre latérale : { points, porteursAPlacer }
@@ -883,7 +884,7 @@ function corpsRessources() {
   if (!liste.length) return `${alerte}<div class="card"><p class="muted">${e(etat.fiches.length ? T.ressources.aucunResultat : T.ressources.aucune)}</p></div>`;
   const C = T.ressources.tableau;
   return `${alerte}<div class="scroll"><table><thead><tr><th>${e(C.ressource)}</th><th>${e(C.type)}</th><th>${e(C.porteurs)}</th><th>${e(C.statut)}</th><th>${e(C.verifiee)}</th><th>${e(C.versions)}</th><th>${e(C.dernier)}</th></tr></thead><tbody>${liste.map((r) => `
-    <tr data-act="ouvrir-fiche" data-id="${e(r.id)}" tabindex="0"><td><span class="row" style="flex-wrap:nowrap"><span class="avatar tp t-${cleType(r.typePrincipal)}">${e(initiales(r.nom))}</span><span><b>${e(r.nom || T.sansNom)}</b>${r.enAttente ? `<br><span class="pill p-warn">${e(T.ressources.enAttente(Number(r.enAttente)))}</span>` : ''}</span></span></td>
+    <tr data-act="ouvrir-fiche" data-id="${e(r.id)}" tabindex="0"><td><span class="row" style="flex-wrap:nowrap"><span class="avatar tp t-${cleType(r.typePrincipal)}">${e(initiales(r.nom))}</span><span><b>${e(r.nom || T.sansNom)}</b>${r.aRevoir ? ` <span class="pill p-info">${e(T.ressources.revoir.pastille)}</span>` : ''}${r.enAttente ? `<br><span class="pill p-warn">${e(T.ressources.enAttente(Number(r.enAttente)))}</span>` : ''}</span></span></td>
       <td>${pastilleType(r.typePrincipal)}</td><td>${e(r.porteurs.join(' | ')) || `<span class="muted">${e(T.ressources.aucunPorteur)}</span>`}</td><td>${pastilleStatut(r.statut)}</td>
       <td class="num">${r.verifieeLe ? e(jour(r.verifieeLe)) + pastilleAncienne(r.verifieeLe) : `<span class="muted">${e(T.ressources.jamais)}</span>`}</td>
       <td class="num">${Number(r.versions)}</td>
@@ -1068,18 +1069,10 @@ function champFiche(cle) {
 function ongletFiche() {
   const f = etat.r; const fige = f.enCours ? ' disabled' : '';
   const champs = `<div class="fields">${ORDRE_FICHE.map(champFiche).join('')}</div>`;
-  const fiche = f.d.fiche;
-  const publique = fiche && fiche.statut === 'publiee' && fiche.adresse
-    ? `<a class="btn" href="/ressource/${e(encodeURIComponent(fiche.adresse))}" target="_blank" rel="noopener">${e(T.ressources.voirPublique)}</a>` : '';
-  if (!peut()) return `<p class="muted small">${e(T.ressources.lectureSeule)}</p>${champs}${publique ? `<div class="row sep">${publique}</div>` : ''}`;
+  if (!peut()) return `<p class="muted small">${e(T.ressources.lectureSeule)}</p>${champs}`;
   const enregistrer = `<div class="row"><button type="button" class="btn primary" data-act="f-enregistrer"${fige}>${e(f.enCours ? T.enCours : (f.nouvelle ? T.ressources.creer : T.ressources.enregistrer))}</button>${f.nouvelle ? '' : `<span class="muted small">${e(T.ressources.enregistrerAide)}</span>`}</div>`;
   if (f.nouvelle) return champs + enregistrer;
-  const gestes = fiche.statut === 'publiee'
-    ? `<button type="button" class="btn" data-act="f-verifier"${fige}>${e(T.ressources.verifier)}</button>${publique}<button type="button" class="btn danger" data-act="f-demander" data-v="ecarter"${fige}>${e(T.ressources.ecarter.bouton)}</button>`
-    : `<button type="button" class="btn primary" data-act="f-republier"${fige}>${e(T.ressources.republier)}</button>`;
-  const confirmation = f.confirmation === 'ecarter'
-    ? `<div class="confirm" id="confirmationFiche"><span>${e(T.ressources.ecarter.question(fiche.nom || T.sansNom))}</span><button type="button" class="btn sm" data-act="f-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="f-ecarter"${fige}>${e(f.enCours ? T.enCours : T.ressources.ecarter.confirmer)}</button></div>` : '';
-  return `${champs}${enregistrer}<div class="row sep">${gestes}</div>${confirmation}`;
+  return champs + enregistrer;
 }
 
 // Ce qu'une version raconte : qui, et d'où vient le changement.
@@ -1139,6 +1132,29 @@ function ongletApercu() {
   return `<p class="muted small">${e(T.ressources.apercu)}${logoChange ? ` ${e(T.ressources.apercuLogo)}` : ''}</p>${cadreApercu(apercue)}`;
 }
 
+// Les gestes sur la fiche entière, en haut de la fenêtre : vérifiée, à revoir, voir sur le site, écarter ou republier.
+function gestesFiche() {
+  const f = etat.r; const R = T.ressources; const fige = f.enCours ? ' disabled' : '';
+  const fiche = f.d.fiche;
+  const publique = fiche.statut === 'publiee' && fiche.adresse
+    ? `<a class="btn sm" href="/ressource/${e(encodeURIComponent(fiche.adresse))}" target="_blank" rel="noopener">${e(R.voirPublique)}</a>` : '';
+  const marque = fiche.aRevoir ? `<div class="note info"><b>${e(R.revoir.titre)}</b><span>${e(fiche.noteARevoir || R.revoir.sansNote)}</span></div>` : '';
+  if (!peut()) return `${marque}${publique ? `<div class="row gestes">${publique}</div>` : ''}`;
+  const revoir = fiche.aRevoir
+    ? `<button type="button" class="btn sm" data-act="f-retirer-revoir"${fige}>${e(R.revoir.retirer)}</button>`
+    : `<button type="button" class="btn sm" data-act="f-demander" data-v="revoir"${fige}>${e(R.revoir.bouton)}</button>`;
+  const boutons = fiche.statut === 'publiee'
+    ? `<button type="button" class="btn sm" data-act="f-verifier"${fige}>${e(R.verifier)}</button>${revoir}${publique}<button type="button" class="btn sm danger" data-act="f-demander" data-v="ecarter"${fige}>${e(R.ecarter.bouton)}</button>`
+    : `<button type="button" class="btn sm primary" data-act="f-republier"${fige}>${e(R.republier)}</button>${revoir}`;
+  const confirmation = f.confirmation === 'ecarter'
+    ? `<div class="confirm" id="confirmationFiche"><span>${e(R.ecarter.question(fiche.nom || T.sansNom))}</span><button type="button" class="btn sm" data-act="f-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="f-ecarter"${fige}>${e(f.enCours ? T.enCours : R.ecarter.confirmer)}</button></div>`
+    : f.confirmation === 'revoir'
+      ? `<div class="confirm" id="confirmationFiche" style="flex-direction:column;align-items:stretch"><label class="f" for="noteRevoir" style="color:inherit">${e(R.revoir.question)} <small>${e(R.revoir.aide)}</small><textarea class="notes" id="noteRevoir" maxlength="500"${fige}>${e(f.noteRevoir || '')}</textarea></label>
+          <span class="row"><button type="button" class="btn sm" data-act="f-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm primary" data-act="f-revoir"${fige}>${e(f.enCours ? T.enCours : R.revoir.confirmer)}</button></span></div>`
+      : '';
+  return `${marque}<div class="row gestes">${boutons}</div>${confirmation}`;
+}
+
 function contenuFiche() {
   const f = etat.r;
   const fermer = `<button type="button" class="btn sm x" style="margin-left:auto" data-act="fermer">${e(T.fermer)}</button>`;
@@ -1156,9 +1172,10 @@ function contenuFiche() {
   const attente = enAttente.length ? `<dt>${e(T.ressources.enAttenteTitre)}</dt><dd>${enAttente.map((p) => `<button type="button" class="linkish" data-act="ouvrir" data-id="${e(p.id)}">${e(T.ressources.propositionDe(T.genres[p.genre] || T.genres.modification, p.nomProposant || T.anonyme))}</button>`).join(' · ')}</dd>` : '';
   const onglet = (cle, nom) => `<button type="button" data-act="f-onglet" data-v="${cle}" aria-pressed="${f.onglet === cle}">${e(nom)}</button>`;
   return `<div class="row" style="flex-wrap:nowrap;align-items:flex-start"><span class="logoimg t-${type ? cleType(type) : ''}">${e(initiales(fiche.nom))}</span>
-      <div style="min-width:0"><h2 id="titreFenetre">${e(fiche.nom || T.sansNom)}</h2><span class="row" style="margin-top:.25rem">${pastilleStatut(fiche.statut)}${pastilleType(type)}${valeurs.secondType ? pastilleType(valeurs.secondType) : ''}</span></div>${fermer}</div>
+      <div style="min-width:0"><h2 id="titreFenetre">${e(fiche.nom || T.sansNom)}</h2><span class="row" style="margin-top:.25rem">${pastilleStatut(fiche.statut)}${fiche.aRevoir ? `<span class="pill p-info">${e(T.ressources.revoir.pastille)}</span>` : ''}${pastilleType(type)}${valeurs.secondType ? pastilleType(valeurs.secondType) : ''}</span></div>${fermer}</div>
     ${note}
     <dl class="kv"><dt>${e(T.ressources.verifiee)}</dt><dd>${verifiee}</dd>${attente}</dl>
+    ${gestesFiche()}
     <div class="row"><span class="seg" role="group" aria-label="${e(T.vue)}">${onglet('fiche', T.ressources.onglets.fiche)}${onglet('hist', T.ressources.onglets.hist(versions.length))}${onglet('apercu', T.ressources.onglets.apercu)}</span></div>
     ${f.onglet === 'hist' ? ongletHistorique() : f.onglet === 'apercu' ? ongletApercu() : ongletFiche()}`;
 }
@@ -1229,13 +1246,16 @@ async function gesteFiche(action) {
   const f = etat.r;
   if (!f || !f.d || f.nouvelle || f.enCours || !peut()) return;
   f.enCours = true; f.note = null; f.confirmation = null; dessinerFenetre();
-  const r = await appel(action, { corps: { fiche: f.id } });
+  const marquer = action === 'revoir' || action === 'retirer-revoir';
+  const corps = marquer ? { fiche: f.id, actif: action === 'revoir', note: action === 'revoir' ? (f.noteRevoir || '') : '' } : { fiche: f.id };
+  const r = await appel(marquer ? 'revoir' : action, { corps });
   if (etat.r !== f) return;
   f.enCours = false;
   if (!r.ok) return echecFiche(r);
   const fiche = f.d.fiche;
   f.id = r.donnees.id; fiche.id = r.donnees.id;
-  if (action === 'verifier') { fiche.verifieeLe = r.donnees.verifieeLe; fiche.verifieePar = r.donnees.verifieePar; }
+  if (marquer) { fiche.aRevoir = !!r.donnees.aRevoir; fiche.noteARevoir = r.donnees.note || ''; f.noteRevoir = ''; }
+  else if (action === 'verifier') { fiche.verifieeLe = r.donnees.verifieeLe; fiche.verifieePar = r.donnees.verifieePar; }
   else {
     fiche.statut = action === 'ecarter' ? 'ecartee' : 'publiee';
     // Une fiche écartée n'a plus d'adresse publique ; republiée, elle en retrouve une.
@@ -1299,15 +1319,17 @@ function gesteFenetreFiche(act, cible) {
   }
   if (act === 'f-enregistrer') return enregistrerFiche();
   if (act === 'f-verifier') return gesteFiche('verifier');
+  if (act === 'f-revoir') return gesteFiche('revoir');
+  if (act === 'f-retirer-revoir') return gesteFiche('retirer-revoir');
   if (act === 'f-republier') return gesteFiche('republier');
   if (act === 'f-ecarter') return gesteFiche('ecarter');
   if (act === 'v-retablir') return retablirVersion(Number(v));
   if (act === 'f-annuler') { f.confirmation = null; return dessinerFenetre(); }
   if (act === 'f-demander' || act === 'v-demander') {
-    f.confirmation = act === 'f-demander' ? 'ecarter' : `retablir:${Number(v)}`;
+    f.confirmation = act === 'f-demander' ? (v === 'revoir' ? 'revoir' : 'ecarter') : `retablir:${Number(v)}`;
     dessinerFenetre();
     const zone = $('#confirmationFiche');
-    if (zone) { zone.scrollIntoView({ block: 'center' }); const oui = zone.querySelector('.danger'); if (oui) oui.focus(); }
+    if (zone) { zone.scrollIntoView({ block: 'center' }); const cible2 = zone.querySelector('textarea') || zone.querySelector('.danger'); if (cible2) cible2.focus(); }
   }
 }
 
@@ -1325,14 +1347,17 @@ function cartePorteur(o) {
 function corpsPorteurs() {
   if (!etat.porteurs) return `<p class="muted" role="status">${e(T.chargement)}</p>`;
   if (!etat.porteurs.length) return `<div class="card"><p class="muted">${e(P.aucun)}</p></div>`;
+  const rech = plier((etat.rechP || '').trim());
+  const visibles = rech ? etat.porteurs.filter((o) => plier(`${o.nom} ${o.adresse || ''}`).includes(rech)) : etat.porteurs;
+  if (!visibles.length) return `<div class="card"><p class="muted">${e(P.aucunTrouve)}</p></div>`;
   if (etat.vueP === 'colonnes') {
     return `<div class="cols c2">${[[false, P.colonnes.aPlacer], [true, P.colonnes.places]].map(([place, titre]) => {
-      const cartes = etat.porteurs.filter((o) => !!o.place === place);
+      const cartes = visibles.filter((o) => !!o.place === place);
       return `<section class="col"><header><h3>${e(titre)}</h3><span class="pill p-mute num">${cartes.length}</span></header>${cartes.map(cartePorteur).join('') || `<p class="muted small" style="padding:.4rem .2rem">${e(T.rienIci)}</p>`}</section>`;
     }).join('')}</div><p class="muted small">${e(peut() ? P.aideColonnes : P.aideColonnesLecture)}</p>`;
   }
   const C = P.tableau;
-  return `<div class="scroll"><table><thead><tr><th>${e(C.porteur)}</th><th>${e(C.adresse)}</th><th>${e(C.carte)}</th><th>${e(C.bottin)}</th><th>${e(C.ressources)}</th></tr></thead><tbody>${etat.porteurs.map((o) => `
+  return `<div class="scroll"><table><thead><tr><th>${e(C.porteur)}</th><th>${e(C.adresse)}</th><th>${e(C.carte)}</th><th>${e(C.bottin)}</th><th>${e(C.ressources)}</th></tr></thead><tbody>${visibles.map((o) => `
     <tr data-act="ouvrir-porteur" data-id="${e(o.id)}" tabindex="0"><td><b>${e(o.nom || T.sansNom)}</b></td><td>${e(o.adresse) || `<span class="muted">${e(P.aucune)}</span>`}</td>
       <td>${o.place ? `<span class="pill p-ok">${e(P.place)}</span>` : `<span class="pill p-warn">${e(P.aPlacer)}</span>`}</td>
       <td>${o.bottin ? `<span class="pill p-info">${e(P.lie)}</span>` : ''}</td><td class="num">${Number(o.ressources)}</td></tr>`).join('')}</tbody></table></div>`;
@@ -1341,6 +1366,7 @@ function ecranPorteurs() {
   const vue = (cle, nom) => `<button type="button" data-act="vue-porteurs" data-v="${cle}" aria-pressed="${etat.vueP === cle}">${e(nom)}</button>`;
   return `<div class="head"><div><h1>${e(T.routes.porteurs)}</h1><p>${e(P.intro)}</p></div>
       <div class="row"><span class="seg" role="group" aria-label="${e(T.affichage)}">${vue('colonnes', T.enColonnes)}${vue('liste', T.enListe)}</span>${peut() ? `<button type="button" class="btn primary" data-act="nouveau-porteur">${e(P.ajouter)}</button>` : ''}</div></div>
+    <div class="tools"><input type="search" id="pq" placeholder="${e(P.chercher)}" value="${e(etat.rechP || '')}" aria-label="${e(P.chercher)}"></div>
     <div id="pbody">${corpsPorteurs()}</div>`;
 }
 
@@ -1689,9 +1715,9 @@ function ligneQualite(p) {
   return null;
 }
 // Les sujets qui portent sur une fiche : ils se lisent fiche par fiche, « ce qui lui manque ».
-const SUJETS_FICHE = ['sansContact', 'sansPorteur', 'sansLogo', 'liens', 'aVerifier'];
+const SUJETS_FICHE = ['aRevoir', 'sansContact', 'sansPorteur', 'sansLogo', 'liens', 'aVerifier'];
 // Ceux qui comptent dans la pastille ; « à vérifier » est un état de fond, vu seulement par son filtre.
-const SUJETS_COMPTES = ['sansContact', 'sansPorteur', 'sansLogo', 'liens'];
+const SUJETS_COMPTES = ['aRevoir', 'sansContact', 'sansPorteur', 'sansLogo', 'liens'];
 const AUTRES_SUJETS = ['doublons', 'porteursDoubles', 'valeursNouvelles'];
 
 // Les fiches et ce qui leur manque : { fiche, points : { sujet : le point } }, les plus incomplètes d'abord.
@@ -1707,10 +1733,10 @@ function fichesQualite() {
 }
 function pastillesManque(x, filtre) {
   const P2 = Q.manque;
-  const sortes = { sansContact: 'p-warn', sansPorteur: 'p-warn', sansLogo: 'p-warn', liens: 'p-bad', aVerifier: 'p-mute' };
+  const sortes = { aRevoir: 'p-info', sansContact: 'p-warn', sansPorteur: 'p-warn', sansLogo: 'p-warn', liens: 'p-bad', aVerifier: 'p-mute' };
   return SUJETS_FICHE.filter((sujet) => x.points[sujet] && (sujet !== 'aVerifier' || filtre === 'aVerifier')).map((sujet) => {
     const p = x.points[sujet];
-    const texte = sujet === 'liens' ? P2.liens(jour(p.depuis)) : sujet === 'aVerifier' ? (p.verifieeLe ? P2.ancienne(jour(p.verifieeLe)) : P2.jamais) : sujet === 'sansLogo' && p.proposition ? P2.logoPropose : P2[sujet];
+    const texte = sujet === 'aRevoir' ? P2.aRevoir(p.note || '') : sujet === 'liens' ? P2.liens(jour(p.depuis)) : sujet === 'aVerifier' ? (p.verifieeLe ? P2.ancienne(jour(p.verifieeLe)) : P2.jamais) : sujet === 'sansLogo' && p.proposition ? P2.logoPropose : P2[sujet];
     return `<span class="pill ${sortes[sujet]}">${e(texte)}</span>`;
   }).join(' ');
 }
@@ -1936,6 +1962,8 @@ document.addEventListener('input', (evenement) => {
   if (cible.id === 'q') { etat.filtres.q = cible.value; return rafraichir(); }
   if (cible.id === 'qq') { etat.q.rech = cible.value; return rafraichir(); }
   if (cible.id === 'rq') { etat.filtresR.q = cible.value; return rafraichir(); }
+  if (cible.id === 'pq') { etat.rechP = cible.value; return rafraichir(); }
+  if (cible.id === 'noteRevoir' && etat.r) { etat.r.noteRevoir = cible.value; return; }
   // Volet d'un porteur : chaque frappe est gardée, et le repère suit les coordonnées écrites.
   const o = etat.o;
   if (o && o.d) {

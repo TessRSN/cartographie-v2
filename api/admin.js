@@ -24,6 +24,7 @@
  *   POST fusionner-porteurs { doublon, garde }  → rattache les fiches du doublon au porteur gardé
  *   GET  qualite                                → ce qui est à corriger dans les fiches publiées
  *   POST fusionner-valeurs { cle, de, vers }    → une seule écriture pour un mot-clé ou une norme
+ *   POST revoir         { fiche, actif, note }  → marque une fiche « à revoir » pour l'équipe, ou retire la marque
  *   POST revisiter-lien { fiche }               → revisite le lien principal d'une fiche
  * Une fiche est désignée par son adresse publique, ou par un repère opaque si elle est écartée ;
  * un porteur, toujours par un repère opaque : jamais par un identifiant Notion.
@@ -51,6 +52,7 @@ const ACTIONS = {
   ressources: { methode: 'GET', role: 'lecture' }, ressource: { methode: 'GET', role: 'lecture' },
   enregistrer: { methode: 'POST', role: 'approbation' }, retablir: { methode: 'POST', role: 'approbation' },
   verifier: { methode: 'POST', role: 'approbation' }, ecarter: { methode: 'POST', role: 'approbation' },
+  revoir: { methode: 'POST', role: 'approbation' },
   republier: { methode: 'POST', role: 'approbation' }, creer: { methode: 'POST', role: 'approbation' },
   porteurs: { methode: 'GET', role: 'lecture' }, porteur: { methode: 'GET', role: 'lecture' }, qualite: { methode: 'GET', role: 'lecture' },
   'enregistrer-porteur': { methode: 'POST', role: 'approbation' }, 'creer-porteur': { methode: 'POST', role: 'approbation' },
@@ -68,7 +70,7 @@ const GESTES_LOT3 = {
   'revisiter-lien': { lisible: (c) => repereValide(c.fiche), faire: (d, c, par) => d.qualite.revisiterLien({ repere: c.fiche, par }) },
 };
 // Les gestes qui portent sur une fiche existante.
-const GESTES_FICHE = ['enregistrer', 'retablir', 'verifier', 'ecarter', 'republier'];
+const GESTES_FICHE = ['enregistrer', 'retablir', 'verifier', 'revoir', 'ecarter', 'republier'];
 // Un rôle inconnu a le rang le plus bas : il ne permet que la lecture.
 const RANGS = { lecture: 1, approbation: 2, administration: 3 };
 const rang = (role) => RANGS[role] || 1;
@@ -293,6 +295,7 @@ function creerGestionnaire(donnees) {
           const demande = { repere: corps.fiche, par: approbateur };
           if (action === 'enregistrer') Object.assign(demande, { valeurs: corps.valeurs, depart: corps.depart });
           if (action === 'retablir') demande.numero = corps.numero;
+          if (action === 'revoir') Object.assign(demande, { actif: corps.actif === true, note: typeof corps.note === 'string' ? corps.note : '' });
           retour = await d.ressources[action](demande);
         }
         if (retour.ok) return res.status(200).json(retour);
