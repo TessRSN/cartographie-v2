@@ -149,6 +149,11 @@ function htmlGroupe(titre, cles) {
   return `<section class="f-groupe"><h3>${e(titre)}</h3>${cles.map(htmlChamp).join('')}</section>`;
 }
 
+// Ligne de contact, au bas de chaque écran.
+function htmlQuestion() {
+  return `<p class="f-question-contact">${e(T.question)} <a href="mailto:${e(T.adresseQuestions)}">${e(T.adresseQuestions)}</a>.</p>`;
+}
+
 // ─── Rendu des étapes ───
 function htmlType() {
   const cartes = Object.entries(CLES_TYPE).map(([libelle, cle]) => {
@@ -199,7 +204,7 @@ function afficher({ haut = false } = {}) {
     <div class="f-actions">
       ${etat.etape > 0 ? `<button type="button" class="f-bouton" id="precedent">${e(T.precedent)}</button>` : ''}
       <button type="submit" class="f-bouton principal droite" ${etat.envoi ? 'disabled' : ''}>${e(etat.envoi ? T.envoiEnCours : derniere && nom !== 'type' ? T.envoyer : T.suivant)}</button>
-    </div></form>`;
+    </div>${htmlQuestion()}</form>`;
   if (haut) window.scrollTo({ top: 0 });
 }
 
@@ -305,7 +310,7 @@ function afficherDemandeDeLien(message) {
     <div class="champ"><label for="courrielLien">${e(T.courriel)}</label><input type="email" id="courrielLien" maxlength="254" autocomplete="email" required>
       <p class="erreur" id="erreurLien" role="alert"></p></div>
     <div class="f-piege" aria-hidden="true"><label>Site web<input type="text" id="siteLien" tabindex="-1" autocomplete="off"></label></div>
-    <div class="f-actions"><a class="f-bouton" href="/">${e(T.retourCarte)}</a><button type="submit" class="f-bouton principal droite">${e(T.recevoir)}</button></div></form>`;
+    <div class="f-actions"><a class="f-bouton" href="/">${e(T.retourCarte)}</a><button type="submit" class="f-bouton principal droite">${e(T.recevoir)}</button></div>${htmlQuestion()}</form>`;
   document.getElementById('demandeLien').addEventListener('submit', async (evenement) => {
     evenement.preventDefault();
     const courriel = document.getElementById('courrielLien').value.trim();

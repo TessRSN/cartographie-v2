@@ -84,6 +84,9 @@
 [data-theme="dark"] .f-bouton.lien { color: var(--rsn-accent); }
 .f-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: space-between; margin-top: 1.8rem; padding-top: 1.1rem; border-top: 1px solid var(--rsn-border); }
 .f-actions .droite { margin-left: auto; }
+.f-question-contact { margin-top: 1.1rem; text-align: center; font-size: 0.84rem; color: var(--muted-strong); }
+.f-question-contact a { color: var(--rsn-secondary); font-weight: 600; }
+[data-theme="dark"] .f-question-contact a { color: var(--rsn-accent); }
 /* Champ piège : hors de l'écran, jamais atteint au clavier. */
 .f-piege { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .f-merci { text-align: center; padding: 1rem 0; }

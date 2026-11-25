@@ -180,6 +180,8 @@ const TEXTES = {
     recevoir: 'Recevoir le lien',
     lienEnvoye: 'Si cette adresse est valide, un lien vient de vous être envoyé. Il est valable 24 heures.',
     chargement: 'Chargement…',
+    question: 'Une question ? Écrivez-nous à',
+    adresseQuestions: 'rsn.gestion@rimuhc.ca',
   },
   portrait: {
     titre: 'Portrait de la cartographie',
