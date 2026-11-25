@@ -513,7 +513,7 @@ function logoPropose() {
 }
 // Le cadre qui montre une fiche comme sur le site, avec la feuille de styles du site.
 function cadreApercu(fiche) {
-  const page = `<!doctype html><html lang="fr" data-theme="${theme() === 'dark' ? 'dark' : 'light'}"><head><meta charset="utf-8"><base target="_blank"><link rel="stylesheet" href="/css/styles.css"><style>body{margin:0;padding:12px;background:transparent}.fiche-statique{margin:0 auto}</style></head><body><main class="fiche-statique">${htmlFiche(fiche)}</main></body></html>`;
+  const page = `<!doctype html><html lang="fr" data-theme="${theme() === 'dark' ? 'dark' : 'light'}"><head><meta charset="utf-8"><base target="_blank"><link rel="stylesheet" href="/css/styles.css"><style>:root{color-scheme:${theme() === 'dark' ? 'dark' : 'light'}}body{margin:0;padding:12px;background:var(--rsn-body-bg)}.fiche-statique{margin:0 auto}</style></head><body><main class="fiche-statique">${htmlFiche(fiche)}</main></body></html>`;
   return `<iframe class="apercu-cadre" id="cadreApercu" title="${e(T.apercu.titre)}" sandbox="allow-same-origin" srcdoc="${e(page)}"></iframe>`;
 }
 function apercuSurLeSite() {
