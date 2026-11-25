@@ -565,20 +565,10 @@ function blocActions(r) {
     else window.prompt(T.copierLien, adresse);
   });
   rangee.append(graphe, copier);
-  // « Proposer une modification » : seulement quand les contributions sont ouvertes.
-  if (etat.contributions) {
-    const modifier = document.createElement('button');
-    modifier.type = 'button';
-    modifier.innerHTML = ICONE_CRAYON + '<span></span>';
-    modifier.querySelector('span').textContent = TEXTES.proposer.modification;
-    modifier.addEventListener('click', () => ouvrirDemandeLien({ but: 'modifier', adresse: r.adresse, nom: r.nom }));
-    rangee.append(modifier);
-  }
   return rangee;
 }
 
 // ─── Demande de lien pour proposer une ressource ou une modification ───
-const ICONE_CRAYON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
 let demandeLien = null;      // { but, adresse } de la fenêtre ouverte
 let focusAvantLien = null;
 
@@ -645,6 +635,11 @@ async function envoyerDemandeLien(ev) {
 function brancherDemandeLien() {
   const fenetre = $('fenetreLien');
   $('boutonProposer').addEventListener('click', () => ouvrirDemandeLien({ but: 'proposer' }));
+  // Le crayon en haut de la fiche ouverte.
+  $('modifierFiche').addEventListener('click', () => {
+    const r = ficheOuverte && parAdresse(ficheOuverte);
+    if (r) ouvrirDemandeLien({ but: 'modifier', adresse: r.adresse, nom: r.nom });
+  });
   $('formulaireLien').addEventListener('submit', envoyerDemandeLien);
   $('fermerLien').addEventListener('click', fermerDemandeLien);
   fenetre.addEventListener('click', (ev) => {
@@ -854,6 +849,8 @@ function demarrer() {
       etat.carte = donnees.carte || { cle: '' };
       etat.contributions = donnees.contributions === true;
       $('boutonProposer').hidden = !etat.contributions;
+      $('modifierFiche').hidden = !etat.contributions;
+      $('fenetreFiche').classList.toggle('avec-modification', etat.contributions);
       construireIndex();
       chiffres = statistiquesBandeau(etat.ressources, 6);
       etat.pret = true;

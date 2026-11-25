@@ -127,10 +127,10 @@ body {
 /* Le nom du réseau est déjà porté par le logo : gardé pour les lecteurs d'écran. */
 .header-title p { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .header-search { position: relative; }
-.header-search > svg { width: 16px; height: 16px; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); pointer-events: none; transition: color 0.2s; }
+.header-search > svg { width: 16px; height: 16px; position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.6); pointer-events: none; transition: color 0.2s; }
 .header-search:focus-within > svg { color: #fff; }
 .search-input { width: 100%; outline: none; font: inherit; transition: border-color 0.2s, background 0.3s, color 0.3s; }
-.header .search-input { height: 38px; padding: 0 2.5rem 0 2.3rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.08); color: #fff; font-size: 0.88rem; }
+.header .search-input { height: 38px; padding: 0 2.6rem 0 2.5rem; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.08); color: #fff; font-size: 0.88rem; }
 .header .search-input::placeholder { color: rgba(255,255,255,0.7); opacity: 1; }
 .header .search-input:hover { border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.1); }
 .header .search-input:focus { border-color: rgba(255,255,255,0.55); background: rgba(255,255,255,0.14); }
@@ -138,20 +138,23 @@ body {
 [data-theme="dark"] .header .search-input:hover { background: rgba(255,255,255,0.08); }
 [data-theme="dark"] .header .search-input:focus { background: rgba(255,255,255,0.12); }
 .header :focus-visible { outline-color: #fff; }
-.search-clear { position: absolute; right: 4px; top: 4px; width: 30px; height: 30px; border: 0; border-radius: 6px; background: none; color: #fff; font-size: 1.3rem; line-height: 1; cursor: pointer; }
+.search-clear { position: absolute; right: 5px; top: 4px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: none; color: #fff; font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .search-clear:hover { background: rgba(255,255,255,0.18); }
 .header-controls { display: flex; gap: 0.5rem; align-items: center; margin-left: auto; }
+/* Boutons de l'en-tête : petites pastilles sans contour, dans le ton de la barre de recherche. */
 .header-btn {
-    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); color: white;
-    height: 44px; min-width: 44px; padding: 0 0.7rem; border-radius: 8px;
-    cursor: pointer; font: inherit; font-size: 0.8rem; font-weight: 600; text-decoration: none;
-    transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 0.3rem;
+    background: rgba(255,255,255,0.1); border: 0; color: #fff;
+    height: 34px; min-width: 34px; padding: 0 0.85rem; border-radius: 999px;
+    cursor: pointer; font: inherit; font-size: 0.78rem; font-weight: 600; text-decoration: none;
+    transition: background 0.15s, color 0.15s; display: flex; align-items: center; justify-content: center; gap: 0.3rem; white-space: nowrap;
 }
-.header-btn:hover { background: rgba(255,255,255,0.25); }
-.header-btn svg { width: 14px; height: 14px; }
-/* « Proposer une ressource » : le bouton plein de l'en-tête, comme « Devenir membre » dans le bottin. */
-.header-btn.header-proposer { background: #fff; border-color: #fff; color: #1a365d; padding: 0 0.9rem; }
-.header-btn.header-proposer:hover { background: #e8f0fe; border-color: #e8f0fe; }
+.header-btn:hover { background: rgba(255,255,255,0.2); }
+.header-btn svg { width: 13px; height: 13px; }
+#boutonTheme { padding: 0; }
+#boutonTheme svg { width: 15px; height: 15px; }
+/* « Proposer une ressource » : la seule pastille pleine, pour qu'elle se voie sans prendre de place. */
+.header-btn.header-proposer { background: #fff; color: #1a365d; }
+.header-btn.header-proposer:hover { background: #e8f0fe; }
 .proposer-court { display: none; }
 
 
@@ -548,6 +551,13 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
 .member-modal[open]::backdrop { animation: rsn-voile 0.25s ease-out; }
 .member-modal-close { position: absolute; top: 0.5rem; right: 0.5rem; width: 40px; height: 40px; border-radius: 8px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--rsn-muted); line-height: 1; }
 .member-modal-close:hover { color: var(--rsn-text); background: rgba(43,108,176,0.12); }
+/* « Proposer une modification » : un crayon dans un rond, en haut de la fiche, à côté de la croix. */
+.fiche-modifier { position: absolute; top: 0.6rem; right: 3.1rem; width: 36px; height: 36px; border-radius: 50%; border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(43,108,176,0.14); color: var(--rsn-secondary); transition: background 0.15s, color 0.15s; }
+.fiche-modifier:hover { background: var(--rsn-secondary); color: #fff; }
+.fiche-modifier svg { width: 16px; height: 16px; }
+[data-theme="dark"] .fiche-modifier { background: rgba(99,179,237,0.18); color: var(--rsn-accent); }
+[data-theme="dark"] .fiche-modifier:hover { background: var(--rsn-accent); color: #0f1724; }
+.fenetre-fiche.avec-modification .fiche-entete { padding-right: 4.8rem; }
 .modal-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--rsn-border); }
 .modal-actions button { display: inline-flex; align-items: center; gap: 0.4rem; height: 44px; padding: 0 0.9rem; border-radius: 8px; border: 1px solid var(--rsn-border); background: var(--rsn-card-bg); color: var(--ink); font: inherit; font-size: 0.86rem; font-weight: 600; cursor: pointer; }
 .modal-actions button.primary { background: #1a365d; border-color: #1a365d; color: #fff; }
@@ -677,6 +687,7 @@ a.axe-chip.mot-cle:hover { text-decoration: underline; text-underline-offset: 2p
     .header-title h1 { font-size: 0.92rem; }
     .header-title p { display: none; }
     .header-controls a.header-btn { display: none; }
+    .header-btn { height: 40px; min-width: 40px; }
     /* Sur téléphone, le libellé court garde le bouton sur la ligne du logo. */
     .proposer-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .proposer-court { display: inline; }
