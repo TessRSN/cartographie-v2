@@ -23,7 +23,7 @@ const TEXTES = {
   theme: { sombre: 'Passer au mode sombre', clair: 'Passer au mode clair' },
   oui: 'Oui',
   filtres: {
-    type: 'Type', modeAcces: "Mode d'accès", porteur: 'Porteur', etat: 'État', portee: 'Portée', langue: 'Langue',
+    type: 'Type', modeAcces: "Mode d'accès", porteur: 'Porteur', etat: 'État', portee: 'Portée', langue: 'Langue', norme: 'Normes et formats',
     tous: 'Tous', effacer: 'Tout réinitialiser', retirer: 'Retirer', horsCarte: 'En ligne ou hors Québec',
   },
   // Étiquettes de la sélection en cours, affichées sur la carte ou le graphe et au-dessus de la liste.
@@ -200,7 +200,7 @@ function enListe(v) { return Array.isArray(v) ? v.filter(Boolean) : (v ? [v] : [
 function filtrer(ressources, filtres) {
   const f = filtres || {};
   const types = enListe(f.type), modes = enListe(f.modeAcces), porteurs = enListe(f.porteur), etats = enListe(f.etat);
-  const portees = enListe(f.portee), langues = enListe(f.langue);
+  const portees = enListe(f.portee), langues = enListe(f.langue), normes = enListe(f.norme);
   return (ressources || []).filter((r) => {
     if (types.length && !types.includes(r.typePrincipal) && !types.includes(r.secondType)) return false;
     if (modes.length && !(r.modesAcces || []).some((m) => modes.includes(m))) return false;
@@ -208,13 +208,14 @@ function filtrer(ressources, filtres) {
     if (etats.length && !etats.includes(r.etat)) return false;
     if (portees.length && !portees.includes(r.portee)) return false;
     if (langues.length && !(r.langues || []).some((l) => langues.includes(l))) return false;
+    if (normes.length && !(r.normes || []).some((n) => normes.includes(n))) return false;
     if (f.horsCarte && surLaCarte(r)) return false;
     return true;
   });
 }
 
 // Les filtres à choix multiples, dans l'ordre de la barre.
-const CLES_FILTRE = ['type', 'modeAcces', 'porteur', 'etat', 'portee', 'langue'];
+const CLES_FILTRE = ['type', 'modeAcces', 'porteur', 'etat', 'portee', 'langue', 'norme'];
 
 function filtresActifs(filtres) {
   const f = filtres || {};
@@ -233,6 +234,7 @@ function comptesDeFiltre(ressources) {
     ajouter(comptes.etat, r.etat);
     ajouter(comptes.portee, r.portee);
     for (const l of new Set(r.langues || [])) ajouter(comptes.langue, l);
+    for (const n of new Set(r.normes || [])) ajouter(comptes.norme, n);
   }
   const trier = (m) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr')).map(([valeur, nombre]) => ({ valeur, nombre }));
   return Object.fromEntries(CLES_FILTRE.map((cle) => [cle, trier(comptes[cle])]));

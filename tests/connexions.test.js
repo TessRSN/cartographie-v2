@@ -88,3 +88,20 @@ test('calculerSujets : le français et l\'anglais se rejoignent, liste vide sans
   assert.equal(s.sujets[0].nombre, 3);
   assert.deepEqual(calculerSujets([], {}), { noeuds: [], sujets: [], liens: [], sansSujet: [] });
 });
+
+// ─── Normes et formats dans les connexions ───
+
+test('deux ressources qui partagent une norme sont reliées ; un outil commun ne relie pas', () => {
+  const { calculerSujets } = require('../public/js/connexions.js');
+  const avec = (adresse, normes, outils) => Object.assign(r(adresse, []), { normes, outils });
+  const liste = [avec('a', ['BIDS'], ['Docker']), avec('b', ['BIDS'], ['Docker']), avec('c', [], ['Docker']), ...remplissage];
+  const g = calculerConnexions(liste);
+  const lien = g.liens.find((l) => [l.a, l.b].sort().join() === 'a,b');
+  assert.ok(lien, 'a et b sont reliées par BIDS');
+  assert.deepEqual(lien.motsCommuns, ['bids']);
+  assert.ok(!g.liens.some((l) => l.a === 'c' || l.b === 'c'), 'Docker seul ne relie pas');
+  // En mode sujets, la norme devient une étiquette, marquée comme norme.
+  const s = calculerSujets([avec('a', ['BIDS']), avec('b', ['BIDS']), avec('c', ['bids']), r('d', ['oncologie'])], { FICHES_MIN: 3 });
+  assert.deepEqual(s.sujets.map((x) => [x.nom, x.nombre, x.norme]), [['bids', 3, true]]);
+  assert.equal(calculerSujets([r('a', ['cohorte']), r('b', ['cohorte']), r('c', ['cohorte'])], { FICHES_MIN: 3 }).sujets[0].norme, false);
+});

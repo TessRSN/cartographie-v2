@@ -77,11 +77,21 @@ function htmlCarteFiche(r) {
   const tousSujets = (r.motsCles || []).filter(Boolean);
   const sujets = tousSujets.slice(0, 3).map(puceSujet).join('')
     + (tousSujets.length > 3 ? `<span class="chip-more" title="${e(tousSujets.slice(3).join(' · '))}">+${tousSujets.length - 3}<span class="visually-hidden"> (${e(o.TEXTES.autresSujets(tousSujets.length - 3))})</span></span>` : '');
+  // Normes, formats et outils : visibles d'un coup d'œil, dans une autre couleur que les sujets. Quatre au plus, le reste compté.
+  const tousReperes = (r.normes || []).filter(Boolean).map((v) => ['norme', v]).concat((r.outils || []).filter(Boolean).map((v) => ['outil', v]));
+  const reperes = tousReperes.slice(0, 4).map(([genre, v]) => `<span class="axe-chip ${genre}">${e(v)}</span>`).join('')
+    + (tousReperes.length > 4 ? `<span class="chip-more" title="${e(tousReperes.slice(4).map((x) => x[1]).join(' · '))}">+${tousReperes.length - 4}</span>` : '');
+  // Bandeau du haut : la couleur, l'icône et le nom du type.
+  const cleDuType = r.typePrincipal ? o.cleType(r.typePrincipal) : null;
+  const bandeau = cleDuType
+    ? `<div class="card-bande type-${cleDuType}" title="${e(r.typePrincipal)}">${o.iconeType(cleDuType)}<span>${e(cleDuType === 'autre' ? r.typePrincipal : o.TEXTES.typesCourts[cleDuType])}</span></div>` : '';
   return `<article class="member-card">
-    <div class="card-top">${htmlLogo(r)}<div class="card-id"><h3 class="card-name" title="${e(r.nom)}">${e(r.nom)}</h3>${porteursHtml ? `<div class="card-institution" title="${e(porteurs.join(' · '))}">${porteursHtml}</div>` : ''}</div>${pastilleType(r.typePrincipal)}</div>
+    ${bandeau}
+    <div class="card-top">${htmlLogo(r)}<div class="card-id"><h3 class="card-name" title="${e(r.nom)}">${e(r.nom)}</h3>${porteursHtml ? `<div class="card-institution" title="${e(porteurs.join(' · '))}">${porteursHtml}</div>` : ''}</div></div>
     ${r.phrase ? `<p class="card-themes">${e(r.phrase)}</p>` : ''}
     ${acces ? `<div class="card-chips-row">${acces}</div>` : ''}
     ${sujets ? `<div class="card-chips-row card-sujets">${sujets}</div>` : ''}
+    ${reperes ? `<div class="card-chips-row card-reperes">${reperes}</div>` : ''}
     <div class="card-foot">
       <a class="card-action" href="/ressource/${e(r.adresse)}" data-fiche="${e(r.adresse)}">${e(T.voirFiche)}<span class="visually-hidden"> : ${e(r.nom)}</span></a>
       <button type="button" class="card-action" data-graphe="${e(r.adresse)}">${ICONE_GRAPHE}${e(T.voirConnexions)}<span class="visually-hidden"> : ${e(r.nom)}</span></button>
@@ -148,8 +158,8 @@ function htmlFiche(f) {
     ligne(T.financePar, puces(f.financePar)),
     ligne(T.portee, f.portee ? e(f.portee) : ''),
     ligne(T.langues, (f.langues || []).map(e).join(', ')),
-    ligne(T.normes, puces(f.normes)),
-    ligne(T.outils, puces(f.outils)),
+    ligne(T.normes, puces(f.normes, 'axe-chip norme')),
+    ligne(T.outils, puces(f.outils, 'axe-chip outil')),
   ].join('');
 
   const liens = (f.liens || []).map((l) =>

@@ -327,3 +327,29 @@ test('le site ne connaît plus que cinq types : « Initiative » est retiré', (
   assert.equal(TEXTES.typesAides.initiative, undefined);
   assert.equal(require('../public/js/texte.js').TRACES_ICONES.initiative, undefined);
 });
+
+test('filtre « Normes et formats » : une norme cochée suffit, en intersection avec les autres', () => {
+  const liste = [
+    fiche('A', { normes: ['BIDS', 'NIfTI'], portee: 'Le Québec' }), fiche('B', { normes: ['DICOM'], portee: 'Le Québec' }),
+    fiche('C', { normes: [], outils: ['Docker'] }), fiche('D', {}),
+  ];
+  assert.deepEqual(filtrer(liste, { norme: ['BIDS'] }).map((f) => f.nom), ['A']);
+  assert.deepEqual(filtrer(liste, { norme: ['BIDS', 'DICOM'] }).map((f) => f.nom), ['A', 'B']);
+  assert.deepEqual(filtrer(liste, { norme: ['DICOM'], portee: ['Le Québec'] }).map((f) => f.nom), ['B']);
+  assert.deepEqual(filtrer(liste, { norme: [] }).map((f) => f.nom), ['A', 'B', 'C', 'D']);
+  assert.equal(filtresActifs({ norme: ['BIDS'] }), true);
+  assert.deepEqual(comptesDeFiltre(liste).norme, [{ valeur: 'BIDS', nombre: 1 }, { valeur: 'DICOM', nombre: 1 }, { valeur: 'NIfTI', nombre: 1 }]);
+  assert.equal(TEXTES.filtres.norme, 'Normes et formats');
+});
+
+test('la carte d\'une fiche montre ses normes et ses outils, distincts des sujets', () => {
+  const html = htmlCarteFiche(fiche('CODA', { motsCles: ['oncologie'], normes: ['HL7 FHIR', 'DICOM'], outils: ['Docker'] }));
+  assert.ok(html.includes('<span class="axe-chip norme">HL7 FHIR</span>'));
+  assert.ok(html.includes('<span class="axe-chip norme">DICOM</span>'));
+  assert.ok(html.includes('<span class="axe-chip outil">Docker</span>'));
+  assert.ok(!htmlCarteFiche(fiche('Vide', {})).includes('card-reperes'));
+  // Au-delà de quatre, le reste est compté.
+  const beaucoup = htmlCarteFiche(fiche('N', { normes: ['A1', 'B2', 'C3', 'D4', 'E5'], outils: ['F6'] }));
+  assert.ok(beaucoup.includes('>+2<') && !beaucoup.includes('>E5<'));
+  assert.ok(!htmlCarteFiche(fiche('H', { normes: ['<i>x</i>'] })).includes('<i>x</i>'));
+});
