@@ -41,9 +41,11 @@
 [data-theme="dark"] .f-groupe > h3 { color: var(--rsn-accent); }
 .champ { margin-top: 0.95rem; border: 0; padding: 0; min-width: 0; }
 .champ > label, .champ legend { display: block; font-size: 0.9rem; font-weight: 600; color: var(--ink); padding: 0; }
-/* « * obligatoire » : pastille au jaune de la charte du RSN, lisible en clair comme en sombre. */
-.champ .oblig { display: inline-block; font-weight: 700; font-size: 0.7rem; line-height: 1.5; margin-left: 0.4rem; padding: 0 0.45rem; border-radius: 999px; white-space: nowrap; vertical-align: 0.08em; background: var(--type-logiciel); color: var(--type-logiciel-sur); }
-.champ .oblig::before { content: "* "; }
+/* « * obligatoire » : texte au jaune de la charte du RSN. Sur fond clair, le jaune pur serait
+   illisible : on prend sa version foncée, de la même teinte. */
+.champ .oblig { font-weight: 700; font-size: 0.75rem; margin-left: 0.35rem; white-space: nowrap; color: #8a6700; }
+.champ .oblig::before { content: "* "; font-size: 0.95rem; }
+[data-theme="dark"] .champ .oblig { color: var(--type-logiciel); }
 .champ .aide { font-size: 0.8rem; color: var(--muted-strong); margin-top: 0.1rem; line-height: 1.4; }
 .champ input[type="text"], .champ input[type="url"], .champ input[type="email"], .champ select, .champ textarea {
     width: 100%; margin-top: 0.35rem; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--rsn-border);
