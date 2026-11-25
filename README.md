@@ -8,7 +8,7 @@ Le bottin des membres du RSN est un outil distinct : https://bottin.rsn.quebec
 
 ## Comment c'est fait
 
-Une page HTML sans cadriciel ni étape de compilation, et deux fonctions hébergées chez Vercel qui lisent Notion. Cette version ne fait que lire : rien n'est écrit dans Notion.
+Des pages HTML sans cadriciel ni étape de compilation, et des fonctions hébergées chez Vercel qui lisent Notion. Le site public ne fait que lire. Les contributions (proposer une ressource ou une modification, puis l'approuver) écrivent dans Notion ; elles restent fermées tant que le réglage `CONTRIBUTIONS` ne vaut pas `oui`.
 
 | Fichier | Rôle |
 |---|---|
@@ -26,6 +26,29 @@ Une page HTML sans cadriciel ni étape de compilation, et deux fonctions héberg
 | `api/export.js` | `/api/export` : les fiches publiques, en JSON |
 | `api/ressource.js` | `/`, `/ressource/<adresse>`, `/sitemap.xml`, `/robots.txt` |
 
+### Les contributions
+
+| Fichier | Rôle |
+|---|---|
+| `public/proposer.html` | le formulaire de proposition, ouvert par un lien reçu par courriel |
+| `public/admin.html` | le panneau d'approbation |
+| `public/js/proposer.js`, `public/js/admin.js` | le code du formulaire et du panneau |
+| `public/js/champs.js` | le catalogue des champs et le calcul des changements, communs au navigateur et au serveur |
+| `api/lien.js` | `/api/lien` : envoie le lien pour proposer, pour modifier une fiche ou pour entrer dans le panneau |
+| `api/proposition.js` | `/api/proposition` : lit et enregistre une proposition |
+| `api/admin.js` | `/api/admin` : la file des propositions, approuver, corriger, refuser |
+| `api/logo.js` | `/api/logo` : sert le logo déposé pour une fiche |
+| `lib/jetons.js` | les liens signés, valables un temps limité |
+| `lib/courriels.js` | les courriels, envoyés par Resend |
+| `lib/limites.js` | les limites d'envoi de liens et l'usage unique d'un lien |
+| `lib/contributions.js` | ce que partagent les routes de contribution : le réglage qui les ouvre, l'origine sûre des liens |
+| `lib/propositions.js` | la file des propositions et la liste des approbateurs, dans Notion |
+| `lib/approbation.js` | approuver ou refuser une proposition ; le seul endroit où une fiche publique change |
+| `lib/fichiers-notion.js`, `lib/images.js` | le dépôt et le contrôle des images de logo |
+| `lib/geocodage.js` | les coordonnées d'un nouveau porteur, par Nominatim (OpenStreetMap) |
+
+Une proposition n'est jamais appliquée à une fiche sans qu'une personne de la liste des approbateurs l'ait approuvée.
+
 Une fiche dont le « Statut de la fiche » est « Écartée » n'est jamais publiée. Les champs internes de Notion (notes de veille, remarques de recherche, sources) ne sont jamais lus.
 
 ## Réglages
@@ -39,7 +62,15 @@ Variables d'environnement, dans `.env.local` en local et dans le projet Vercel e
 | `NOTION_DB_PORTEURS` | identifiant de la base « Porteurs » |
 | `CARTO_BASEMAP_KEY` | clé du fond de carte CARTO ; sans elle, la carte utilise OpenStreetMap |
 | `INDEXATION` | `oui` pour ouvrir le site aux moteurs de recherche ; toute autre valeur le ferme |
-| `SITE_URL` | adresse officielle du site (facultative) ; sinon l'adresse de la requête est utilisée |
+| `SITE_URL` | adresse officielle du site ; elle sert aux pages publiques et aux liens envoyés par courriel |
+| `CONTRIBUTIONS` | `oui` pour ouvrir les contributions ; toute autre valeur les ferme |
+| `JWT_SECRET` | signe les liens envoyés par courriel |
+| `NOTION_DB_PROPOSITIONS` | identifiant de la base « Propositions » |
+| `NOTION_DB_APPROBATEURS` | identifiant de la base « Approbateurs » |
+| `RESEND_API_KEY` | envoi des courriels ; sans elle, rien ne part et le lien est écrit dans le journal du serveur |
+| `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME` | expéditeur des courriels (facultatives) |
+| `EMAIL_TEST_MODE`, `EMAIL_TEST_RECIPIENT` | mode d'essai : tous les courriels vont à une seule adresse |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | stockage clé-valeur de Vercel, pour les limites d'envoi ; sans lui, une limite en mémoire prend le relais |
 
 ## En local
 
@@ -55,7 +86,9 @@ npm test
 node --env-file=.env.local scripts/serveur-local.js
 ```
 
-Le site est alors à l'adresse http://localhost:3210.
+Le site est alors à l'adresse http://localhost:3210. Le serveur local garde la page et les réglages en mémoire : le relancer après un changement de `public/gabarit.html` ou de `.env.local`.
+
+Attention : en local, le site lit et écrit dans les mêmes bases Notion que le site en ligne.
 
 ## Mettre à jour les logos
 
