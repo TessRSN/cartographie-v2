@@ -565,7 +565,97 @@ function blocActions(r) {
     else window.prompt(T.copierLien, adresse);
   });
   rangee.append(graphe, copier);
+  // « Proposer une modification » : seulement quand les contributions sont ouvertes.
+  if (etat.contributions) {
+    const modifier = document.createElement('button');
+    modifier.type = 'button';
+    modifier.innerHTML = ICONE_CRAYON + '<span></span>';
+    modifier.querySelector('span').textContent = TEXTES.proposer.modification;
+    modifier.addEventListener('click', () => ouvrirDemandeLien({ but: 'modifier', adresse: r.adresse, nom: r.nom }));
+    rangee.append(modifier);
+  }
   return rangee;
+}
+
+// ─── Demande de lien pour proposer une ressource ou une modification ───
+const ICONE_CRAYON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+let demandeLien = null;      // { but, adresse } de la fenêtre ouverte
+let focusAvantLien = null;
+
+function messageLien(texte, genre) {
+  const zone = $('messageLien');
+  zone.textContent = texte || '';
+  zone.className = 'pm-msg ' + (texte ? genre : 'hidden');
+}
+
+function ouvrirDemandeLien({ but, adresse, nom }) {
+  const T = TEXTES.proposer;
+  const fenetre = $('fenetreLien');
+  demandeLien = { but, adresse: adresse || '' };
+  focusAvantLien = document.activeElement;
+  $('titreLien').textContent = but === 'modifier' ? T.titreModification(nom) : T.ressource;
+  $('explicationLien').textContent = but === 'modifier' ? T.explicationModification : T.explicationRessource;
+  messageLien('');
+  $('envoyerLien').disabled = false;
+  $('envoyerLien').textContent = T.envoyer;
+  $('formulaireLien').hidden = false;
+  $('siteLien').value = '';
+  if (typeof fenetre.showModal === 'function') fenetre.showModal(); else fenetre.setAttribute('open', '');
+  $('courrielLien').focus();
+}
+
+function fermerDemandeLien() {
+  const fenetre = $('fenetreLien');
+  if (fenetre.open) fenetre.close();
+}
+
+async function envoyerDemandeLien(ev) {
+  ev.preventDefault();
+  if (!demandeLien) return;
+  const T = TEXTES.proposer;
+  const champ = $('courrielLien');
+  const courriel = champ.value.trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(courriel)) { messageLien(T.adresseInvalide, 'error'); champ.focus(); return; }
+  const bouton = $('envoyerLien');
+  bouton.disabled = true; bouton.textContent = T.envoi;
+  messageLien('');
+  try {
+    const rep = await fetch('/api/lien', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ courriel, but: demandeLien.but, adresse: demandeLien.adresse, site: $('siteLien').value }),
+    });
+    if (rep.status === 400) {
+      const corps = await rep.json().catch(() => ({}));
+      messageLien(corps.erreur || T.adresseInvalide, 'error');
+      bouton.disabled = false; bouton.textContent = T.envoyer; champ.focus();
+      return;
+    }
+    if (!rep.ok) throw new Error(`lien ${rep.status}`);
+    // Même message que l'adresse soit connue ou non : le serveur ne le dit pas.
+    $('formulaireLien').hidden = true;
+    messageLien(T.envoye, 'success');
+    $('fermerLien').focus();
+  } catch (err) {
+    console.error(err);
+    messageLien(T.echec, 'error');
+    bouton.disabled = false; bouton.textContent = T.envoyer;
+  }
+}
+
+function brancherDemandeLien() {
+  const fenetre = $('fenetreLien');
+  $('boutonProposer').addEventListener('click', () => ouvrirDemandeLien({ but: 'proposer' }));
+  $('formulaireLien').addEventListener('submit', envoyerDemandeLien);
+  $('fermerLien').addEventListener('click', fermerDemandeLien);
+  fenetre.addEventListener('click', (ev) => {
+    if (ev.target !== fenetre) return;
+    const c = fenetre.getBoundingClientRect();
+    if (ev.clientX < c.left || ev.clientX > c.right || ev.clientY < c.top || ev.clientY > c.bottom) fermerDemandeLien();
+  });
+  fenetre.addEventListener('close', () => {
+    demandeLien = null;
+    if (focusAvantLien && document.contains(focusAvantLien)) focusAvantLien.focus();
+  });
 }
 
 function ouvrirFiche(adresse, { historique = true } = {}) {
@@ -755,12 +845,15 @@ function demarrer() {
   brancherRecherche();
   brancherFenetres();
   brancherPortrait();
+  brancherDemandeLien();
 
   fetch('/api/export', { cache: 'no-cache' })
     .then((rep) => { if (!rep.ok) throw new Error(`export ${rep.status}`); return rep.json(); })
     .then((donnees) => {
       etat.ressources = donnees.ressources || [];
       etat.carte = donnees.carte || { cle: '' };
+      etat.contributions = donnees.contributions === true;
+      $('boutonProposer').hidden = !etat.contributions;
       construireIndex();
       chiffres = statistiquesBandeau(etat.ressources, 6);
       etat.pret = true;

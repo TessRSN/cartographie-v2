@@ -94,6 +94,8 @@ function creerGestionnaire({ source, journal = console.error } = {}) {
         ressources: donnees.ressources,
         porteurs: donnees.porteurs,
         carte: { cle: process.env.CARTO_BASEMAP_KEY || '' },
+        // Les boutons « Proposer » n'existent dans la page que si les contributions sont ouvertes.
+        contributions: process.env.CONTRIBUTIONS === 'oui',
       });
     } catch (err) {
       // Le détail reste dans les journaux du serveur, jamais dans la réponse.
