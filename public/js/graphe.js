@@ -139,7 +139,8 @@ function pixel(hex) {
 }
 // Point d'un sujet : une étiquette, d'autant plus grande que le sujet réunit de ressources.
 function formeSujet(s, sombre) {
-  const fond = sombre ? '#243152' : '#ffffff', bord = sombre ? '#8fb4e8' : '#1a365d';
+  // Une norme ou un format se distingue d'un sujet par son contour violet.
+  const fond = sombre ? '#243152' : '#ffffff', bord = s.norme ? (sombre ? '#c4b5fd' : '#6d28d9') : (sombre ? '#8fb4e8' : '#1a365d');
   return {
     id: s.id, shape: 'box', label: s.nom, title: `${s.nom} · ${TEXTES.graphe.ressourcesDuSujet(s.nombre)}`,
     margin: 16, borderWidth: 2.5, borderWidthSelected: 5, shapeProperties: { borderRadius: 26 },
@@ -147,8 +148,37 @@ function formeSujet(s, sombre) {
     color: { background: fond, border: bord, highlight: { background: fond, border: '#a855f7' }, hover: { background: fond, border: '#a855f7' } },
     // Le graphe est vu de loin : les étiquettes sont écrites gros pour rester lisibles.
     font: { size: Math.round(34 + Math.min(s.nombre, 26) * 1.5), color: sombre ? '#f1f5f9' : '#1a202c' },
-    estSujet: true, nombre: s.nombre,
+    estSujet: true, nombre: s.nombre, norme: !!s.norme,
   };
+}
+// Logo entier dans son rond : vis-network remplit le cercle avec l'image, ce qui rogne un logo
+// carré ou large. On redessine donc chaque logo, réduit et centré sur un fond blanc carré ; le
+// cercle ne coupe plus que du blanc. Seuls les logos servis par le site peuvent être redessinés.
+const logosRonds = new Map();   // adresse du logo → promesse de l'image redessinée
+function logoRond(adresse) {
+  if (!/^\/logos\//.test(adresse || '')) return Promise.resolve(null);
+  if (!logosRonds.has(adresse)) {
+    logosRonds.set(adresse, new Promise((resoudre) => {
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const cote = 192, toile = document.createElement('canvas');
+          toile.width = cote; toile.height = cote;
+          const dessin = toile.getContext('2d');
+          dessin.fillStyle = '#ffffff'; dessin.fillRect(0, 0, cote, cote);
+          // Le carré inscrit dans le cercle fait 71 % du diamètre ; 66 % laisse un peu d'air.
+          const boite = cote * 0.66, l = image.naturalWidth || 1, h = image.naturalHeight || 1;
+          const echelle = Math.min(boite / l, boite / h);
+          dessin.imageSmoothingQuality = 'high';
+          dessin.drawImage(image, (cote - l * echelle) / 2, (cote - h * echelle) / 2, l * echelle, h * echelle);
+          resoudre(toile.toDataURL('image/png'));
+        } catch (err) { resoudre(null); }
+      };
+      image.onerror = () => resoudre(null);
+      image.src = adresse;
+    }));
+  }
+  return logosRonds.get(adresse);
 }
 // Rond d'une ressource qui a un logo : fond blanc, contour épais de la couleur du type.
 function couleurLogo(hex) {
@@ -324,6 +354,7 @@ function afficherPanneauLiens(adresse, voisines) {
   else if (g.mode === 'sujets') aide.textContent = TEXTES.graphe.porteSur(voisines.length);
   else aide.textContent = voisines.length ? TEXTES.graphe.relieeA(voisines.length) : TEXTES.graphe.sansLien;
   const liste = document.createElement('ul');
+  const normesChoisie = new Set((ressource.normes || []).map((n) => String(n).toLowerCase()));
   for (const { lien, autre } of voisines) {
     const li = document.createElement('li'); if (!autre.estSujet) li.className = `type-${autre.cleType}`;
     const bouton = document.createElement('button'); bouton.type = 'button';
@@ -333,7 +364,7 @@ function afficherPanneauLiens(adresse, voisines) {
     bouton.appendChild(libelle);
     bouton.addEventListener('click', () => { choisir(autre.id); centrer(autre.id, 500); });
     const sujets = document.createElement('div'); sujets.className = 'card-chips-row';
-    if (g.mode !== 'sujets') for (const mot of lien.mots || []) { const p = document.createElement('span'); p.className = 'axe-chip'; p.textContent = mot; sujets.appendChild(p); }
+    if (g.mode !== 'sujets') for (const mot of lien.mots || []) { const p = document.createElement('span'); p.className = normesChoisie.has(mot) ? 'axe-chip norme' : 'axe-chip'; p.textContent = mot; sujets.appendChild(p); }
     li.append(bouton, sujets);
     liste.appendChild(li);
   }
@@ -396,7 +427,7 @@ function appliquerFiltres() {
 }
 function cle(etat) {
   const f = etat.filtres;
-  return [etat.requete, f.type.join(','), f.modeAcces.join(','), f.porteur.join(','), f.etat.join(','), f.portee.join(','), f.langue.join(','), f.horsCarte ? 'h' : ''].join('|');
+  return [etat.requete, f.type.join(','), f.modeAcces.join(','), f.porteur.join(','), f.etat.join(','), f.portee.join(','), f.langue.join(','), f.norme.join(','), f.horsCarte ? 'h' : ''].join('|');
 }
 
 // Curseur « Liens » : nouveau seuil, donc nouveaux liens et nouveau placement, calculé hors écran.
@@ -424,7 +455,7 @@ function appliquerTheme() {
   const sombre = C.modeSombre();
   const couleur = couleurTrait(sombre);
   g.noeudsDS.update(g.noeuds.map((n) => {
-    if (n.estSujet) { const f = formeSujet({ id: n.id, nom: n.label, nombre: n.nombre }, sombre); return { id: n.id, font: f.font, color: f.color }; }
+    if (n.estSujet) { const f = formeSujet({ id: n.id, nom: n.label, nombre: n.nombre, norme: n.norme }, sombre); return { id: n.id, font: f.font, color: f.color }; }
     const hex = couleurType(n.cleType);
     return { id: n.id, font: police(sombre), color: n.avecLogo ? couleurLogo(hex) : couleurNoeud(hex, sombre) };
   }));
@@ -477,6 +508,12 @@ function construire() {
   arreterRespiration();
   if (reseau) { try { reseau.destroy(); } catch (err) { /* déjà détruit */ } reseau = null; }
   g.noeudsDS = new vis.DataSet(g.noeuds);
+  // Les logos redessinés remplacent les originaux dès qu'ils sont prêts, sans attendre pour afficher le graphe.
+  const jeu = g.noeudsDS;
+  for (const n of g.noeuds) {
+    if (!n.avecLogo) continue;
+    logoRond(n.image).then((rond) => { if (rond && g && g.noeudsDS === jeu) jeu.update({ id: n.id, image: rond }); });
+  }
   g.liensDS = new vis.DataSet(g.liens);
   // Options du bottin ; seules les forces (FORCES) sont réglées pour ce graphe.
   const options = {

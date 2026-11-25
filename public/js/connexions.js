@@ -19,6 +19,11 @@ const PARAMS_CONNEXIONS = {
   DEGREE_CAP: 10,       // nombre maximal de liens par fiche
 };
 
+// Ce qui rapproche deux ressources : leurs mots-clés et leurs normes et formats (BIDS, DICOM, CIM-10…).
+// Les outils et environnements (Docker, REDCap…) n'en font pas partie : ils disent comment une
+// ressource est distribuée, pas de quoi elle traite, et relieraient tous les logiciels entre eux.
+function sujetsDe(r) { return (r.motsCles || []).concat(r.normes || []); }
+
 function calculerConnexions(ressources, params) {
   const P = Object.assign({}, PARAMS_CONNEXIONS, params || {});
   const liste = ressources || [];
@@ -29,7 +34,7 @@ function calculerConnexions(ressources, params) {
   // Sujets de chaque fiche : clé canonique → libellé d'origine (pour l'affichage).
   const sujets = liste.map((r) => {
     const m = new Map();
-    for (const motCle of (r.motsCles || [])) {
+    for (const motCle of sujetsDe(r)) {
       const cle = outils.cleMotCle(motCle);
       if (cle && !m.has(cle)) m.set(cle, String(motCle).toLowerCase());
     }
@@ -101,13 +106,15 @@ function calculerSujets(ressources, params) {
   const parSujet = new Map();
   for (const r of liste) {
     const vus = new Set();
-    for (const motCle of (r.motsCles || [])) {
+    const sesNormes = new Set((r.normes || []).map((n) => outils.cleMotCle(n)));
+    for (const motCle of sujetsDe(r)) {
       const cle = outils.cleMotCle(motCle);
       if (!cle || vus.has(cle)) continue;
       vus.add(cle);
-      if (!parSujet.has(cle)) parSujet.set(cle, { adresses: [], libelles: new Map() });
+      if (!parSujet.has(cle)) parSujet.set(cle, { adresses: [], libelles: new Map(), norme: false });
       const s = parSujet.get(cle);
       s.adresses.push(r.adresse);
+      if (sesNormes.has(cle)) s.norme = true;
       const libelle = String(motCle).toLowerCase();
       s.libelles.set(libelle, (s.libelles.get(libelle) || 0) + 1);
     }
@@ -119,6 +126,7 @@ function calculerSujets(ressources, params) {
       id: `sujet:${cle}`,
       nom: [...s.libelles.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], 'fr'))[0][0],
       nombre: s.adresses.length,
+      norme: s.norme,
       adresses: s.adresses,
     }))
     .sort((x, y) => y.nombre - x.nombre || x.nom.localeCompare(y.nom, 'fr'));
@@ -127,7 +135,7 @@ function calculerSujets(ressources, params) {
   for (const s of sujets) for (const adresse of s.adresses) { liens.push({ a: adresse, b: s.id, poids: 1, motsCommuns: [s.nom] }); reliees.add(adresse); }
   return {
     noeuds: liste.filter((r) => reliees.has(r.adresse)).map((r) => ({ adresse: r.adresse, nom: r.nom, type: r.typePrincipal || null })),
-    sujets: sujets.map(({ id, nom, nombre }) => ({ id, nom, nombre })),
+    sujets: sujets.map(({ id, nom, nombre, norme }) => ({ id, nom, nombre, norme })),
     liens,
     sansSujet: liste.filter((r) => !reliees.has(r.adresse)).map((r) => r.adresse),
   };
