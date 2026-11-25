@@ -247,6 +247,10 @@ const TEXTES = {
     affichage: 'Affichage', enColonnes: 'Colonnes', enListe: 'Liste',
     aucunResultat: 'Aucune proposition ne correspond. Effacez la recherche ou les filtres pour tout revoir.',
     aucuneProposition: 'Aucune proposition pour le moment.',
+    anciennes: {
+      rangees: (n) => `${n} ${n > 1 ? 'propositions tranchées' : 'proposition tranchée'} depuis plus de 30 jours ${n > 1 ? 'ne sont pas montrées' : 'n’est pas montrée'}.`,
+      voir: 'Voir les plus anciennes', ranger: 'Ne montrer que les 30 derniers jours',
+    },
     colonneVerificationAide: 'Un second regard est demandé au reste de l’équipe.',
     rienIci: 'Rien ici.',
     aideColonnes: 'Glissez une carte d’une colonne à l’autre, ou utilisez les boutons. Cliquez une carte pour comparer la version actuelle et la version proposée.',

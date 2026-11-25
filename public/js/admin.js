@@ -33,7 +33,7 @@ const etat = {
   accueil: null,        // dernière lecture de l'accueil
   liste: null,          // dernière lecture des propositions
   nouvelles: null,      // compte pour la pastille de la barre latérale
-  filtres: { q: '', genre: '', type: '', affichage: 'colonnes' },
+  filtres: { q: '', genre: '', type: '', affichage: 'colonnes', anciennes: false },
   f: null,              // la fenêtre d'une proposition, quand elle est ouverte (voir fenetreNeuve)
   fiches: null,         // dernière lecture du tableau des ressources
   historique: true,     // faux si l'historique des versions n'a pas pu être lu
@@ -216,10 +216,15 @@ function ecranAccueil() {
 }
 
 // ─── Propositions ───
-function filtrees() {
-  const { q, genre, type } = etat.filtres;
+// Une proposition tranchée depuis plus de trente jours : gardée, mais rangée hors de la vue courante.
+const JOURS_RECENTS = 30;
+const ancienne = (p) => !ouverte(p) && !!p.decideLe && Date.now() - Date.parse(p.decideLe) > JOURS_RECENTS * 86400000;
+// tout : vrai pour compter aussi les anciennes. Une recherche les montre toujours : on cherche pour retrouver.
+function filtrees({ tout = false } = {}) {
+  const { q, genre, type, anciennes } = etat.filtres;
   const cherche = plier(q.trim());
   return (etat.liste || []).filter((p) => {
+    if (!tout && !anciennes && !cherche && ancienne(p)) return false;
     if (genre && p.genre !== genre) return false;
     if (type && (!p.type || cleType(p.type) !== type)) return false;
     if (cherche && !plier(`${p.nom} ${p.nomProposant} ${p.courriel} ${T.genres[p.genre] || ''}`).includes(cherche)) return false;
@@ -255,21 +260,26 @@ function carte(p) {
 function corpsPropositions() {
   if (!etat.liste) return `<p class="muted" role="status">${e(T.chargement)}</p>`;
   const liste = filtrees();
-  if (!liste.length) return `<div class="card"><p class="muted">${e(etat.liste.length ? T.aucunResultat : T.aucuneProposition)}</p></div>`;
+  const rangees = filtrees({ tout: true }).length - liste.length;
+  // Le lien qui montre ou range les propositions tranchées depuis plus de trente jours.
+  const lienAnciennes = etat.filtres.anciennes
+    ? `<p class="muted small"><button type="button" class="linkish" data-act="anciennes">${e(T.anciennes.ranger)}</button></p>`
+    : rangees ? `<p class="muted small">${e(T.anciennes.rangees(rangees))} <button type="button" class="linkish" data-act="anciennes">${e(T.anciennes.voir)}</button></p>` : '';
+  if (!liste.length) return `<div class="card"><p class="muted">${e(etat.liste.length ? T.aucunResultat : T.aucuneProposition)}</p></div>${lienAnciennes}`;
   if (etat.filtres.affichage === 'colonnes') {
     return `<div class="cols c4">${ETATS.map((statut) => {
       const cartes = liste.filter((p) => p.statut === statut);
       return `<section class="col" data-drop="${statut}"><header><h3>${e(T.colonnes[statut])}</h3><span class="row"><span class="pill p-mute num">${cartes.length}</span></span></header>
         ${statut === 'verification' ? `<p class="muted small" style="padding:0 .2rem">${e(T.colonneVerificationAide)}</p>` : ''}
         ${cartes.map(carte).join('') || `<p class="muted small" style="padding:.4rem .2rem">${e(T.rienIci)}</p>`}</section>`;
-    }).join('')}</div><p class="muted small">${e(peut() ? T.aideColonnes : T.aideColonnesLecture)}</p>`;
+    }).join('')}</div>${lienAnciennes}<p class="muted small">${e(peut() ? T.aideColonnes : T.aideColonnesLecture)}</p>`;
   }
   const C = T.tableau;
   return `<div class="scroll"><table><thead><tr><th>${e(C.ressource)}</th><th>${e(C.genre)}</th><th>${e(C.type)}</th><th>${e(C.par)}</th><th>${e(C.recue)}</th><th>${e(C.champs)}</th><th>${e(C.avis)}</th><th>${e(C.etat)}</th></tr></thead><tbody>${liste.map((p) => `
     <tr data-act="ouvrir" data-id="${e(p.id)}" tabindex="0"><td><b>${e(p.nom || T.sansNom)}</b></td><td>${pastilleGenre(p.genre)}</td><td>${pastilleType(p.type)}</td>
       <td>${e(p.nomProposant || T.anonyme)}<br><span class="muted small">${e(p.courriel || '')}${p.genre === 'rsn' ? '' : ` · ${e(T.liens[p.lienAvecRessource] || T.liens.aucun)}`}</span></td>
       <td class="num">${e(jour(p.proposeLe))}</td><td class="num">${p.nbChamps === null ? '' : Number(p.nbChamps)}</td>
-      <td>${p.avis.length ? pucesAvis(p.avis) : `<span class="muted">${e(C.aucunAvis)}</span>`}</td><td>${pastilleEtat(p.statut)}</td></tr>`).join('')}</tbody></table></div>`;
+      <td>${p.avis.length ? pucesAvis(p.avis) : `<span class="muted">${e(C.aucunAvis)}</span>`}</td><td>${pastilleEtat(p.statut)}</td></tr>`).join('')}</tbody></table></div>${lienAnciennes}`;
 }
 function ecranPropositions() {
   const f = etat.filtres;
@@ -1879,6 +1889,7 @@ document.addEventListener('click', async (evenement) => {
   if (act === 'reessayer') return demarrer();
   if (act === 'voir-propositions') { Object.assign(etat.filtres, { q: '', genre: '', type: '', affichage: 'colonnes' }); location.hash = 'propositions'; return; }
   if (act === 'affichage') { etat.filtres.affichage = v; return rendre(); }
+  if (act === 'anciennes') { etat.filtres.anciennes = !etat.filtres.anciennes; return rafraichir(); }
   if (act === 'fermer') return fermerFenetre();
 
   // Cartes
