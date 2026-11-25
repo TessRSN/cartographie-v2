@@ -72,3 +72,9 @@ test('ficheDepuisPage lit les normes et formats, et les outils et environnements
   assert.deepEqual(sans.normes, []);
   assert.deepEqual(sans.outils, []);
 });
+
+test('ficheDepuisPage lit le DOI de la ressource', () => {
+  const page = { id: 'r-11', properties: { Nom: { title: [{ plain_text: 'BALSAC' }] }, DOI: { url: 'https://doi.org/10.5683/SP3/BW7DIG' } } };
+  assert.equal(ficheDepuisPage(page).doi, 'https://doi.org/10.5683/SP3/BW7DIG');
+  assert.equal(ficheDepuisPage({ id: 'r-12', properties: { Nom: { title: [{ plain_text: 'X' }] } } }).doi, null);
+});

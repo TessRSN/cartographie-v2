@@ -353,3 +353,21 @@ test('la carte d\'une fiche montre ses normes et ses outils, distincts des sujet
   assert.ok(beaucoup.includes('>+2<') && !beaucoup.includes('>E5<'));
   assert.ok(!htmlCarteFiche(fiche('H', { normes: ['<i>x</i>'] })).includes('<i>x</i>'));
 });
+
+test('la fiche affiche le DOI comme un lien, écrit sans le préfixe doi.org', () => {
+  const html = htmlFiche(fiche('BALSAC', { doi: 'https://doi.org/10.5683/SP3/BW7DIG' }));
+  assert.ok(html.includes('href="https://doi.org/10.5683/SP3/BW7DIG"'));
+  assert.ok(html.includes('>10.5683/SP3/BW7DIG<'));
+  assert.ok(!htmlFiche(fiche('Sans', {})).includes('>DOI<'));
+  // Une adresse qui n'est pas celle d'un DOI n'est pas affichée.
+  assert.ok(!htmlFiche(fiche('Faux', { doi: 'javascript:alert(1)' })).includes('alert(1)'));
+});
+
+test('la mention du bas dit seulement d\'où vient la fiche', () => {
+  assert.equal(TEXTES.fiche.nonConfirmee, "Fiche préparée par l'équipe du RSN à partir de sources publiques.");
+});
+
+test('la carte porte un onglet de type, avec son icône', () => {
+  const html = htmlCarteFiche(fiche('X', { typePrincipal: 'Logiciel ou application' }));
+  assert.match(html, /<div class="card-onglet type-logiciel" title="Logiciel ou application"><svg class="icone-type"/);
+});

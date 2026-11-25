@@ -139,15 +139,20 @@ function pixel(hex) {
 }
 // Point d'un sujet : une étiquette, d'autant plus grande que le sujet réunit de ressources.
 function formeSujet(s, sombre) {
-  // Une norme ou un format se distingue d'un sujet par son contour violet.
-  const fond = sombre ? '#243152' : '#ffffff', bord = s.norme ? (sombre ? '#c4b5fd' : '#6d28d9') : (sombre ? '#8fb4e8' : '#1a365d');
+  // Bulle en verre : un fond teinté translucide, un liseré clair à peine visible, une ombre douce.
+  // Pas de contour foncé ni de texte noir. Un sujet est bleu, une norme ou un format violet.
+  const teinte = s.norme
+    ? (sombre ? { fond: 'rgba(91,60,160,0.78)', vif: 'rgba(124,92,200,0.92)', texte: '#ede9fe' } : { fond: 'rgba(237,233,254,0.86)', vif: 'rgba(221,214,254,0.96)', texte: '#5b21b6' })
+    : (sombre ? { fond: 'rgba(42,67,101,0.78)', vif: 'rgba(59,98,150,0.92)', texte: '#dbeafe' } : { fond: 'rgba(226,238,252,0.86)', vif: 'rgba(199,222,247,0.96)', texte: '#1a365d' });
+  const lisere = sombre ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.9)';
   return {
     id: s.id, shape: 'box', label: s.nom, title: `${s.nom} · ${TEXTES.graphe.ressourcesDuSujet(s.nombre)}`,
-    margin: 16, borderWidth: 2.5, borderWidthSelected: 5, shapeProperties: { borderRadius: 26 },
+    margin: { top: 14, bottom: 14, left: 24, right: 24 }, borderWidth: 1.5, borderWidthSelected: 1.5, shapeProperties: { borderRadius: 40 },
     widthConstraint: { maximum: 460 }, mass: 4,
-    color: { background: fond, border: bord, highlight: { background: fond, border: '#a855f7' }, hover: { background: fond, border: '#a855f7' } },
+    color: { background: teinte.fond, border: lisere, highlight: { background: teinte.vif, border: lisere }, hover: { background: teinte.vif, border: lisere } },
+    shadow: { enabled: true, color: sombre ? 'rgba(0,0,0,0.35)' : 'rgba(26,54,93,0.16)', size: 18, x: 0, y: 6 },
     // Le graphe est vu de loin : les étiquettes sont écrites gros pour rester lisibles.
-    font: { size: Math.round(34 + Math.min(s.nombre, 26) * 1.5), color: sombre ? '#f1f5f9' : '#1a202c' },
+    font: { size: Math.round(34 + Math.min(s.nombre, 26) * 1.5), color: teinte.texte },
     estSujet: true, nombre: s.nombre, norme: !!s.norme,
   };
 }
@@ -455,7 +460,7 @@ function appliquerTheme() {
   const sombre = C.modeSombre();
   const couleur = couleurTrait(sombre);
   g.noeudsDS.update(g.noeuds.map((n) => {
-    if (n.estSujet) { const f = formeSujet({ id: n.id, nom: n.label, nombre: n.nombre, norme: n.norme }, sombre); return { id: n.id, font: f.font, color: f.color }; }
+    if (n.estSujet) { const f = formeSujet({ id: n.id, nom: n.label, nombre: n.nombre, norme: n.norme }, sombre); return { id: n.id, font: f.font, color: f.color, shadow: f.shadow }; }
     const hex = couleurType(n.cleType);
     return { id: n.id, font: police(sombre), color: n.avecLogo ? couleurLogo(hex) : couleurNoeud(hex, sombre) };
   }));
