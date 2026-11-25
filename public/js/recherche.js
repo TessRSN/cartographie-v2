@@ -126,6 +126,10 @@ function statistiquesBandeau(ressources, combien) {
   const liste = ressources || [];
   const n = combien || 6;
   const { sujets, porteurs } = denombrer(liste);
+  // Normes et formats : une fiche compte une fois par norme, même si la norme y est écrite deux fois.
+  const parNorme = new Map();
+  for (const r of liste) for (const norme of new Set((r.normes || []).filter(Boolean))) parNorme.set(norme, (parNorme.get(norme) || 0) + 1);
+  const normes = [...parNorme.entries()].map(([norme, nombre]) => ({ norme, nombre })).sort((a, b) => b.nombre - a.nombre || a.norme.localeCompare(b.norme, 'fr'));
   const parType = new Map();
   for (const r of liste) {
     const cle = textes.cleType(r.typePrincipal);
@@ -141,6 +145,7 @@ function statistiquesBandeau(ressources, combien) {
     types,
     sujets: sujets.slice(0, n).map(({ sujet, nombre }) => ({ sujet, nombre })),
     porteursPrincipaux: porteurs.slice(0, n).map(({ nom, nombre }) => ({ nom, nombre })),
+    normesPrincipales: normes.slice(0, n),
   };
 }
 

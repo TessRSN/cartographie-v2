@@ -97,7 +97,7 @@ test('statistiquesBandeau : ressources, porteurs, types dans l\'ordre de la lég
   assert.deepEqual(s.sujets[0], { sujet: 'oncologie', nombre: 3 });
   assert.equal(s.sujets.length, 2);
   assert.deepEqual(s.porteursPrincipaux, [{ nom: 'Mila', nombre: 2 }, { nom: 'ISQ', nombre: 1 }]);
-  assert.deepEqual(statistiquesBandeau([]), { ressources: 0, porteurs: 0, types: [], sujets: [], porteursPrincipaux: [] });
+  assert.deepEqual(statistiquesBandeau([]), { ressources: 0, porteurs: 0, types: [], sujets: [], porteursPrincipaux: [], normesPrincipales: [] });
 });
 
 test('suggestions : sujets, porteurs, puis ressources dont un mot du nom commence par la saisie', () => {
@@ -130,4 +130,13 @@ test('la recherche lit aussi les normes et les outils d\'une fiche', () => {
   assert.equal(docs[0].normes, 'HL7 FHIR DICOM Docker');
   assert.equal(docs[1].normes, '');
   assert.deepEqual(noms(chercher(docs, 'fhir')), ['Avec']);
+});
+
+test('statistiquesBandeau : principales normes et formats, de la plus fréquente à la moins fréquente', () => {
+  const s = statistiquesBandeau([
+    fiche('A', { normes: ['BIDS', 'DICOM'] }), fiche('B', { normes: ['BIDS', 'BIDS'] }), fiche('C', { normes: ['DICOM', 'NIfTI'] }),
+    fiche('D', { normes: ['BIDS'], outils: ['Docker'] }), fiche('E', {}),
+  ], 2);
+  assert.deepEqual(s.normesPrincipales, [{ norme: 'BIDS', nombre: 3 }, { norme: 'DICOM', nombre: 2 }]);
+  assert.deepEqual(statistiquesBandeau([fiche('X')], 6).normesPrincipales, []);
 });

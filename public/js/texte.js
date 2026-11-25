@@ -100,6 +100,7 @@ const TEXTES = {
     types: 'Types de ressources', typesAide: 'Type principal de chaque fiche',
     sujets: 'Principaux sujets', sujetsAide: 'Nombre de fiches',
     porteursTitre: 'Principaux porteurs', porteursAide: 'Nombre de fiches',
+    normesTitre: 'Principales normes', normesAide: 'Nombre de fiches',
     pourcent: (x) => `${Math.round(x)} %`,
   },
   suggestions: { sujets: 'Sujets', porteurs: 'Porteurs', ressources: 'Ressources' },
