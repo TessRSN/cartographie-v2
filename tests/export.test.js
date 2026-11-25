@@ -112,3 +112,16 @@ test('sans lecture gardée, une lecture sans réponse finit par un 502', async (
   await Promise.race([gestionnaire({ method: 'GET' }, res), new Promise((r) => setTimeout(r, 500))]);
   assert.equal(res.code, 502);
 });
+
+test("la réponse publique ne contient ni identifiant Notion ni table des adresses", async () => {
+  const { assembler } = require('../lib/fiches');
+  const brute = { id: 'id-notion-1', nom: 'Cohorte X', statutFiche: 'Publiée', porteurIds: [], faitPartieDe: [], reposeSur: [], donneAccesA: [], remplace: [] };
+  const assemble = assembler([brute], []);
+  assert.deepEqual(assemble.idParAdresse, { 'cohorte-x': 'id-notion-1' });
+  const gestionnaire = creerGestionnaire({ source: creerSource({ lire: async () => assemble }) });
+  const res = reponse();
+  await gestionnaire({ method: 'GET' }, res);
+  const corps = JSON.stringify(res.corps);
+  assert.ok(!corps.includes('id-notion-1'));
+  assert.ok(!corps.includes('idParAdresse'));
+});
