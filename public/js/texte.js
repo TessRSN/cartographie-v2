@@ -317,6 +317,8 @@ const TEXTES = {
       confirmer: 'Confirmer le refus', requis: 'Un commentaire est nécessaire pour refuser.',
       ecrire: 'Écrivez un commentaire pour refuser : il est envoyé à la personne.',
     },
+    definitif: (courriel) => `Un courriel sera envoyé à ${courriel || 'la personne'}. Cette décision ne pourra pas être annulée.`,
+    ouvrirLaFiche: 'Ouvrir la fiche',
     confirmerApprobation: { titre: 'Approuver cette proposition ?', aide: 'Vérifiez ce qui est proposé ci-dessus. La fiche change sur le site dès l’approbation, et la personne est prévenue par courriel.' },
     avis: {
       titre: 'Avis de l’équipe', aucun: 'Aucun avis pour l’instant.', aucunCarte: 'Aucun avis pour l’instant', sansCommentaire: 'sans commentaire',
