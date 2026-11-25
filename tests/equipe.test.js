@@ -15,7 +15,7 @@ const ODILE = 'odile@exemple.ca';
 const ORIGINE = 'https://carto.exemple';
 
 // Tess (Administration), Max (Approbation), Léa (Lecture seule, sans résumé), Odile (retirée).
-function banc({ pannes = {}, envoi = { envoye: true }, verrous, admins = [TESS], secret = SECRET } = {}) {
+function banc({ pannes = {}, envoi = { envoye: true }, verrous, admins = [TESS], secret = SECRET, env = ENV, limites } = {}) {
   const faux = fauxNotion({ pannes });
   inscrire(faux, { id: 'id-notion-tess', nom: 'Tess Berthier', courriel: TESS, role: admins.includes(TESS) ? 'Administration' : 'Approbation' });
   inscrire(faux, { id: 'id-notion-max', nom: 'Maxime Lafrenière', courriel: MAX, role: admins.includes(MAX) ? 'Administration' : 'Approbation' });
@@ -23,7 +23,7 @@ function banc({ pannes = {}, envoi = { envoye: true }, verrous, admins = [TESS],
   inscrire(faux, { id: 'id-notion-odile', nom: 'Odile Charbonneau', courriel: ODILE, role: 'Approbation', actif: false, sansResume: true });
   const envois = []; const journal = [];
   const courriels = { async lienPanneau(m) { envois.push(m); if (envoi === 'panne') throw new Error('Resend en panne'); return envoi; } };
-  const equipe = creerEquipe({ client: faux.client, env: ENV, courriels, verrous, secret, journal: (...l) => journal.push(l.join(' ')), attendre: async () => {} });
+  const equipe = creerEquipe({ client: faux.client, env, courriels, verrous, limites, secret, journal: (...l) => journal.push(l.join(' ')), attendre: async () => {} });
   const ecritures = () => faux.de('pages.create').length + faux.de('pages.update').length;
   const repere = async (courriel) => ((await equipe.lister({ moi: TESS })).find((x) => x.courriel === courriel) || {}).id;
   return { faux, equipe, envois, journal, ecritures, repere, lignes: () => lignes(faux), ligne: (courriel) => lignes(faux).filter((l) => l.courriel === courriel) };
@@ -296,4 +296,95 @@ test('Notion en panne pendant un réglage : refus net, et le verrou est rendu', 
   assert.deepEqual(await b.equipe.retirer({ personne: await b.repere(MAX), par: TESS }), { ok: false, code: 'notion' });
   assert.deepEqual(await b.equipe.changerRole({ personne: await b.repere(MAX), role: 'lecture', par: TESS }), { ok: false, code: 'notion' });
   assert.ok(b.journal.length >= 2);
+});
+
+// ─── Relecture du lot 4a ───
+test('en mode d\'essai des courriels, l\'invitation le dit, sans donner l\'adresse d\'essai', async () => {
+  const b = banc({ env: { ...ENV, EMAIL_TEST_MODE: 'true', EMAIL_TEST_RECIPIENT: 'boite-d-essai@exemple.org' } });
+  const r = await b.equipe.inviter({ courriel: 'a@b.org', nom: 'A', role: 'approbation', par: TESS, origine: ORIGINE });
+  assert.equal(r.ok, true);
+  assert.equal(r.essai, true);
+  assert.ok(!JSON.stringify(r).includes('boite-d-essai'));
+  for (const env of [ENV, { ...ENV, EMAIL_TEST_MODE: 'false' }, { ...ENV, EMAIL_TEST_MODE: true }]) {
+    const sans = await banc({ env }).equipe.inviter({ courriel: 'a@b.org', nom: 'A', role: 'approbation', par: TESS, origine: ORIGINE });
+    assert.equal(sans.ok, true);
+    assert.ok(!Object.hasOwn(sans, 'essai'), 'hors du mode d\'essai, la réponse ne change pas');
+  }
+});
+
+test('le lien d\'une invitation passe par la limite des liens d\'entrée : au-delà, la personne est inscrite et aucun courriel ne part', async () => {
+  const demandes = [];
+  const limites = (permis) => ({ async autoriserLien(d) { demandes.push(d); if (permis === 'panne') throw new Error('stockage en panne'); return permis; } });
+  const b = banc({ limites: limites(true) });
+  const r = await b.equipe.inviter({ courriel: ' Nadia@Exemple.org ', nom: 'Nadia', role: 'approbation', par: TESS, origine: ORIGINE, ip: '203.0.113.9' });
+  assert.equal(r.courriel, true);
+  assert.deepEqual(demandes, [{ courriel: 'nadia@exemple.org', ip: '203.0.113.9', plafondDuJour: false }], 'la même demande que /api/lien pour le panneau');
+  assert.equal(b.envois.length, 1);
+  for (const permis of [false, 'panne']) {
+    const c = banc({ limites: limites(permis) });
+    const refuse = await c.equipe.inviter({ courriel: 'a@b.org', nom: 'A', role: 'approbation', par: TESS, origine: ORIGINE, ip: '203.0.113.9' });
+    assert.equal(refuse.ok, true, String(permis));
+    assert.equal(refuse.courriel, false);
+    assert.equal(c.envois.length, 0, 'aucun courriel');
+    assert.deepEqual(c.ligne('a@b.org').map((l) => l.actif), [true], 'la personne est inscrite');
+  }
+  // Une invitation refusée ne compte pas dans la limite.
+  const avant = demandes.length;
+  const d = banc({ limites: limites(true) });
+  assert.equal((await d.equipe.inviter({ courriel: MAX, nom: 'Max', role: 'lecture', par: TESS, origine: ORIGINE })).code, 'deja-inscrite');
+  assert.equal(demandes.length, avant);
+});
+
+test('avec la vraie limite : la quatrième invitation de la même adresse dans l\'heure n\'envoie plus de lien', async () => {
+  const { creerLimites } = require('../lib/limites');
+  const b = banc({ limites: creerLimites({ env: {}, maintenant: () => Date.parse('2026-11-25T15:00:00.000Z'), journal: () => {} }) });
+  const partis = [];
+  for (let tour = 1; tour <= 4; tour++) {
+    const r = await b.equipe.inviter({ courriel: 'a@b.org', nom: 'A', role: 'approbation', par: TESS, origine: ORIGINE, ip: '203.0.113.9' });
+    assert.equal(r.ok, true);
+    partis.push(r.courriel);
+    assert.equal((await b.equipe.retirer({ personne: r.id, par: TESS })).ok, true);
+  }
+  assert.deepEqual(partis, [true, true, true, false]);
+  assert.equal(b.envois.length, 3);
+});
+
+test('liste périmée de Notion : deux personnes en Administration qui se rétrogradent l\'une l\'autre ne laissent pas l\'équipe sans Administration', async () => {
+  const b = banc({ admins: [TESS, MAX] });
+  const [versMax, versTess] = [await b.repere(MAX), await b.repere(TESS)];
+  // À partir d'ici, la liste de la base ne voit plus les écritures ; la lecture directe d'une page, si.
+  b.faux.figerListes();
+  assert.equal((await b.equipe.changerRole({ personne: versMax, role: 'approbation', par: TESS })).ok, true);
+  const seconde = await b.equipe.changerRole({ personne: versTess, role: 'approbation', par: MAX });
+  assert.deepEqual(seconde, { ok: false, code: 'role' }, 'Max n\'est plus en Administration, quoi que dise la liste');
+  assert.deepEqual(b.lignes().filter((l) => l.actif && l.role === 'Administration').map((l) => l.courriel), [TESS]);
+  assert.ok(b.faux.de('pages.retrieve').includes('id-notion-max'), 'la ligne de la personne qui agit est relue directement');
+});
+
+test('liste périmée de Notion : deux personnes en Administration qui se retirent l\'une l\'autre, et une personne retirée qui agit encore', async () => {
+  const b = banc({ admins: [TESS, MAX] });
+  const [versMax, versTess, versLea] = [await b.repere(MAX), await b.repere(TESS), await b.repere(LEA)];
+  b.faux.figerListes();
+  assert.equal((await b.equipe.retirer({ personne: versMax, par: TESS })).ok, true);
+  assert.deepEqual(await b.equipe.retirer({ personne: versTess, par: MAX }), { ok: false, code: 'role' });
+  assert.deepEqual(await b.equipe.changerRole({ personne: versLea, role: 'administration', par: MAX }), { ok: false, code: 'role' });
+  assert.deepEqual(await b.equipe.inviter({ courriel: 'a@b.org', nom: 'A', role: 'administration', par: MAX, origine: ORIGINE }), { ok: false, code: 'role' });
+  assert.deepEqual(await b.equipe.reglerResume({ personne: versLea, actif: true, par: MAX }), { ok: false, code: 'role' });
+  assert.deepEqual(b.lignes().filter((l) => l.actif && l.role === 'Administration').map((l) => l.courriel), [TESS]);
+  assert.equal(b.envois.length, 0);
+  // La personne visée est relue elle aussi : Max, retiré, est introuvable même si la liste le montre actif.
+  assert.equal((await b.equipe.changerRole({ personne: versMax, role: 'lecture', par: TESS })).code, 'introuvable');
+  // Et une adresse que la liste croit active, mais retirée en vrai, se réinvite sans seconde ligne.
+  const revenu = await b.equipe.inviter({ courriel: MAX, nom: 'Maxime Lafrenière', role: 'lecture', par: TESS, origine: ORIGINE });
+  assert.equal(revenu.ok, true);
+  assert.equal(revenu.reactivee, true);
+  assert.deepEqual(b.ligne(MAX).map((l) => [l.role, l.actif]), [['Lecture seule', true]]);
+});
+
+test('la lecture directe d\'une ligne en panne : le geste est refusé net, rien n\'est écrit, le verrou est rendu', async () => {
+  const b = banc({ admins: [TESS, MAX], pannes: { 'pages.retrieve': true } });
+  const versMax = await b.repere(MAX);
+  assert.deepEqual(await b.equipe.changerRole({ personne: versMax, role: 'approbation', par: TESS }), { ok: false, code: 'notion' });
+  assert.deepEqual(await b.equipe.retirer({ personne: versMax, par: TESS }), { ok: false, code: 'notion' });
+  assert.equal(b.ecritures(), 0);
 });

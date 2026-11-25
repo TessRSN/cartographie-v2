@@ -399,7 +399,7 @@ test('une modification de l\'équipe porte son propre genre et se relit comme le
   assert.equal(lue.genre, 'equipe');
   assert.equal(lue.ficheId, 'fiche-1');
   assert.equal(lue.statut, 'attente');
-  assert.deepEqual((await propositions.listerPropositions({ statut: 'ouvertes' })).map((p) => p.genre), ['equipe'], 'elle compte dans ce qui attend, donc dans le résumé de la semaine');
+  assert.deepEqual((await propositions.listerPropositions({ statut: 'ouvertes' })).map((p) => p.genre), ['equipe'], 'elle compte dans ce qui attend : le résumé de la semaine l\'annonce aux personnes en Administration');
 });
 
 test('equipe, avec les personnes retirées : elles sont marquées inactives et viennent après les actives', async () => {

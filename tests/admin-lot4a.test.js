@@ -642,3 +642,192 @@ test('le journal de l\'équipe est branché sur les vrais modules, et sa base es
   assert.match(assemblage, /journalEquipe/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8'), /NOTION_DB_JOURNAL/);
 });
+
+// ─── Relecture du lot 4a ───
+test('Approbation, par la route : corriger ce qui est proposé oui, compléter un autre champ non (400) ; sa propre proposition non plus (403)', async () => {
+  const b = banc();
+  const id = await b.propositionPublique();
+  const trop = await b.envoyer('approuver', { id, corrections: { phrase: 'Une phrase corrigée.', contact: 'max@ailleurs.org' } }, MAX);
+  assert.equal(trop.code, 400);
+  assert.equal(trop.corps.code, 'invalide');
+  assert.deepEqual(Object.keys(trop.corps.erreurs), ['contact']);
+  assert.equal(b.ecrituresFiches(), 0);
+  assert.equal(b.fiches[0].contact, 'a@b.org');
+  assert.equal(b.envois.length, 0);
+  assert.deepEqual(b.journalEcrit(), []);
+  const sienne = await b.propositionPublique({ courriel: MAX, nomProposant: 'Maxime' });
+  const refus = await b.envoyer('approuver', { id: sienne }, MAX);
+  assert.equal(refus.code, 403);
+  assert.equal(refus.corps.code, 'role');
+  assert.equal(b.ecrituresFiches(), 0);
+  assert.equal(b.envois.length, 0);
+  assert.deepEqual(b.journalEcrit(), []);
+  // La correction d'un champ proposé passe ; l'Administration complète ce qu'elle veut, même sur la proposition de Max.
+  assert.equal((await b.envoyer('approuver', { id, corrections: { phrase: 'Une phrase corrigée.' } }, MAX)).code, 200);
+  assert.equal(b.fiches[0].phrase, 'Une phrase corrigée.');
+  assert.equal((await b.envoyer('approuver', { id: sienne, corrections: { contact: 'c@d.org' } }, TESS)).code, 200);
+  assert.equal(b.fiches[0].contact, 'c@d.org');
+});
+
+test('la page : le menu « Compléter un autre champ » d\'une proposition n\'existe que pour l\'Administration', () => {
+  const source = lirePublic('js', 'admin.js');
+  const menu = source.split('\n').filter((l) => l.includes('id="autreChamp"'));
+  assert.equal(menu.length, 1);
+  assert.match(menu[0], /corrigeable\(\) && administre\(\) && restants\.length/);
+  // Même sans le menu, la page n'ajoute aucun champ pour une personne qui n'administre pas.
+  assert.ok(source.includes("cible.id === 'autreChamp' && cible.value && administre()"));
+});
+
+test('inviter en mode d\'essai des courriels : la réponse le dit, sans l\'adresse d\'essai ; hors de ce mode, rien ne change', async () => {
+  const b = banc({ env: { ...ENV, EMAIL_TEST_MODE: 'true', EMAIL_TEST_RECIPIENT: 'boite-d-essai@exemple.org' } });
+  const res = await b.envoyer('inviter', { courriel: 'nadia@exemple.org', nom: 'Nadia Tremblay', role: 'approbation' });
+  assert.equal(res.code, 200);
+  assert.deepEqual(Object.keys(res.corps).sort(), ['courriel', 'essai', 'id', 'ok', 'reactivee', 'role']);
+  assert.equal(res.corps.essai, true);
+  assert.ok(!JSON.stringify(res.corps).includes('boite-d-essai'));
+  const sans = await banc().envoyer('inviter', { courriel: 'nadia@exemple.org', nom: 'Nadia Tremblay', role: 'approbation' });
+  assert.ok(!Object.hasOwn(sans.corps, 'essai'));
+});
+
+test('inviter passe par la limite des liens d\'entrée, avec l\'adresse du visiteur ; au-delà : inscrite, sans courriel', async () => {
+  const b = banc();
+  const res = await b.envoyer('inviter', { courriel: 'Nadia@exemple.org', nom: 'Nadia Tremblay', role: 'approbation' }, TESS, { headers: { 'x-real-ip': '203.0.113.9' } });
+  assert.equal(res.corps.courriel, true);
+  assert.deepEqual(b.demandesDeLien, [{ courriel: 'nadia@exemple.org', ip: '203.0.113.9', plafondDuJour: false }]);
+  const c = banc({ lienPermis: false });
+  const refuse = await c.envoyer('inviter', { courriel: 'nadia@exemple.org', nom: 'Nadia Tremblay', role: 'approbation' }, TESS, { headers: { 'x-real-ip': '203.0.113.9' } });
+  assert.equal(refuse.code, 200);
+  assert.equal(refuse.corps.courriel, false);
+  assert.equal(c.envois.length, 0, 'aucun courriel');
+  assert.equal(c.equipeEcrite().filter((l) => l.courriel === 'nadia@exemple.org' && l.actif).length, 1, 'la personne est inscrite');
+  assert.deepEqual(c.journalEcrit().map((l) => l.geste), ['Invitation']);
+  // Les vrais modules sont branchés de la même façon.
+  const assemblage = fs.readFileSync(path.join(__dirname, '..', 'lib', 'contributions.js'), 'utf8');
+  assert.match(assemblage, /creerEquipe\(\{[^}]*\blimites,[^}]*\}\)/);
+});
+
+test('la page : après une invitation en mode d\'essai, le message dit où le lien est parti et quoi faire', () => {
+  const source = lirePublic('js', 'admin.js');
+  const { TEXTES } = require('../public/js/texte.js');
+  const EQ = TEXTES.panneau.equipe;
+  assert.ok(source.includes('(d.reactivee ? EQ.reactivee : EQ.invitee)(nom, !!d.courriel, d.essai === true)'), 'le message reçoit le mode d\'essai');
+  for (const texte of [EQ.invitee('Nadia', true, true), EQ.reactivee('Nadia', true, true)]) {
+    assert.match(texte, /Nadia/);
+    assert.match(texte, /adresse d’essai/);
+    assert.match(texte, /non à (Nadia|son adresse)/);
+    assert.match(texte, /[Tt]ransférez-le-lui dans l’heure/);
+    assert.match(texte, /[Tt]ant que le mode d’essai est actif, .*ne peut pas demander son lien elle-même/);
+    assert.ok(!/—/.test(texte));
+  }
+  // Courriel non parti en mode d'essai : on ne dit pas à tort qu'elle peut demander son lien elle-même.
+  for (const texte of [EQ.invitee('Nadia', false, true), EQ.reactivee('Nadia', false, true)]) {
+    assert.match(texte, /n’a pas pu partir/);
+    assert.match(texte, /ne peut pas demander son lien elle-même/);
+  }
+  // Hors du mode d'essai, les messages d'avant.
+  assert.equal(EQ.invitee('Nadia', true), 'Nadia est invitée : son lien d’entrée vient de partir par courriel.');
+  assert.match(EQ.invitee('Nadia', false), /Elle peut demander son lien elle-même/);
+  assert.match(EQ.reactivee('Nadia', true), /retrouve son accès : son lien d’entrée vient de partir/);
+});
+
+test('le journal ne note pas un geste sans effet : fiche déjà « à revoir », déjà démarquée, déjà vérifiée aujourd\'hui', async () => {
+  const b = banc();
+  const gestes = [
+    ['revoir', { fiche: 'cohorte-x', actif: false }, 200, 0],
+    ['revoir', { fiche: 'cohorte-x', actif: true, note: 'Le lien a changé.' }, 200, 1],
+    ['revoir', { fiche: 'cohorte-x', actif: true, note: 'Le lien a changé.' }, 200, 1],
+    ['verifier', { fiche: 'cohorte-x' }, 200, 2],
+    ['verifier', { fiche: 'cohorte-x' }, 200, 2],
+    ['revoir', { fiche: 'cohorte-x', actif: false }, 200, 3],
+    ['revoir', { fiche: 'cohorte-x', actif: false }, 200, 3],
+  ];
+  for (const [action, corps, code, lignes] of gestes) {
+    const res = await b.envoyer(action, corps, MAX);
+    assert.equal(res.code, code, action);
+    assert.equal(res.corps.ok, true);
+    assert.equal(b.journalEcrit().length, lignes, `${action} ${JSON.stringify(corps)}`);
+  }
+  assert.deepEqual(b.journalEcrit().map((l) => l.geste), ['Fiche à revoir', 'Fiche vérifiée', 'Fiche à revoir']);
+  assert.equal(b.de('mettreAJourFiche').length, 3, 'un geste sans effet n\'écrit pas non plus dans Notion');
+});
+
+test('une fusion interrompue qui a déjà changé des fiches est notée quand même, avec le compte et l\'interruption', async () => {
+  // Fusion de valeurs : la seconde fiche ne s'écrit pas.
+  const b = banc({ pannes: { mettreAJourFiche: (a) => a.id === 'id-notion-outil' } });
+  const valeurs = await b.envoyer('fusionner-valeurs', { cle: 'motsCles', de: 'Cancer', vers: 'cancer' }, MAX);
+  assert.equal(valeurs.code, 502);
+  assert.deepEqual(valeurs.corps, { code: 'interrompue', faites: 1, restantes: 1 }, 'la réponse ne change pas');
+  assert.deepEqual(b.journalEcrit(), [{ geste: 'Valeurs fusionnées', par: MAX, sur: 'cancer', phrase: 'a commencé à fusionner « Cancer » dans « cancer » : 1 fiche faite, puis le geste a été interrompu' }]);
+  // Fusion de porteurs : la fiche est rattachée, puis le doublon ne peut pas être mis à la corbeille.
+  const c = banc({ pannes: { archiverPorteur: true } });
+  const porteurs = (await c.lire('porteurs')).corps.porteurs;
+  const repereDe = (nom) => porteurs.find((o) => o.nom === nom).id;
+  const fusion = await c.envoyer('fusionner-porteurs', { doublon: repereDe('C.H.U.M.'), garde: repereDe('CHUM') }, MAX);
+  assert.equal(fusion.code, 502);
+  assert.deepEqual(fusion.corps, { code: 'interrompue', faites: 1, restantes: 0 });
+  assert.deepEqual(c.journalEcrit(), [{ geste: 'Porteurs fusionnés', par: MAX, sur: 'CHUM', phrase: 'a commencé à fusionner le porteur C.H.U.M. dans CHUM : 1 fiche faite, puis le geste a été interrompu' }]);
+});
+
+test('une fusion « à poursuivre » est notée si des fiches sont faites ; un échec sans aucune fiche faite ne note rien', async () => {
+  const b = banc();
+  let retour = { ok: false, code: 'a-poursuivre', faites: 2, restantes: 5 };
+  b.deps.qualite.fusionnerValeurs = async () => retour;
+  const corps = { cle: 'motsCles', de: 'Cancer', vers: 'cancer' };
+  const res = await b.envoyer('fusionner-valeurs', corps, MAX);
+  assert.equal(res.code, 409);
+  assert.deepEqual(res.corps, { code: 'a-poursuivre', faites: 2, restantes: 5 });
+  assert.deepEqual(b.journalEcrit().map((l) => l.phrase), ['a commencé à fusionner « Cancer » dans « cancer » : 2 fiches faites, puis le geste a été interrompu']);
+  for (retour of [{ ok: false, code: 'interrompue', faites: 0, restantes: 2 }, { ok: false, code: 'occupee', faites: 0, restantes: 2 }, { ok: false, code: 'notion' }]) {
+    await b.envoyer('fusionner-valeurs', corps, MAX);
+  }
+  assert.equal(b.journalEcrit().length, 1);
+  // Les noms des porteurs introuvables au moment de noter : la ligne est écrite quand même, sans eux.
+  const c = banc();
+  c.deps.porteurs.fusionner = async () => ({ ok: false, code: 'a-poursuivre', faites: 3, restantes: 1 });
+  c.deps.porteurs.lister = async () => { throw new Error('Notion en panne'); };
+  const fusion = await c.envoyer('fusionner-porteurs', { doublon: '~000000000000000000000001', garde: '~000000000000000000000002' }, MAX);
+  assert.equal(fusion.code, 409);
+  assert.deepEqual(c.journalEcrit(), [{ geste: 'Porteurs fusionnés', par: MAX, sur: '', phrase: 'a commencé à fusionner deux porteurs : 3 fiches faites, puis le geste a été interrompu' }]);
+});
+
+test('le journal ne retarde jamais un geste de plus de trois secondes, et sa lenteur va au journal du serveur', async (t) => {
+  const b = banc();
+  b.deps.journalEquipe.noter = () => new Promise(() => {});
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const laisserFaire = async () => { for (let i = 0; i < 30; i++) await new Promise((suite) => setImmediate(suite)); };
+  let res = null;
+  b.envoyer('verifier', { fiche: 'cohorte-x' }, MAX).then((r) => { res = r; });
+  await laisserFaire();
+  assert.equal(b.fiches[0].verifieePar, 'Équipe du RSN', 'le geste est fait');
+  assert.equal(res, null, 'la réponse attend le journal');
+  t.mock.timers.tick(2999);
+  await laisserFaire();
+  assert.equal(res, null, 'encore un instant');
+  t.mock.timers.tick(1);
+  await laisserFaire();
+  assert.ok(res, 'au bout de trois secondes, la réponse part sans le journal');
+  assert.equal(res.code, 200);
+  assert.equal(res.corps.ok, true);
+  assert.ok(b.lignesServeur.some((l) => /journal de l'équipe.*trois secondes/.test(l)), b.lignesServeur.join(' | '));
+});
+
+test('un journal qui échoue après les trois secondes ne lève rien ; un journal rapide ne laisse aucune minuterie', async (t) => {
+  const b = banc();
+  let rejeter;
+  b.deps.journalEquipe.noter = () => new Promise((_, rejet) => { rejeter = rejet; });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const laisserFaire = async () => { for (let i = 0; i < 30; i++) await new Promise((suite) => setImmediate(suite)); };
+  let res = null;
+  b.envoyer('verifier', { fiche: 'cohorte-x' }, MAX).then((r) => { res = r; });
+  await laisserFaire();
+  t.mock.timers.tick(3000);
+  await laisserFaire();
+  assert.equal(res.code, 200);
+  rejeter(new Error('trop tard'));
+  await laisserFaire();
+  // Un journal rapide : la réponse part sans attendre la minuterie.
+  const c = banc();
+  const rapide = await c.envoyer('revoir', { fiche: 'cohorte-x', actif: true, note: 'x' }, MAX);
+  assert.equal(rapide.code, 200);
+  assert.equal(c.journalEcrit().length, 1);
+});

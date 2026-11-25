@@ -4,9 +4,13 @@
  * « choix différent », et leurs combinaisons « et » / « ou ».
  * pannes : par nom d'appel, vrai (toujours en panne) ou une fonction des arguments.
  * uuid : vrai pour des identifiants de page à la forme de ceux de Notion.
+ * figerListes() : à partir de là, « databases.query » rend les pages telles qu'elles étaient à cet
+ * instant (une liste périmée, comme Notion en rend juste après une écriture), alors que
+ * « pages.retrieve » rend toujours la page à jour. degelerListes() remet les listes à jour.
  */
 function fauxNotion({ pannes = {}, uuid = false } = {}) {
   const pages = new Map(); const blocs = new Map(); const appels = []; let n = 0;
+  let figees = null;
   const lu = (segments) => (segments || []).map((s) => ({ ...s, plain_text: s.text.content }));
   const noter = (nom, args) => {
     appels.push({ nom, args });
@@ -70,13 +74,15 @@ function fauxNotion({ pannes = {}, uuid = false } = {}) {
     databases: {
       async query({ database_id, filter, sorts }) {
         noter('databases.query', { database_id, filter, sorts });
-        const results = [...pages.values()].filter((p) => p.parent.database_id === database_id && retient(p, filter)).map(lisible);
+        const results = [...(figees || pages.values())].filter((p) => p.parent.database_id === database_id && retient(p, filter)).map(lisible);
         return { results, has_more: false };
       },
     },
   };
   const de = (nom) => appels.filter((a) => a.nom === nom).map((a) => a.args);
-  return { client, pages, blocs, appels, de };
+  const figerListes = () => { figees = JSON.parse(JSON.stringify([...pages.values()])); };
+  const degelerListes = () => { figees = null; };
+  return { client, pages, blocs, appels, de, figerListes, degelerListes };
 }
 
 module.exports = { fauxNotion };

@@ -616,12 +616,16 @@ const TEXTES = {
         ancienMembre: 'Une personne qui n’est plus dans l’équipe',
       },
       // Messages
-      invitee: (nom, courriel) => (courriel
+      // « essai » : le mode d’essai des courriels est actif, le lien n’est pas parti à la personne invitée.
+      invitee: (nom, courriel, essai) => (essai ? TEXTES.panneau.equipe.enEssai(`${nom} est inscrite`, nom, courriel) : courriel
         ? `${nom} est invitée : son lien d’entrée vient de partir par courriel.`
         : `${nom} est inscrite, mais le courriel n’a pas pu partir. Elle peut demander son lien elle-même sur la page d’entrée du panneau, avec son adresse.`),
-      reactivee: (nom, courriel) => (courriel
+      reactivee: (nom, courriel, essai) => (essai ? TEXTES.panneau.equipe.enEssai(`${nom} retrouve son accès`, nom, courriel) : courriel
         ? `${nom} retrouve son accès : son lien d’entrée vient de partir par courriel.`
         : `${nom} retrouve son accès, mais le courriel n’a pas pu partir. Elle peut demander son lien elle-même sur la page d’entrée du panneau.`),
+      enEssai: (debut, nom, courriel) => (courriel
+        ? `${debut}, mais le mode d’essai des courriels est actif : son lien d’entrée est parti à l’adresse d’essai, et non à ${nom}. Transférez-le-lui dans l’heure. Tant que le mode d’essai est actif, ${nom} ne peut pas demander son lien elle-même.`
+        : `${debut}, mais le courriel n’a pas pu partir. Tant que le mode d’essai est actif, ${nom} ne peut pas demander son lien elle-même ; ensuite, elle le pourra sur la page d’entrée du panneau, avec son adresse.`),
       roleChange: (nom, role) => `Rôle de ${nom} : ${role}. Le changement vaut tout de suite.`,
       retiree: (nom) => `Accès retiré à ${nom}. Sa session est coupée tout de suite.`,
       resumeActive: (nom, moi) => (moi ? 'Vous recevrez le résumé hebdomadaire.' : `${nom} recevra le résumé hebdomadaire.`),

@@ -532,11 +532,12 @@ function comparaison() {
     ? [T.colonnesComparaison.actuelle, modification ? T.colonnesComparaison.proposee : T.colonnesComparaison.propose]
     : p.statut === 'approuvee' ? [T.colonnesComparaison.avant, modification ? T.colonnesComparaison.applique : T.colonnesComparaison.publie]
       : [T.colonnesComparaison.surLaFiche, T.colonnesComparaison.refuse];
+  // Compléter un champ que la proposition ne porte pas est réservé à l'Administration : le serveur le refuse aux autres.
   const restants = CHAMPS.filter((c) => !cles.includes(c.cle));
   return `${modification ? legende() : ''}
     <div class="cmp${modification ? '' : ' one'}"><div class="hd">${e(T.colonnesComparaison.champ)}</div>${modification ? `<div class="hd b">${e(entetes[0])}</div>` : ''}<div class="hd b">${e(entetes[1])}</div>${rangs}${logo}</div>
     ${!rangs && !logo ? `<p class="muted small">${e(T.rienAMontrer)}</p>` : ''}
-    ${ouvert && corrigeable() && restants.length ? `<div class="row"><select id="autreChamp" aria-label="${e(T.autreChamp)}" style="width:auto"${f.enCours ? ' disabled' : ''}><option value="">${e(T.autreChamp)}…</option>${restants.map((c) => option(c.cle, '', libelle(c.cle))).join('')}</select><span class="muted small">${e(T.autreChampAide)}</span></div>` : ''}`;
+    ${ouvert && corrigeable() && administre() && restants.length ? `<div class="row"><select id="autreChamp" aria-label="${e(T.autreChamp)}" style="width:auto"${f.enCours ? ' disabled' : ''}><option value="">${e(T.autreChamp)}…</option>${restants.map((c) => option(c.cle, '', libelle(c.cle))).join('')}</select><span class="muted small">${e(T.autreChampAide)}</span></div>` : ''}`;
 }
 
 // La fiche telle qu'elle serait sur le site : les valeurs de la fiche, puis celles de la proposition.
@@ -1995,7 +1996,7 @@ function inviter() {
     if (fautif) fautif.focus();
     return undefined;
   }
-  return gesteEquipe('inviter', 'inviter', { courriel, nom, role: i.role }, (d) => (d.reactivee ? EQ.reactivee : EQ.invitee)(nom, !!d.courriel));
+  return gesteEquipe('inviter', 'inviter', { courriel, nom, role: i.role }, (d) => (d.reactivee ? EQ.reactivee : EQ.invitee)(nom, !!d.courriel, d.essai === true));
 }
 function gesteEcranEquipe(act, cible) {
   const q = etat.eq; const x = personneDe(cible.dataset.id);
@@ -2221,7 +2222,7 @@ document.addEventListener('change', (evenement) => {
   }
   if (!f || !f.d) return;
   if (cible.id === 'corrIn') { f.brouillon = cible.type === 'checkbox' ? cible.checked : cible.value; return; }
-  if (cible.id === 'autreChamp' && cible.value) {
+  if (cible.id === 'autreChamp' && cible.value && administre()) {
     const cle = cible.value;
     if (!PAR_CLE[cle]) return;
     if (f.edition && !garder()) return;

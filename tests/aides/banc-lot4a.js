@@ -39,7 +39,8 @@ function requete(method, action, { body, query = {}, headers = {}, cookie = temo
   return { method, body, query: { action, ...query }, headers: { host: 'carto.exemple', ...(cookie ? { cookie } : {}), ...propres, ...headers } };
 }
 
-function banc({ env = ENV, pannes = {}, pannesNotion = {}, envoi = { envoye: true }, sansJournal = false } = {}) {
+// lienPermis : ce que répond la limite des liens d'entrée à une invitation.
+function banc({ env = ENV, pannes = {}, pannesNotion = {}, envoi = { envoye: true }, sansJournal = false, lienPermis = true } = {}) {
   const faux = fauxNotion({ pannes: pannesNotion, uuid: true });
   inscrire(faux, { id: 'id-notion-tess', nom: 'Tess Berthier', courriel: TESS, role: 'Administration' });
   inscrire(faux, { id: 'id-notion-max', nom: 'Maxime Lafrenière', courriel: MAX, role: 'Approbation' });
@@ -77,10 +78,12 @@ function banc({ env = ENV, pannes = {}, pannesNotion = {}, envoi = { envoye: tru
   const ressources = creerRessources(commun);
   const porteurs = creerPorteurs({ ...commun, geocoder: async () => ({ latitude: 46.8, longitude: -71.2 }) });
   const qualite = creerQualite({ ...commun, liens: {} });
-  const equipe = creerEquipe({ client: faux.client, env, courriels, verrous, secret: SECRET, journal, attendre: async () => {} });
+  const demandesDeLien = [];
+  const limites = { async consommerJeton() { return true; }, async autoriserLien(demande) { demandesDeLien.push(demande); return lienPermis; } };
+  const equipe = creerEquipe({ client: faux.client, env, courriels, limites, verrous, secret: SECRET, journal, attendre: async () => {} });
   const journalEquipe = creerJournal(faux.client, env, { maintenant, journal });
   const deps = {
-    env, journal, limites: { async consommerJeton() { return true; } }, propositions, notion: base.notion, source: async () => publiques(),
+    env, journal, limites, propositions, notion: base.notion, source: async () => publiques(),
     fichiers: { async telecharger() { throw new Error('aucun fichier'); } }, approbation, ressources, porteurs, qualite, equipe,
     ...(sansJournal ? {} : { journalEquipe }),
   };
@@ -90,7 +93,7 @@ function banc({ env = ENV, pannes = {}, pannesNotion = {}, envoi = { envoye: tru
   const pagesDe = (baseNotion) => [...faux.pages.values()].filter((p) => p.parent.database_id === baseNotion);
   const texte = (prop) => ((prop && (prop.title || prop.rich_text)) || []).map((s) => s.text.content).join('');
   return {
-    ...base, faux, deps, envois, lignesServeur, vues, appeler, propositions, equipe,
+    ...base, faux, deps, envois, lignesServeur, vues, appeler, propositions, equipe, demandesDeLien,
     envoyer: (action, corps = {}, par = TESS, options = {}) => appeler(requete('POST', action, { body: corps, cookie: temoin(par), ...options })),
     lire: (action, query = {}, par = TESS) => appeler(requete('GET', action, { query, cookie: temoin(par) })),
     // Le journal de l'équipe tel qu'il est écrit dans Notion, de la première ligne à la dernière.

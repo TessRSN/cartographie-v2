@@ -597,3 +597,38 @@ test('Administration : enregistrer change la fiche tout de suite, avec sa versio
   assert.equal(b.faux.de('pages.create').length, 1);
   assert.equal(b.proposees.length, 0);
 });
+
+// ─── Relecture du lot 4a : un geste sans effet n'écrit rien ───
+test('marquer « à revoir » une fiche qui l\'est déjà avec la même note, ou démarquer une fiche qui ne l\'est pas : rien n\'est écrit', async () => {
+  const b = banc();
+  const deja = await b.ressources.revoir({ repere: 'cohorte-x', actif: false, note: '', par: MAX });
+  assert.deepEqual(deja, { ok: true, id: 'cohorte-x', aRevoir: false, note: '', nom: 'Cohorte X', inchangee: true });
+  assert.equal(b.de('mettreAJourFiche').length, 0);
+  const marque = await b.ressources.revoir({ repere: 'cohorte-x', actif: true, note: 'Le lien a changé.', par: MAX });
+  assert.ok(!Object.hasOwn(marque, 'inchangee'));
+  const encore = await b.ressources.revoir({ repere: 'cohorte-x', actif: true, note: '  Le lien   a changé. ', par: TESS });
+  assert.deepEqual(encore, { ok: true, id: 'cohorte-x', aRevoir: true, note: 'Le lien a changé.', nom: 'Cohorte X', inchangee: true });
+  assert.equal(b.de('mettreAJourFiche').length, 1, 'une seule écriture');
+  // Une autre note est un changement : elle s'écrit.
+  const autre = await b.ressources.revoir({ repere: 'cohorte-x', actif: true, note: 'Le contact aussi.', par: TESS });
+  assert.ok(!Object.hasOwn(autre, 'inchangee'));
+  assert.equal(b.fiches[0].noteARevoir, 'Le contact aussi.');
+  assert.equal(b.de('mettreAJourFiche').length, 2);
+});
+
+test('marquer vérifiée une fiche déjà vérifiée le même jour par l\'équipe : rien n\'est écrit ; un autre jour ou une autre source, si', async () => {
+  const b = banc();
+  assert.ok(!Object.hasOwn(await b.ressources.verifier({ repere: 'cohorte-x', par: MAX }), 'inchangee'));
+  const encore = await b.ressources.verifier({ repere: 'cohorte-x', par: TESS });
+  assert.deepEqual(encore, { ok: true, id: 'cohorte-x', verifieeLe: '2026-11-25', verifieePar: 'Équipe du RSN', nom: 'Cohorte X', inchangee: true });
+  assert.equal(b.de('mettreAJourFiche').length, 1, 'une seule écriture');
+  assert.equal(b.vidages(), 1);
+  for (const avant of [{ verifieeLe: '2026-11-24', verifieePar: 'Équipe du RSN' }, { verifieeLe: '2026-11-25', verifieePar: 'Responsable' }]) {
+    const c = banc({ fiches: [brute(avant)] });
+    const retour = await c.ressources.verifier({ repere: 'cohorte-x', par: MAX });
+    assert.ok(retour.ok && !Object.hasOwn(retour, 'inchangee'), JSON.stringify(avant));
+    assert.equal(c.de('mettreAJourFiche').length, 1);
+    assert.equal(c.fiches[0].verifieeLe, '2026-11-25');
+    assert.equal(c.fiches[0].verifieePar, 'Équipe du RSN');
+  }
+});

@@ -30,13 +30,17 @@
  *   POST revisiter-lien { fiche }               → revisite le lien principal d'une fiche
  *   GET  equipe                                 → les personnes qui ont accès, et le journal de l'équipe
  *   POST inviter        { courriel, nom, role } → inscrit une personne et lui envoie son lien d'entrée (Administration)
+ *                                                 { courriel: false } si le lien n'est pas parti (panne, ou limite des liens atteinte) ;
+ *                                                 { essai: true } si le mode d'essai des courriels l'a envoyé à l'adresse d'essai
  *   POST changer-role   { personne, role }      → (Administration) ; jamais le sien
  *   POST retirer        { personne }            → coupe l'accès sans rien supprimer (Administration) ; jamais soi-même
  *   POST regler-resume  { personne, actif }     → le résumé hebdomadaire : le sien, ou celui de tous en Administration
  * Une fiche est désignée par son adresse publique, ou par un repère opaque si elle est écartée ;
  * un porteur ou une personne, toujours par un repère opaque : jamais par un identifiant Notion.
  * Les courriels de l'équipe ne sortent que par « equipe » ; partout ailleurs, une personne est un nom.
- * Chaque geste réussi est noté dans le journal de l'équipe, qui ne fait jamais échouer le geste.
+ * Chaque geste réussi qui change quelque chose est noté dans le journal de l'équipe, comme une fusion
+ * interrompue qui a déjà changé des fiches. Le journal ne fait jamais échouer un geste et ne le retarde
+ * jamais de plus de trois secondes.
  * Hors « session » et « deconnexion », chaque appel exige un témoin de session valide ET une
  * personne toujours inscrite et active, dont le rôle, relu à chaque appel, suffit pour l'action.
  * Tout envoi doit venir du site lui-même.
@@ -45,7 +49,7 @@ const { signer, verifier } = require('../lib/jetons');
 const { CHAMPS, egales } = require('../public/js/champs.js');
 const { avisDe, ROLES } = require('../lib/propositions');
 const { verifierOctets } = require('../lib/images');
-const { ouvertes, origineSure, memeOrigineStricte, corpsDe, dependances } = require('../lib/contributions');
+const { ouvertes, origineSure, memeOrigineStricte, ipDe, corpsDe, dependances } = require('../lib/contributions');
 const { repereValide } = require('../lib/ressources');
 const { reperePorteurValide } = require('../lib/porteurs');
 const { reperePersonneValide } = require('../lib/equipe');
@@ -86,7 +90,7 @@ const GESTES_LOT3 = {
 };
 // Les gestes sur l'équipe. Les garde-fous (son propre rôle, la dernière Administration…) sont dans lib/equipe.js.
 const GESTES_EQUIPE = {
-  inviter: { lisible: (c) => texteCourt(c.courriel, 254) && texteCourt(c.nom, 400) && texteCourt(c.role, 40), faire: (d, c, par, origine) => d.equipe.inviter({ courriel: c.courriel, nom: c.nom, role: c.role, par, origine }) },
+  inviter: { lisible: (c) => texteCourt(c.courriel, 254) && texteCourt(c.nom, 400) && texteCourt(c.role, 40), faire: (d, c, par, origine, ip) => d.equipe.inviter({ courriel: c.courriel, nom: c.nom, role: c.role, par, origine, ip }) },
   'changer-role': { lisible: (c) => reperePersonneValide(c.personne) && texteCourt(c.role, 40), faire: (d, c, par) => d.equipe.changerRole({ personne: c.personne, role: c.role, par }) },
   retirer: { lisible: (c) => reperePersonneValide(c.personne), faire: (d, c, par) => d.equipe.retirer({ personne: c.personne, par }) },
   'regler-resume': { lisible: (c) => reperePersonneValide(c.personne) && typeof c.actif === 'boolean', faire: (d, c, par) => d.equipe.reglerResume({ personne: c.personne, actif: c.actif, par }) },
@@ -170,8 +174,8 @@ const JOURNAL = {
   retablir: (r, c) => (r.inchangee ? null : ligne('Version rétablie', r.nom, `a rétabli la version ${Number(c.numero)} de ${r.nom}`)),
   ecarter: (r) => (r.inchangee ? null : ligne('Fiche écartée', r.nom, `a écarté la fiche de ${r.nom}`)),
   republier: (r) => (r.inchangee ? null : ligne('Fiche republiée', r.nom, `a republié la fiche de ${r.nom}`)),
-  verifier: (r) => ligne('Fiche vérifiée', r.nom, `a marqué ${r.nom} comme vérifiée`),
-  revoir: (r) => ligne('Fiche à revoir', r.nom, r.aRevoir ? `a marqué ${r.nom} « à revoir »` : `a retiré la marque « à revoir » de ${r.nom}`),
+  verifier: (r) => (r.inchangee ? null : ligne('Fiche vérifiée', r.nom, `a marqué ${r.nom} comme vérifiée`)),
+  revoir: (r) => (r.inchangee ? null : ligne('Fiche à revoir', r.nom, r.aRevoir ? `a marqué ${r.nom} « à revoir »` : `a retiré la marque « à revoir » de ${r.nom}`)),
   'creer-porteur': (r) => ligne('Porteur créé', r.nom, `a ajouté le porteur ${r.nom}`),
   'enregistrer-porteur': (r) => (r.inchange ? null : ligne('Porteur modifié', r.nom, `a modifié le porteur ${r.nom}`)),
   'fusionner-porteurs': (r) => ligne('Porteurs fusionnés', r.nom, `a fusionné le porteur ${r.nomDoublon} dans ${r.nom}`),
@@ -181,14 +185,46 @@ const JOURNAL = {
   retirer: (r) => ligne('Personne retirée', r.nom, `a retiré l'accès de ${r.nom}`),
   'regler-resume': (r) => (r.inchange ? null : ligne('Résumé réglé', r.nom, `${r.resume ? 'a activé' : 'a arrêté'} le résumé hebdomadaire pour ${r.nom}`)),
 };
-// Note un geste réussi. Ne lève jamais et ne change rien à la réponse : une panne va au journal du serveur.
+// Un geste de masse arrêté en route (échec, ou « à poursuivre ») qui a déjà changé des fiches : il
+// est noté quand même, avec le compte des fiches faites. Les noms des porteurs sont relus ici, la
+// réponse du module ne les porte pas ; s'ils ne peuvent pas l'être, la ligne s'écrit sans eux.
+const fichesFaites = (n) => `${n} ${n > 1 ? 'fiches faites' : 'fiche faite'}, puis le geste a été interrompu`;
+const INTERROMPUS = {
+  'fusionner-porteurs': async (r, c, d) => {
+    let noms = null;
+    try {
+      const { porteurs } = await d.porteurs.lister();
+      const nomDe = (repere) => (porteurs.find((o) => o.id === repere) || {}).nom;
+      if (nomDe(c.doublon) && nomDe(c.garde)) noms = { doublon: nomDe(c.doublon), garde: nomDe(c.garde) };
+    } catch (err) { /* la ligne s'écrit sans les noms */ }
+    return noms
+      ? ligne('Porteurs fusionnés', noms.garde, `a commencé à fusionner le porteur ${noms.doublon} dans ${noms.garde} : ${fichesFaites(r.faites)}`)
+      : ligne('Porteurs fusionnés', '', `a commencé à fusionner deux porteurs : ${fichesFaites(r.faites)}`);
+  },
+  'fusionner-valeurs': (r, c) => ligne('Valeurs fusionnées', c.vers, `a commencé à fusionner « ${c.de} » dans « ${c.vers} » : ${fichesFaites(r.faites)}`),
+};
+// Le journal ne retarde jamais un geste plus longtemps que cela.
+const ATTENTE_JOURNAL_MS = 3000;
+// Note un geste réussi, ou un geste de masse interrompu qui a déjà changé des fiches. Ne lève jamais,
+// ne change rien à la réponse et n'attend pas plus de trois secondes : une panne ou une lenteur va
+// au journal du serveur.
 async function consigner(d, action, par, retour, corps) {
+  const dire = (...texte) => { try { d.journal(...texte); } catch (e) { /* rien de plus à faire */ } };
+  let minuterie;
   try {
-    if (!d.journalEquipe || !Object.hasOwn(JOURNAL, action) || !retour || !retour.ok) return;
-    const aNoter = JOURNAL[action](retour, corps || {});
-    if (aNoter) await d.journalEquipe.noter({ ...aNoter, par });
+    if (!d.journalEquipe || !retour) return;
+    const table = retour.ok ? JOURNAL : (Number.isInteger(retour.faites) && retour.faites > 0 ? INTERROMPUS : null);
+    if (!table || !Object.hasOwn(table, action)) return;
+    const ecriture = (async () => {
+      const aNoter = await table[action](retour, corps || {}, d);
+      if (aNoter) await d.journalEquipe.noter({ ...aNoter, par });
+    })().catch((err) => { dire(`[admin] journal de l'équipe non écrit (${action}) :`, err && err.message); });
+    const tropLong = new Promise((suite) => { minuterie = setTimeout(() => suite('trop long'), ATTENTE_JOURNAL_MS); });
+    if ((await Promise.race([ecriture, tropLong])) === 'trop long') dire(`[admin] journal de l'équipe : pas de réponse après trois secondes, le geste n'attend plus (${action})`);
   } catch (err) {
-    try { d.journal(`[admin] journal de l'équipe non écrit (${action}) :`, err && err.message); } catch (e) { /* rien de plus à faire */ }
+    dire(`[admin] journal de l'équipe non écrit (${action}) :`, err && err.message);
+  } finally {
+    clearTimeout(minuterie);
   }
 }
 // Ce qu'un geste réussi répond : sans ce que le module a ajouté pour le journal.
@@ -412,7 +448,7 @@ function creerGestionnaire(donnees) {
       if (Object.hasOwn(GESTES_EQUIPE, action)) {
         const geste = GESTES_EQUIPE[action];
         if (!geste.lisible(corps)) return illisible();
-        const retour = await geste.faire(d, corps, approbateur, origine);
+        const retour = await geste.faire(d, corps, approbateur, origine, ipDe(req));
         if (retour.ok) {
           await consigner(d, action, approbateur, retour, corps);
           return res.status(200).json(reponseDe(retour));
@@ -438,10 +474,9 @@ function creerGestionnaire(donnees) {
         const geste = GESTES_LOT3[action];
         if (!geste.lisible(corps)) return illisible();
         const retour = await geste.faire(d, corps, approbateur);
-        if (retour.ok) {
-          await consigner(d, action, approbateur, retour, corps);
-          return res.status(200).json(reponseDe(retour));
-        }
+        // Réussi ou non : une fusion arrêtée en route qui a déjà changé des fiches est notée elle aussi.
+        await consigner(d, action, approbateur, retour, corps);
+        if (retour.ok) return res.status(200).json(reponseDe(retour));
         const { ok, code, ...detail } = retour;
         return res.status(CODES[code] || 502).json({ code, ...detail });
       }
