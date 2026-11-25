@@ -26,7 +26,8 @@ function creerGestionnaire(donnees) {
 
     const d = dependances(donnees);
     try {
-      const enAttente = await d.propositions.listerPropositions({ statut: 'attente' });
+      // Tout ce qui attend encore une décision : les nouvelles et celles en vérification.
+      const enAttente = await d.propositions.listerPropositions({ statut: 'ouvertes' });
       if (!enAttente.length) return res.status(200).json({ ok: true, enAttente: 0, envoyes: 0 });
       const propositions = enAttente.map((x) => ({ titre: x.titre, proposeLe: x.proposeLe }));
       const lienPanneau = `${origineSure(req, env)}/admin`;

@@ -3,36 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panneau d'approbation | Cartographie du RSN</title>
+    <title>Panneau de la cartographie du RSN</title>
     <meta name="robots" content="noindex, nofollow">
     <meta name="referrer" content="no-referrer">
     <link rel="icon" type="image/png" href="/icone-rsn.png">
-    <script>(function(){try{var c=localStorage.getItem('rsn-theme');if(c==='dark'||(!c&&window.matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.setAttribute('data-theme','dark');}catch(e){}})();</script>
-    <link rel="stylesheet" href="/css/styles.css">
-    <link rel="stylesheet" href="/css/formulaires.css">
+    <!-- Le choix de mode clair ou sombre fait sur le site est repris ici ; sans choix, le panneau suit l'appareil. -->
+    <script>(function(){try{var c=localStorage.getItem('rsn-theme');if(c==='dark'||c==='light')document.documentElement.setAttribute('data-theme',c);}catch(e){}})();</script>
+    <link rel="stylesheet" href="/css/admin.css">
 </head>
-<body class="page-formulaire">
+<body>
 
-<header class="header">
-    <a href="/" class="header-home" aria-label="Retour à l'accueil de la cartographie"><img class="header-logo" src="/logo-rsn-blanc.webp" width="150" height="40" alt="Logo du RSN"></a>
-    <div class="header-main">
-        <div class="header-title"><h1>Cartographie des ressources en santé numérique</h1></div>
+<div class="top"><div class="top-in">
+    <div class="brand"><span class="blogo"><img src="/logo-rsn-blanc.webp" width="150" height="40" alt="Logo du RSN"></span><div><b id="marqueReseau">Réseau santé numérique</b><span id="marquePanneau">Administration de la cartographie</span></div></div>
+    <div class="who">
+        <span id="quiNom"></span>
+        <span class="role" id="quiRole"></span>
+        <button class="tbtn" id="boutonTheme" type="button"></button>
+        <button class="tbtn" id="deconnexion" type="button" hidden></button>
     </div>
-    <div class="header-controls">
-        <a class="header-btn" href="/">Retour à la cartographie</a>
-        <button type="button" class="header-btn" id="boutonTheme" aria-label="Changer de mode clair ou sombre">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </button>
-    </div>
-</header>
+</div></div>
 
-<main class="formulaire-page panneau-page" id="panneau">
-    <p class="formulaire-attente">Chargement…</p>
-    <noscript><p class="formulaire-attente">Cette page a besoin de JavaScript.</p></noscript>
-</main>
+<div class="shell seule" id="coque">
+    <nav class="side" id="nav" aria-label="Sections du panneau" hidden></nav>
+    <main id="main">
+        <p class="muted">Chargement…</p>
+        <noscript><p class="muted">Cette page a besoin de JavaScript.</p></noscript>
+    </main>
+</div>
+<div id="layer"></div>
+<div class="toast" id="toast" role="status" hidden></div>
 
 <script src="/js/texte.js"></script>
 <script src="/js/champs.js"></script>
+<script src="/js/comparaison.js"></script>
+<script src="/js/fiche.js"></script>
 <script src="/js/admin.js"></script>
 </body>
 </html>

@@ -417,3 +417,37 @@ test('le profil du responsable suit le nom du responsable dans le formulaire', (
   const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/js/proposer.js'), 'utf8');
   assert.match(source, /\['contact', \['contact', 'responsable', 'profilResponsable'\]\]/);
 });
+
+test('textes du panneau : un libellé pour chaque rôle, chaque état et chaque champ, sans tiret cadratin', () => {
+  const { TEXTES: T } = require('../public/js/texte.js');
+  const { CHAMPS } = require('../public/js/champs.js');
+  const { STATUTS, ROLES, GENRES, LIENS } = require('../lib/propositions');
+  const P = T.panneau;
+  for (const statut of Object.keys(STATUTS)) { assert.ok(P.etats[statut], statut); assert.ok(P.colonnes[statut], statut); }
+  for (const role of Object.keys(ROLES)) assert.ok(P.roles[role], role);
+  for (const genre of Object.keys(GENRES)) { assert.ok(P.genres[genre], genre); assert.equal(typeof P.activite.objets[genre], 'function', genre); }
+  for (const lien of Object.keys(LIENS)) assert.ok(P.liens[lien], lien);
+  for (const champ of CHAMPS) assert.ok((P.champs[champ.cle] || T.contribuer.champs[champ.cle] || {}).libelle, champ.cle);
+  for (const champ of CHAMPS.filter((c) => c.saisie === 'fiches')) assert.ok(P.natures[champ.cle], champ.cle);
+  const tout = JSON.stringify(P, (cle, v) => (typeof v === 'function' ? v('X', 'Y', 'Z', true) : v));
+  assert.ok(!tout.includes('—') && !tout.includes('–'), 'pas de tiret cadratin');
+  assert.ok(!/undefined|\[object/.test(tout));
+});
+
+test('chaque texte que la page du panneau demande existe', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { TEXTES: T } = require('../public/js/texte.js');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'admin.js'), 'utf8');
+  const chemins = new Set([...source.matchAll(/\bT\.((?:[A-Za-z_]\w*)(?:\.[A-Za-z_]\w*)*)/g)].map((m) => m[1]));
+  assert.ok(chemins.size > 100);
+  for (const chemin of chemins) {
+    let v = T.panneau;
+    for (const cle of chemin.split('.')) {
+      // Un accès par clé calculée (T.genres[x]) s'arrête à l'objet ; une méthode de chaîne (.toLowerCase) aussi.
+      if (typeof v === 'string' || typeof v === 'function') break;
+      assert.ok(v && Object.hasOwn(v, cle), `TEXTES.panneau.${chemin}`);
+      v = v[cle];
+    }
+  }
+});
