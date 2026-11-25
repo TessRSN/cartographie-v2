@@ -398,3 +398,17 @@ test('la carte sépare l\'accès et la portée, et met en avant « Voir la fiche
   // « Voir la fiche » est le bouton principal, précédé d'un « + » décoratif.
   assert.match(html, /<a class="card-action principale" href="\/ressource\/[^"]+" data-fiche="[^"]+"><span class="plus" aria-hidden="true">\+<\/span>Voir la fiche/);
 });
+
+test('textes du formulaire de contribution', () => {
+  const { TEXTES: T, CLES_TYPE: TYPES } = require('../public/js/texte.js');
+  const { CHAMPS } = require('../public/js/champs.js');
+  const C = T.contribuer;
+  for (const cle of Object.values(TYPES)) {
+    assert.ok(C.types[cle].definition.length > 10, cle);
+    assert.equal(C.types[cle].exemples.length, 2, cle);
+  }
+  for (const champ of CHAMPS.filter((c) => c.role === 'proposant')) assert.ok(C.champs[champ.cle] && C.champs[champ.cle].libelle, champ.cle);
+  for (const lien of ['responsable', 'jy-travaille', 'aucun']) assert.ok(C.liens[lien], lien);
+  const tout = JSON.stringify(C, (cle, v) => (typeof v === 'function' ? v('X') : v));
+  assert.ok(!tout.includes('—'), 'pas de tiret cadratin');
+});
