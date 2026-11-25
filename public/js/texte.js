@@ -84,12 +84,11 @@ const TEXTES = {
     titre: 'Comment sont calculées les connexions ?',
     chapeau: 'Aucune intelligence artificielle : un calcul déterministe, refait dans votre navigateur à partir des sujets inscrits dans les fiches.',
     sections: [
-      ["D'où viennent les sujets", "Des sujets (mots-clés) de chaque fiche. Un sujet est pris en entier : « imagerie par résonance magnétique » compte comme une seule expression. Un dictionnaire rapproche le français et l'anglais, pour qu'« intelligence artificielle » et « artificial intelligence » comptent comme un même sujet."],
-      ['Quels sujets comptent', "Un sujet présent dans plus de 20 % des fiches ne distingue aucune ressource ; un sujet présent dans une seule fiche ne peut relier personne. Ces sujets sont ignorés."],
-      ['Comment se calcule la proximité', "Chaque sujet partagé pèse selon sa rareté dans le catalogue : un sujet rare vaut plus qu'un sujet courant. Le score d'une paire de ressources est la somme de ces poids."],
-      ['Quels liens sont affichés', "Les liens au-dessus du seuil du curseur, puis les 4 voisines les plus proches de chaque ressource, avec un maximum de 10 liens par ressource pour éviter les étoiles illisibles. L'épaisseur du trait suit le score."],
-      ['Les ●●● dans « Ressources proches »', '●●● proximité forte, plusieurs sujets rares en commun. ●●○ moyenne. ●○○ faible. Le classement suit le score, pas le nombre de sujets.'],
-      ['Limites', "Une fiche qui porte peu de sujets, ou des sujets très généraux, aura peu de liens : la qualité du graphe dépend de la précision des sujets inscrits dans les fiches."],
+      ["Ce qui rapproche deux ressources", "Leurs sujets (mots-clés) et leurs normes et formats, comme BIDS, DICOM ou CIM-10. Un dictionnaire rapproche le français et l'anglais. Les outils comme Docker ne comptent pas : ils relieraient presque tous les logiciels."],
+      ['Quels sujets comptent', "Un sujet présent dans plus de 20 % des fiches ne distingue aucune ressource ; un sujet présent dans une seule fiche ne relie personne. Les deux sont ignorés. Un sujet rare pèse plus qu'un sujet courant."],
+      ['Lire le graphe', "Un trait relie deux ressources proches ; plus il est épais, plus elles le sont. Cliquez sur un point pour voir ce qui le relie aux autres : les sujets communs sont en bleu, les normes et formats en violet. « Par sujets » montre plutôt les sujets partagés par au moins cinq ressources."],
+      ['Les ●●● dans « Ressources proches »', '●●● proximité forte, ●●○ moyenne, ●○○ faible. Le classement suit le poids des sujets communs, pas leur nombre.'],
+      ['Limites', "Une fiche qui porte peu de sujets, ou des sujets très généraux, aura peu de liens."],
     ],
   },
   portrait: {
@@ -152,7 +151,6 @@ const TEXTES = {
     copierLien: 'Copier le lien', lienCopie: 'Lien copié',
     proches: 'Ressources proches',
     sujetsCommuns: (n) => (n > 1 ? `${n} sujets communs` : '1 sujet commun'),
-    voirSujetsCommuns: 'Voir les sujets communs',
     force: { forte: 'Proximité forte', moyenne: 'Proximité moyenne', faible: 'Proximité faible' },
   },
   pied: {

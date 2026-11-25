@@ -513,6 +513,8 @@ function blocProches(r) {
   const bloc = document.createElement('section'); bloc.className = 'proches';
   const titre = document.createElement('h3'); titre.textContent = T.proches;
   const liste = document.createElement('ul');
+  // Normes de la fiche, retrouvées par leur forme en minuscules (celle des sujets communs).
+  const normesDe = new Map((r.normes || []).map((n) => [String(n).toLowerCase(), n]));
   for (const { lien, autre } of voisines) {
     const li = document.createElement('li'); li.className = 'proche';
     const ouvrir = document.createElement('button');
@@ -527,11 +529,14 @@ function blocProches(r) {
     const pourLecteur = document.createElement('span'); pourLecteur.className = 'visually-hidden'; pourLecteur.textContent = ` (${force.nom})`;
     detail.append(porteur, mesure, pourLecteur);
     ouvrir.append(nom, detail);
-    const sujets = document.createElement('details');
-    const resume = document.createElement('summary'); resume.textContent = T.voirSujetsCommuns;
-    const puces = document.createElement('div'); puces.className = 'card-chips-row';
-    for (const mot of lien.motsCommuns) { const p = document.createElement('span'); p.className = 'axe-chip'; p.textContent = mot; puces.appendChild(p); }
-    sujets.append(resume, puces);
+    // Sujets communs affichés d'emblée ; une norme ou un format commun est en violet, écrit comme dans la fiche.
+    const sujets = document.createElement('div'); sujets.className = 'card-chips-row';
+    for (const mot of lien.motsCommuns) {
+      const p = document.createElement('span');
+      const norme = normesDe.get(mot);
+      p.className = norme ? 'axe-chip norme' : 'axe-chip'; p.textContent = norme || mot;
+      sujets.appendChild(p);
+    }
     li.append(ouvrir, sujets);
     liste.appendChild(li);
   }
