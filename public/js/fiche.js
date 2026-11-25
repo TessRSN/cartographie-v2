@@ -18,6 +18,12 @@ function lienExterne(adresse, libelle, classe) {
   return `<a class="${classe || 'lien'}" href="${o.echapper(sure)}" target="_blank" rel="noopener noreferrer">${o.echapper(libelle)}</a>`;
 }
 
+// DOI : un lien vers doi.org, écrit sans le préfixe. Toute autre adresse est ignorée.
+function lienDoi(adresse) {
+  const m = /^https:\/\/doi\.org\/(10\.\d{4,9}\/\S+)$/.exec(String(adresse || ''));
+  return m ? lienExterne(adresse, m[1]) : '';
+}
+
 function ligne(libelle, valeurHtml) {
   return valeurHtml ? `<div class="card-detail"><dt class="dl">${o.echapper(libelle)}</dt><dd>${valeurHtml}</dd></div>` : '';
 }
@@ -81,10 +87,10 @@ function htmlCarteFiche(r) {
   const tousReperes = (r.normes || []).filter(Boolean).map((v) => ['norme', v]).concat((r.outils || []).filter(Boolean).map((v) => ['outil', v]));
   const reperes = tousReperes.slice(0, 4).map(([genre, v]) => `<span class="axe-chip ${genre}">${e(v)}</span>`).join('')
     + (tousReperes.length > 4 ? `<span class="chip-more" title="${e(tousReperes.slice(4).map((x) => x[1]).join(' · '))}">+${tousReperes.length - 4}</span>` : '');
-  // Bandeau du haut : la couleur, l'icône et le nom du type.
+  // Onglet de type, dans le coin haut gauche : il épouse l'arrondi de la carte.
   const cleDuType = r.typePrincipal ? o.cleType(r.typePrincipal) : null;
   const bandeau = cleDuType
-    ? `<div class="card-bande type-${cleDuType}" title="${e(r.typePrincipal)}">${o.iconeType(cleDuType)}<span>${e(cleDuType === 'autre' ? r.typePrincipal : o.TEXTES.typesCourts[cleDuType])}</span></div>` : '';
+    ? `<div class="card-onglet type-${cleDuType}" title="${e(r.typePrincipal)}">${o.iconeType(cleDuType)}<span>${e(cleDuType === 'autre' ? r.typePrincipal : o.TEXTES.typesCourts[cleDuType])}</span></div>` : '';
   return `<article class="member-card">
     ${bandeau}
     <div class="card-top">${htmlLogo(r)}<div class="card-id"><h3 class="card-name" title="${e(r.nom)}">${e(r.nom)}</h3>${porteursHtml ? `<div class="card-institution" title="${e(porteurs.join(' · '))}">${porteursHtml}</div>` : ''}</div></div>
@@ -158,6 +164,7 @@ function htmlFiche(f) {
     ligne(T.financePar, puces(f.financePar)),
     ligne(T.portee, f.portee ? e(f.portee) : ''),
     ligne(T.langues, (f.langues || []).map(e).join(', ')),
+    ligne(T.doi, lienDoi(f.doi)),
     ligne(T.normes, puces(f.normes, 'axe-chip norme')),
     ligne(T.outils, puces(f.outils, 'axe-chip outil')),
   ].join('');
