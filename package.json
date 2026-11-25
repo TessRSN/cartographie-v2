@@ -8,6 +8,8 @@
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
-    "@notionhq/client": "^2.2.15"
+    "@notionhq/client": "^2.2.15",
+    "jsonwebtoken": "^9.0.3",
+    "resend": "^6.39.0"
   }
 }
