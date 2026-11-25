@@ -318,7 +318,8 @@ function corrections() { return etat.f && etat.f.d ? correctionsPanneau(etat.f.v
 function saisieEnCours() {
   const f = etat.f;
   if (!f || !f.d || !ouverte(f.d.proposition) || !peut()) return false;
-  return Object.keys(corrections()).length > 0 || f.edition !== null || f.commentaire.trim() !== '' || f.avisNote.trim() !== '';
+  const adressesChangees = JSON.stringify(f.porteursNouveaux) !== JSON.stringify({ ...f.d.proposition.porteursNouveaux });
+  return Object.keys(corrections()).length > 0 || f.edition !== null || f.commentaire.trim() !== '' || f.avisNote.trim() !== '' || f.sansLogo || adressesChangees;
 }
 function champsProposes() {
   const propose = etat.f.d.proposition.propose;
@@ -414,7 +415,7 @@ function controle(cle) {
   } else if (champ.saisie === 'listeOuverte' || champ.saisie === 'fiches') {
     const choix = champ.saisie === 'fiches' ? existantes('fiches').map(etiquetteFiche) : existantes(cle);
     saisie = `<div class="chips" id="etiquettes">${etiquettesBrouillon(cle)}</div>
-      <div class="ajout"><input type="text" id="ajoutIn" list="choixConnus" maxlength="${Number(champ.max) || 200}" placeholder="${e(TC.indiceListe)}" autocomplete="off" aria-label="${nom}">
+      <div class="ajout"><input type="text" id="ajoutIn" list="choixConnus" maxlength="${Number(champ.max) || 200}" value="${e(f.ajout || '')}" placeholder="${e(TC.indiceListe)}" autocomplete="off" aria-label="${nom}">
         <button type="button" class="btn sm" data-act="ajouter">${e(TC.ajouter)}</button></div>
       <datalist id="choixConnus">${choix.map((o) => `<option value="${e(o)}"></option>`).join('')}</datalist>`;
   } else if (champ.saisie === 'choix') {
@@ -571,11 +572,20 @@ function dessinerFenetre() {
   const calque = $('#layer');
   const ancienne = $('.modal', calque);
   const haut = ancienne ? ancienne.scrollTop : 0;
+  // L'élément qui a le focus dans la fenêtre, pour le retrouver après le redessin.
+  const actif = ancienne && ancienne.contains(document.activeElement) ? document.activeElement : null;
+  const repere = actif ? { id: actif.id, act: actif.dataset.act, k: actif.dataset.k, v: actif.dataset.v } : null;
+  $('#coque').inert = !!etat.f;
   if (!etat.f) { calque.innerHTML = ''; return; }
   const nom = etat.f.d ? etat.f.d.proposition.nom : '';
-  calque.innerHTML = `<div class="veil" data-act="fermer"></div><div class="modal wide" role="dialog" aria-modal="true" aria-label="${e(T.fenetre(nom))}">${contenuFenetre()}</div>`;
+  calque.innerHTML = `<div class="veil" data-act="fermer"></div><div class="modal wide" role="dialog" aria-modal="true" tabindex="-1" aria-label="${e(T.fenetre(nom))}">${contenuFenetre()}</div>`;
   const neuve = $('.modal', calque);
   if (ancienne) neuve.scrollTop = haut;
+  if (repere) {
+    const pareil = (x) => (repere.id ? x.id === repere.id : x.dataset.act === repere.act && x.dataset.k === repere.k && x.dataset.v === repere.v);
+    const retrouve = [...neuve.querySelectorAll('button, input, select, textarea, a[href]')].find((x) => !x.disabled && pareil(x));
+    (retrouve || neuve).focus({ preventScroll: true });
+  }
   // L'aperçu prend la hauteur de la fiche qu'il contient.
   const cadre = $('#cadreApercu', calque);
   if (cadre) cadre.addEventListener('load', () => { try { cadre.style.height = `${cadre.contentDocument.documentElement.scrollHeight + 2}px`; } catch (err) { /* hauteur par défaut */ } });
@@ -594,8 +604,12 @@ function fermerFenetre({ force = false } = {}) {
   if (!etat.f) return true;
   if (etat.f.enCours) return false;
   if (!force && saisieEnCours() && !window.confirm(T.quitter)) return false;
+  const id = etat.f.id;
   etat.f = null;
   dessinerFenetre();
+  // Le focus revient à la carte ou à la ligne d'où l'on venait.
+  const origine = [...document.querySelectorAll('[data-act="ouvrir"]')].find((x) => x.dataset.id === id);
+  if (origine) origine.focus({ preventScroll: true });
   return true;
 }
 
@@ -625,7 +639,7 @@ async function ouvrir(id, { confirmation = null } = {}) {
 function corriger(cle) {
   const f = etat.f;
   if (f.edition && f.edition !== cle && !garder()) return;
-  f.edition = cle;
+  f.edition = cle; f.ajout = '';
   f.brouillon = cloner(f.valeurs[cle]);
   if (estListe(cle) && !Array.isArray(f.brouillon)) f.brouillon = [];
   dessinerFenetre();
@@ -650,7 +664,7 @@ function ajouterAuBrouillon({ focus = true } = {}) {
     if (connue) valeur = connue;
   }
   if (!f.brouillon.some((v) => String(v).toLowerCase() === valeur.toLowerCase())) f.brouillon.push(valeur);
-  entree.value = '';
+  entree.value = ''; f.ajout = '';
   $('#etiquettes').innerHTML = etiquettesBrouillon(cle);
   if (focus) entree.focus();
   return true;
@@ -663,7 +677,7 @@ function garder() {
   const ajout = $('#ajoutIn');
   if (ajout && ajout.value.trim() && !ajouterAuBrouillon({ focus: false })) { ajout.scrollIntoView({ block: 'center' }); ajout.focus(); return false; }
   f.valeurs[cle] = cloner(f.brouillon);
-  f.edition = null; f.brouillon = null;
+  f.edition = null; f.brouillon = null; f.ajout = '';
   delete f.erreurs[cle];
   dessinerFenetre();
   return true;
@@ -718,8 +732,14 @@ async function trancher(action) {
   echecDuGeste(r);
 }
 
+const regardsEnCours = new Set(); // propositions dont le second regard est en train d'être demandé
+
 async function demanderSecondRegard(id) {
-  if (!peut()) return;
+  if (!peut() || regardsEnCours.has(id)) return;
+  regardsEnCours.add(id);
+  try { return await envoyerSecondRegard(id); } finally { regardsEnCours.delete(id); }
+}
+async function envoyerSecondRegard(id) {
   const f = etat.f;
   if (f && (f.enCours || (saisieEnCours() && !window.confirm(T.quitter)))) return;
   if (f) { f.enCours = true; dessinerFenetre(); }
@@ -766,7 +786,8 @@ function deplacer(id, vers) {
   const p = (etat.liste || []).find((x) => x.id === id);
   if (!p || p.statut === vers || !peut()) return;
   if (!ouverte(p)) return message(T.neSeDeplacePlus);
-  if (vers === 'verification') return demanderSecondRegard(id);
+  // Une carte lâchée par erreur ne revient pas en arrière : on demande confirmation.
+  if (vers === 'verification') return window.confirm(T.confirmerSecondRegard(p.nom || T.sansNom)) ? demanderSecondRegard(id) : undefined;
   if (vers === 'approuvee') return ouvrir(id, { confirmation: 'approbation' });
   if (vers === 'refusee') { message(T.refus.ecrire); return ouvrir(id, { confirmation: 'refus' }); }
   return message(T.pasDeRetour);
@@ -822,6 +843,17 @@ document.addEventListener('click', async (evenement) => {
 document.addEventListener('keydown', (evenement) => {
   const cible = evenement.target;
   if (evenement.key === 'Escape' && etat.f) return void fermerFenetre();
+  // Tab tourne dans la fenêtre ouverte, sans sortir vers la page derrière.
+  if (evenement.key === 'Tab' && etat.f) {
+    const fenetre = $('#layer .modal');
+    const atteignables = fenetre ? [...fenetre.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"]')].filter((x) => !x.disabled && x.offsetParent !== null) : [];
+    if (!atteignables.length) return;
+    const premier = atteignables[0]; const dernier = atteignables[atteignables.length - 1];
+    const dedans = fenetre.contains(document.activeElement);
+    if (evenement.shiftKey && (!dedans || document.activeElement === premier || document.activeElement === fenetre)) { evenement.preventDefault(); dernier.focus(); }
+    else if (!evenement.shiftKey && (!dedans || document.activeElement === dernier)) { evenement.preventDefault(); premier.focus(); }
+    return;
+  }
   if (evenement.key === 'Enter' && cible.id === 'ajoutIn') { evenement.preventDefault(); return void ajouterAuBrouillon(); }
   if ((evenement.key === 'Enter' || evenement.key === ' ') && cible.matches && cible.matches('.mcard, tbody tr')) { evenement.preventDefault(); cible.click(); }
 });
@@ -832,6 +864,7 @@ document.addEventListener('input', (evenement) => {
   if (!f) return;
   if (cible.id === 'refusTxt') { f.commentaire = cible.value; return; }
   if (cible.id === 'avisNote') { f.avisNote = cible.value; return; }
+  if (cible.id === 'ajoutIn') { f.ajout = cible.value; return; }
   if (cible.dataset.adressePorteur !== undefined) { f.porteursNouveaux[cible.dataset.adressePorteur] = cible.value; return; }
   if (cible.id === 'corrIn' && cible.type !== 'checkbox') f.brouillon = cible.value;
 });

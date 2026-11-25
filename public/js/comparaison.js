@@ -8,7 +8,8 @@
 // En dessous de cette part de mots communs, deux textes sont montrés comme un remplacement entier.
 const PART_COMMUNE_MIN = 0.35;
 
-const enTexte = (v) => (v === null || v === undefined ? '' : String(v));
+// Les deux écritures d'un même accent (« é » en un ou deux caractères) sont ramenées à une seule.
+const enTexte = (v) => (v === null || v === undefined ? '' : String(v).normalize('NFC'));
 // Les mots et les blancs qui les séparent, dans l'ordre : recollés, ils redonnent le texte exact.
 const morceaux = (texte) => texte.split(/(\s+)/).filter((m) => m !== '');
 const estMot = (m) => /\S/.test(m);
@@ -73,7 +74,7 @@ function comparerTextes(avant, apres) {
 
 // Deux listes d'étiquettes : celles qui restent, celles qui partent, celles qui arrivent.
 function comparerListes(avant, apres) {
-  const propre = (liste) => [...new Set((Array.isArray(liste) ? liste : []).filter((v) => v !== null && v !== undefined && v !== '').map(String))];
+  const propre = (liste) => [...new Set((Array.isArray(liste) ? liste : []).filter((v) => v !== null && v !== undefined && v !== '').map(enTexte))];
   const a = propre(avant); const b = propre(apres);
   return { gardes: a.filter((v) => b.includes(v)), retires: a.filter((v) => !b.includes(v)), ajoutes: b.filter((v) => !a.includes(v)) };
 }

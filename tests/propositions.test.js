@@ -374,3 +374,17 @@ test('lireContenus rend le contenu de chaque proposition demandée, null si le b
   assert.deepEqual(contenus.get(ids[6]), { propose: { nom: { apres: 'N6' } } });
   assert.equal(contenus.get(ids[3]), null);
 });
+
+test('une colonne « Rôle » d\'un autre type que le choix simple donne le moins de droits, pas « approbation »', async () => {
+  const autreType = membre({ nom: 'Cam', courriel: 'cam@exemple.ca' });
+  autreType.properties['Rôle'] = { type: 'multi_select', multi_select: [{ name: 'Lecture seule' }] };
+  const statutNotion = membre({ nom: 'Max', courriel: 'max@exemple.ca' });
+  statutNotion.properties['Rôle'] = { type: 'status', status: { name: 'Administration' } };
+  const sansColonne = membre({ nom: 'Ancienne ligne', courriel: 'ancienne@exemple.ca' });
+  delete sansColonne.properties['Rôle'];
+  const { client } = fauxNotion({ approbateurs: [autreType, statutNotion, sansColonne] });
+  const propositions = creerPropositions(client, env);
+  assert.equal(await propositions.roleDe('cam@exemple.ca'), 'lecture');
+  assert.equal(await propositions.roleDe('max@exemple.ca'), 'lecture');
+  assert.equal(await propositions.roleDe('ancienne@exemple.ca'), 'approbation');
+});

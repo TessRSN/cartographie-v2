@@ -74,3 +74,12 @@ test('deux listes d\'étiquettes : gardées, retirées, ajoutées, dans leur ord
 test('listes : un doublon ne compte qu\'une fois, une valeur vide est ignorée', () => {
   assert.deepEqual(comparerListes(['a', 'a', ''], ['a', 'b', 'b', null]), { gardes: ['a'], retires: [], ajoutes: ['b'] });
 });
+
+test('deux écritures du même accent (composée ou décomposée) ne sont pas un changement', () => {
+  const { comparerTextes: cmp, comparerListes: listes } = require('../public/js/comparaison.js');
+  const compose = 'Un café serré'; const decompose = 'Un café serré';
+  assert.deepEqual(cmp(decompose, compose).map((x) => x.sorte), ['egal']);
+  assert.deepEqual(cmp(decompose, `${compose} noir`).map((x) => x.sorte), ['egal', 'ajoute']);
+  const l = listes(['santé'], ['santé', 'cancer']);
+  assert.deepEqual(l, { gardes: ['sant\u00e9'], retires: [], ajoutes: ['cancer'] });
+});

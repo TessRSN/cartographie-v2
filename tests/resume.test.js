@@ -15,7 +15,7 @@ function banc({ env = ENV, enAttente = [{ titre: 'Nouvelle : X', proposeLe: '202
     env, journal: () => {},
     limites: {},
     propositions: {
-      async listerPropositions({ statut }) { assert.equal(statut, 'attente'); if (panne === 'notion') throw new Error('Notion en panne'); return enAttente; },
+      async listerPropositions({ statut }) { assert.equal(statut, 'ouvertes', 'nouvelles et en vérification'); if (panne === 'notion') throw new Error('Notion en panne'); return enAttente; },
       async approbateursAPrevenir() { return destinataires; },
     },
     courriels: { async resumeHebdomadaire(m) { envois.push(m); if (panne === m.a) return { envoye: false }; return { envoye: true }; } },

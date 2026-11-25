@@ -263,6 +263,7 @@ const TEXTES = {
     refuser: 'Refuser', annuler: 'Annuler', fermer: 'Fermer', enCours: 'Un instant…',
     neSeDeplacePlus: 'Une proposition approuvée ou refusée ne se déplace plus.',
     pasDeRetour: 'Une proposition en vérification ne revient pas dans les nouvelles : approuvez-la ou refusez-la.',
+    confirmerSecondRegard: (nom) => `Demander un second regard sur « ${nom} » ? Elle ne pourra plus revenir dans les nouvelles.`,
 
     // Fenêtre d'une proposition
     fenetre: (nom) => `Proposition : ${nom}`,

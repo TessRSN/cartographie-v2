@@ -518,3 +518,17 @@ test('le détail d\'une modification donne de quoi montrer l\'aperçu : logo et 
   assert.equal(res.corps.ressemble, null);
   assert.equal(res.corps.proposition.type, SOURCE_TYPE);
 });
+
+test('le contenu d\'une proposition tranchée n\'est lu qu\'une fois ; celui des ouvertes est relu à chaque fois', async () => {
+  const { liste, contenus } = quatreEtats();
+  const b = banc({ equipe: EQUIPE, liste, contenus });
+  const premiere = await appeler(b, requete('GET', 'file'));
+  const seconde = await appeler(b, requete('GET', 'accueil'));
+  const troisieme = await appeler(b, requete('GET', 'file'));
+  assert.equal(seconde.code, 200);
+  const [lus1, lus2, lus3] = b.de('lireContenus');
+  assert.deepEqual([...lus1].sort(), [ID, ID2, ID3, ID4].sort());
+  assert.deepEqual([...lus2].sort(), [ID, ID2].sort());
+  assert.deepEqual([...lus3].sort(), [ID, ID2].sort());
+  assert.deepEqual(troisieme.corps, premiere.corps);
+});

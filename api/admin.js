@@ -124,13 +124,22 @@ function resume(p, contenu, { adresseParId, ficheParAdresse, ressources }, equip
 
 // Toutes les propositions des quatre états, avec leur contenu quand il est lu : les ouvertes de la
 // plus ancienne à la plus récente, puis les tranchées de la dernière décision à la plus ancienne.
-async function tableau(d) {
+// memoire : contenus déjà lus des propositions tranchées. Une proposition tranchée ne change plus,
+// donc son contenu n'est lu qu'une fois par instance ; celui des ouvertes est relu à chaque fois.
+async function tableau(d, memoire) {
   const [toutes, publiques] = await Promise.all([d.propositions.listerPropositions({ statut: 'toutes' }), d.source()]);
   const parDate = (cle, sens) => (a, b) => sens * String(a[cle] || '').localeCompare(String(b[cle] || ''));
   const ouvertes = toutes.filter((p) => OUVERTS.includes(p.statut)).sort(parDate('proposeLe', 1));
   const tranchees = toutes.filter((p) => TRANCHES.includes(p.statut)).sort(parDate('decideLe', -1));
-  const aLire = [...ouvertes, ...tranchees.slice(0, CONTENUS_TRANCHEES_MAX)].map((p) => p.id);
+  const recentes = tranchees.slice(0, CONTENUS_TRANCHEES_MAX);
+  const aLire = [...ouvertes, ...recentes.filter((p) => !memoire.has(p.id))].map((p) => p.id);
   const contenus = aLire.length ? await d.propositions.lireContenus(aLire) : new Map();
+  for (const p of recentes) {
+    if (memoire.has(p.id)) contenus.set(p.id, memoire.get(p.id));
+    // Gardé seulement une minute après la décision, le temps que toutes ses écritures soient finies.
+    else if (contenus.has(p.id) && Date.now() - Date.parse(p.decideLe || '') > 60000) memoire.set(p.id, contenus.get(p.id));
+  }
+  if (memoire.size > 500) memoire.clear();
   return { propositions: [...ouvertes, ...tranchees], contenus, publiques };
 }
 
@@ -148,6 +157,7 @@ function activiteDe(resumes, brutes) {
 }
 
 function creerGestionnaire(donnees) {
+  const contenusTranches = new Map();
   return async function gestionnaire(req, res) {
     const env = (donnees && donnees.env) || process.env;
     if (!ouvertes(env)) return res.status(404).json({ erreur: 'Introuvable.' });
@@ -201,7 +211,7 @@ function creerGestionnaire(donnees) {
       }
 
       if (action === 'file' || action === 'accueil') {
-        const { propositions, contenus, publiques } = await tableau(d);
+        const { propositions, contenus, publiques } = await tableau(d, contenusTranches);
         const r = reperes(publiques);
         const resumes = propositions.map((p) => resume(p, contenus.get(p.id), r, equipe, approbateur));
         if (action === 'file') return res.status(200).json({ courriel: approbateur, propositions: resumes });
