@@ -8,10 +8,10 @@ const OPTIONS = { typePrincipal: ['Logiciel ou application'], secondType: [], et
 const NOUVELLE = { nom: { apres: 'Outil X' }, typePrincipal: { apres: 'Logiciel ou application' }, phrase: { apres: 'Une phrase.' }, lien: { apres: 'https://x.org' } };
 
 // Banc d'essai : tout ce qui touche Notion, les courriels et le géocodage est factice et noté.
-function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', contact: 'a@b.org', porteurIds: [] }, pannes = {}, approbateurs = [APPROBATEUR], fichesExistantes = {}, porteurs = [], lent = 0 } = {}) {
-  const appels = [];
+function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', contact: 'a@b.org', porteurIds: [] }, pannes = {}, approbateurs = [APPROBATEUR], fichesExistantes = {}, porteurs = [], lent = 0, verrous, partage } = {}) {
+  const appels = partage ? partage.appels : [];
   const noter = (nom, args) => { appels.push({ nom, args }); if (pannes[nom]) { const e = pannes[nom]; if (typeof e === 'function') { const r = e(); if (r) throw r; } else throw e; } };
-  const prop = {
+  const prop = partage ? partage.prop : {
     id: 'prop-1', genre: 'nouvelle', ficheId: null, courriel: 'p@exemple.org', nomProposant: 'Pat', lienAvecRessource: 'aucun',
     titre: 'Nouvelle : Outil X', statut: 'attente', contenu: { propose: NOUVELLE, applique: null, porteursNouveaux: {} }, ...proposition,
   };
@@ -28,6 +28,7 @@ function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', con
     async estApprobateur(c) { return approbateurs.includes(c); },
     async lireProposition(id) { noter('lireProposition', id); return id === prop.id ? { ...prop } : null; },
     async marquerDecision(id, d) { noter('marquerDecision', { id, ...d }); prop.statut = d.statut; },
+    async lierFiche(id, ficheId) { noter('lierFiche', { id, ficheId }); prop.ficheId = ficheId; },
   };
   const courriels = {
     async approuvee(m) { noter('courriel.approuvee', m); return { envoye: !pannes.courriel }; },
@@ -40,6 +41,7 @@ function banc({ proposition = {}, fiche = { id: 'fiche-1', nom: 'Cohorte X', con
     idParAdresse: async () => ({ 'cohorte-x': 'fiche-1', 'outil-x': 'fiche-neuve', cartagene: 'fiche-c' }),
     maintenant: () => Date.UTC(2026, 10, 24, 15),
     journal: () => {},
+    verrous,
   });
   const de = (nom) => appels.filter((a) => a.nom === nom).map((a) => a.args);
   return { approbation, appels, de, prop };
@@ -249,4 +251,89 @@ test("une panne de lecture ne laisse pas la proposition verrouillée", async () 
   const b = banc({ pannes: { lireProposition: () => { if (premier) { premier = false; return new Error('Notion en panne'); } return null; } } });
   assert.deepEqual(await approuver(b), { ok: false, code: 'notion' });
   assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+});
+
+// Verrou partagé factice, comme celui du stockage clé-valeur.
+function verrousPartages() {
+  const pris = new Set();
+  return { async prendreVerrou(nom) { if (pris.has(nom)) return false; pris.add(nom); return true; }, async rendreVerrou(nom) { pris.delete(nom); } };
+}
+
+test('deux instances du serveur qui approuvent en même temps : une seule écriture', async () => {
+  const verrous = verrousPartages();
+  const a = banc({ lent: 20, verrous });
+  const b = banc({ lent: 20, verrous, partage: a });
+  const resultats = await Promise.all([approuver(a), approuver(b)]);
+  assert.deepEqual(resultats.map((r) => r.ok).sort(), [false, true]);
+  assert.equal(resultats.find((r) => !r.ok).code, 'deja-tranchee');
+  assert.equal(a.de('creerFiche').length, 1);
+  assert.equal(a.de('marquerDecision').length, 1);
+  assert.equal(a.de('courriel.approuvee').length, 1);
+});
+
+test('approuver et refuser en même temps sur deux instances : un seul geste passe', async () => {
+  const verrous = verrousPartages();
+  const a = banc({ lent: 20, verrous });
+  const b = banc({ verrous, partage: a });
+  const resultats = await Promise.all([approuver(a), b.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Non', approbateur: APPROBATEUR })]);
+  assert.equal(resultats.filter((r) => r.ok).length, 1);
+  assert.equal(a.de('marquerDecision').length, 1);
+});
+
+test('le verrou est rendu après le geste, réussi ou non', async () => {
+  const verrous = verrousPartages();
+  const b = banc({ verrous, pannes: { creerFiche: new Error('panne') } });
+  assert.equal((await approuver(b)).code, 'notion');
+  assert.equal(await verrous.prendreVerrou('proposition:prop-1'), true);
+});
+
+test('une fiche écartée depuis la proposition n\'est pas republiée', async () => {
+  const fiche = { id: 'fiche-1', nom: 'Cohorte X', contact: 'a@b.org', porteurIds: [], statutFiche: 'Écartée' };
+  const proposition = { genre: 'modification', ficheId: 'fiche-1', contenu: { propose: { contact: { avant: 'a@b.org', apres: 'c@d.org' } }, applique: null, porteursNouveaux: {} } };
+  const b = banc({ fiche, proposition });
+  assert.deepEqual(await approuver(b), { ok: false, code: 'fiche-introuvable' });
+  assert.equal(b.de('mettreAJourFiche').length + b.de('marquerDecision').length, 0);
+  assert.equal((await b.approbation.examiner('prop-1')).ficheDisparue, true);
+});
+
+test('la fiche créée est reliée à la proposition aussitôt, avant la décision', async () => {
+  const b = banc();
+  await approuver(b);
+  const ordre = b.appels.map((x) => x.nom).filter((n) => ['creerFiche', 'lierFiche', 'marquerDecision'].includes(n));
+  assert.deepEqual(ordre, ['creerFiche', 'lierFiche', 'marquerDecision']);
+  assert.deepEqual(b.de('lierFiche')[0], { id: 'prop-1', ficheId: 'fiche-neuve' });
+});
+
+test('seconde tentative avec un nom corrigé : la fiche déjà créée est mise à jour, pas recréée', async () => {
+  let premier = true;
+  const b = banc({ pannes: { marquerDecision: () => { if (premier) { premier = false; return new Error('panne'); } return null; } } });
+  assert.equal((await approuver(b)).code, 'notion');
+  assert.deepEqual(await approuver(b, { corrections: { nom: 'Outil X corrigé' } }), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.equal(b.de('creerFiche').length, 1);
+  const [{ id, p }] = b.de('mettreAJourFiche');
+  assert.equal(id, 'fiche-neuve');
+  assert.equal(p[PROP.nom].title[0].text.content, 'Outil X corrigé');
+});
+
+test('une nouvelle ressource qui existe déjà (même nom, même lien) est signalée comme doublon', async () => {
+  const b = banc({ fichesExistantes: { 'Outil X|https://x.org': 'fiche-ancienne' } });
+  assert.deepEqual(await approuver(b), { ok: false, code: 'doublon' });
+  assert.equal(b.de('creerFiche').length + b.de('mettreAJourFiche').length + b.de('marquerDecision').length + b.de('courriel.approuvee').length, 0);
+});
+
+test('une proposition au contenu illisible est invalide, rien n\'est écrit', async () => {
+  for (const contenu of [null, { propose: null }, { propose: 'x' }, { propose: { nom: null } }]) {
+    const b = banc({ proposition: { genre: 'modification', ficheId: 'fiche-1', contenu } });
+    const retour = await approuver(b);
+    assert.equal(retour.code, 'invalide', JSON.stringify(contenu));
+    assert.equal(b.de('mettreAJourFiche').length + b.de('marquerDecision').length, 0);
+  }
+});
+
+test('un porteur nommé comme une méthode d\'objet ne reçoit pas une adresse fantôme', async () => {
+  const contenu = { propose: { ...NOUVELLE, porteurs: { apres: ['constructor'] } }, applique: null, porteursNouveaux: {} };
+  const b = banc({ proposition: { contenu } });
+  await approuver(b);
+  assert.deepEqual(b.de('creerPorteur'), [{ nom: 'constructor', adresse: '' }]);
+  assert.equal(b.de('geocoder').length, 0);
 });

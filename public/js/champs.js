@@ -19,7 +19,9 @@ const fiches = (cle) => ({ cle, saisie: 'fiches', role: 'approbateur', section: 
 const CHAMPS = [
   choix('typePrincipal'), choix('secondType'),
   texte('nom', 200), texte('autresNoms', 200), texte('phrase', 300), long('description', 6000),
-  url('lien'), long('autresLiens', 1000), listeOuverte('porteurs'),
+  url('lien'), long('autresLiens', 1000),
+  // Un porteur est une ligne d'une autre base, pas une option : son nom peut contenir une virgule.
+  { cle: 'porteurs', saisie: 'listeOuverte', role: 'proposant', section: 'commun', max: 200, virgule: true },
   choixMultiples('modesAcces'), url('commentAcceder'), choix('frais'), texte('reserveA', 200), coche('environnementSecurise'),
   choix('portee'), choixMultiples('langues'),
   listeOuverte('motsCles'), listeOuverte('normes'), listeOuverte('outils'), listeOuverte('financePar'),
@@ -70,7 +72,7 @@ function valider(champ, brut, options) {
     }
     if (liste.length > MAX_VALEURS) return { erreur: MESSAGES.tropDeValeurs };
     if (saisie === 'listeOuverte') {
-      if (liste.some((v) => v.includes(','))) return { erreur: MESSAGES.virgule };
+      if (!champ.virgule && liste.some((v) => v.includes(','))) return { erreur: MESSAGES.virgule };
       if (liste.some((v) => v.length > max)) return { erreur: MESSAGES.tropLong(max) };
     } else if (saisie === 'choixMultiples') {
       const permis = (options && options[champ.cle]) || [];
@@ -119,8 +121,9 @@ function nettoyer(saisie, { role = 'proposant', options = {}, genre = 'modificat
   for (const cle of OBLIGATOIRES) {
     if (erreurs[cle]) continue;
     const present = Object.prototype.hasOwnProperty.call(valeurs, cle);
-    // Exigé à la création ; ailleurs, un champ obligatoire fourni ne peut pas être vidé.
-    if ((exiges.includes(cle) && !present) || (present && estVide(valeurs[cle]))) {
+    const vide = !present || estVide(valeurs[cle]);
+    // Exigé à la création ; dans une modification, un champ obligatoire fourni ne peut pas être vidé.
+    if ((exiges.includes(cle) && vide) || (genre === 'modification' && present && vide)) {
       delete valeurs[cle];
       erreurs[cle] = MESSAGES.obligatoire;
     }
@@ -157,14 +160,17 @@ function calculerChangements(avant, valeurs) {
 function champsBouscules(changements, actuelle) {
   return Object.keys(changements).filter((cle) => {
     const c = changements[cle];
-    return Object.prototype.hasOwnProperty.call(c, 'avant') && !egales(c.avant, actuelle ? actuelle[cle] : null);
+    return c && typeof c === 'object' && Object.prototype.hasOwnProperty.call(c, 'avant') && !egales(c.avant, actuelle ? actuelle[cle] : null);
   });
 }
 
 // Valeurs à appliquer : celles de la proposition, puis les corrections de l'approbateur.
 function fusionner(changements, corrections = {}) {
   const valeurs = {};
-  for (const cle of Object.keys(changements)) valeurs[cle] = changements[cle].apres;
+  for (const cle of Object.keys(changements)) {
+    const c = changements[cle];
+    if (c && typeof c === 'object' && Object.prototype.hasOwnProperty.call(c, 'apres')) valeurs[cle] = c.apres;
+  }
   return { ...valeurs, ...corrections };
 }
 

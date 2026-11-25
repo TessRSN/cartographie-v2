@@ -179,3 +179,14 @@ test('geocoder renvoie des coordonnées, ou null si rien ne correspond', async (
   assert.equal(await geocoder('  ', { requete: requete([]) }), null);
   await assert.rejects(geocoder('x', { requete: requete([], false) }), /503/);
 });
+
+test('segments ne coupe pas un caractère en deux', () => {
+  const texte = 'a'.repeat(1999) + '😀' + 'b'.repeat(10);
+  const morceaux = segments(texte);
+  assert.equal(morceaux.map((m) => m.text.content).join(''), texte);
+  for (const m of morceaux) {
+    assert.ok(m.text.content.length <= 2000);
+    assert.ok(!/[\ud800-\udbff]$/.test(m.text.content), 'pas de demi-paire en fin de segment');
+    assert.ok(!/^[\udc00-\udfff]/.test(m.text.content), 'pas de demi-paire en début de segment');
+  }
+});

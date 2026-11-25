@@ -95,3 +95,31 @@ test('sans adresse IP connue, seules les limites par adresse et par jour jouent'
   const { limites } = enMemoire();
   for (let i = 1; i <= 12; i++) assert.equal(await limites.autoriserLien({ courriel: `p${i}@e.org`, ip: '' }), true);
 });
+
+test("des demandes refusées ne consomment pas le plafond de la journée", async () => {
+  const { limites } = enMemoire();
+  for (let i = 1; i <= 100; i++) await limites.autoriserLien({ courriel: `p${i}@e.org`, ip: '10.0.0.1' });
+  for (let i = 1; i <= 70; i++) assert.equal(await limites.autoriserLien({ courriel: `q${i}@e.org`, ip: `10.1.${i}.1` }), true, `demande ${i}`);
+});
+
+test('un lien vers le panneau ne dépend pas du plafond de la journée', async () => {
+  const { limites } = enMemoire();
+  for (let i = 1; i <= 80; i++) await limites.autoriserLien({ courriel: `p${i}@e.org`, ip: `10.0.${i}.1` });
+  assert.equal(await limites.autoriserLien({ courriel: 'x@e.org', ip: '10.9.9.9' }), false);
+  assert.equal(await limites.autoriserLien({ courriel: 'tess@e.org', ip: '10.9.9.8', plafondDuJour: false }), true);
+});
+
+test('un verrou ne se prend qu\'une fois, puis se rend', async () => {
+  const { limites } = enMemoire();
+  assert.equal(await limites.prendreVerrou('proposition:1'), true);
+  assert.equal(await limites.prendreVerrou('proposition:1'), false);
+  await limites.rendreVerrou('proposition:1');
+  assert.equal(await limites.prendreVerrou('proposition:1'), true);
+});
+
+test('un verrou oublié expire au bout d\'une minute', async () => {
+  const { limites, horloge } = enMemoire();
+  assert.equal(await limites.prendreVerrou('proposition:1'), true);
+  horloge.t += 61000;
+  assert.equal(await limites.prendreVerrou('proposition:1'), true);
+});

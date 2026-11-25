@@ -170,3 +170,13 @@ test('seuls les approbateurs actifs sont reconnus, sans tenir compte de la casse
   assert.equal(await propositions.estApprobateur(''), false);
   assert.equal(await propositions.estApprobateur(null), false);
 });
+
+test('lierFiche relie la fiche créée sans toucher au statut', async () => {
+  const { client } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  const id = await propositions.creerProposition({ ...base, genre: 'nouvelle', ficheId: null });
+  await propositions.lierFiche(id, 'fiche-9');
+  const lue = await propositions.lireProposition(id);
+  assert.equal(lue.ficheId, 'fiche-9');
+  assert.equal(lue.statut, 'attente');
+});

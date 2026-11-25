@@ -146,3 +146,19 @@ test("fusionner applique les corrections de l'approbateur par-dessus la proposit
   assert.deepEqual(fusionner(changements, { motsCles: ['HL7 FHIR'], etat: 'Actif' }), { motsCles: ['HL7 FHIR'], contact: 'a@b.org', etat: 'Actif' });
   assert.deepEqual(fusionner(changements), { motsCles: ['fhir'], contact: 'a@b.org' });
 });
+
+test('« à remplir par le RSN » accepte un lien laissé vide', () => {
+  assert.deepEqual(nettoyer({ nom: 'X', lien: '', description: 'Quelques mots' }, { role: 'proposant', options, genre: 'rsn' }), { valeurs: { nom: 'X', lien: null, description: 'Quelques mots' }, erreurs: {} });
+});
+
+test('un nom de porteur peut contenir une virgule et dépasser 100 caractères', () => {
+  const long = `Université X, Faculté Y ${'z'.repeat(100)}`;
+  const { valeurs, erreurs } = nettoyer({ porteurs: ['Université X, Faculté Y', long] }, { role: 'proposant', options, genre: 'modification' });
+  assert.deepEqual(erreurs, {});
+  assert.equal(valeurs.porteurs.length, 2);
+});
+
+test('fusionner et champsBouscules ignorent une entrée abîmée', () => {
+  assert.deepEqual(fusionner({ nom: null, contact: { apres: 'a@b.org' }, x: 'texte' }), { contact: 'a@b.org' });
+  assert.deepEqual(champsBouscules({ nom: null, contact: { avant: 'a@b.org', apres: 'c@d.org' } }, { contact: 'z@z.org' }), ['contact']);
+});
