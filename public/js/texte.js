@@ -142,7 +142,8 @@ const TEXTES = {
       doi: { libelle: 'DOI', aide: 'Sous la forme https://doi.org/…' },
       contact: { libelle: 'Courriel de contact', aide: 'Une adresse publique, affichée sur la fiche.' },
       responsable: { libelle: 'Responsable', aide: 'Le nom de la personne responsable, affiché sur la fiche.' },
-      logo: { libelle: 'Adresse du logo', aide: "Le lien vers l'image du logo, avec https://" },
+      profilResponsable: { libelle: 'Profil du responsable', aide: 'Un lien vers son profil universitaire ou sa page du bottin. Le nom du responsable y mènera.' },
+      logo: { libelle: 'Logo', aide: 'Déposez une image, ou donnez son adresse sur le Web.' },
       population: { libelle: 'Population', aide: 'Qui est décrit par les données.' },
       periode: { libelle: 'Période couverte', aide: 'Par exemple 2009 à aujourd’hui.' },
       typesDonnees: { libelle: 'Types de données' },
@@ -153,6 +154,12 @@ const TEXTES = {
       licence: { libelle: 'Licence', aide: 'Par exemple MIT, GPL-3.0.' },
     },
     rsnDescription: { libelle: 'Quelques mots sur la ressource', aide: 'Ce que c’est, à qui ça sert.' },
+    logoChoisir: 'Choisir une image', logoChanger: 'Changer d’image', logoRetirer: 'Retirer',
+    logoFormats: 'PNG, JPEG, WebP ou SVG, 2 Mo au plus.',
+    logoOu: 'ou son adresse :',
+    logoTropGros: "L'image dépasse 2 Mo. Choisissez un fichier plus léger.",
+    logoIllisible: "L'image n'a pas pu être lue. Choisissez un autre fichier.",
+    logoPerdu: "Après un rechargement de la page, l'image est à choisir de nouveau.",
     choisir: 'Choisir…',
     ajouter: 'Ajouter',
     indiceListe: 'Écrivez puis appuyez sur Entrée',
@@ -273,7 +280,8 @@ function adresseSure(valeur) {
 // Adresse d'un logo : une copie servie par le site (/logos/…) ou une adresse http(s).
 function adresseLogo(valeur) {
   const v = String(valeur || '').trim();
-  return /^\/logos\/[a-f0-9]{16}\.[a-z]{3,4}$/.test(v) ? v : adresseSure(v);
+  if (/^\/logos\/[a-f0-9]{16}\.[a-z]{3,4}$/.test(v) || /^\/api\/logo\?adresse=[a-z0-9-]{1,200}&v=[a-f0-9]{10}$/.test(v)) return v;
+  return adresseSure(v);
 }
 
 // Cadre approximatif du Québec : une ressource placée en dehors rejoint le

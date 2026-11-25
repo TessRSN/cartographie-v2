@@ -41,13 +41,20 @@
 [data-theme="dark"] .f-groupe > h3 { color: var(--rsn-accent); }
 .champ { margin-top: 0.95rem; border: 0; padding: 0; min-width: 0; }
 .champ > label, .champ legend { display: block; font-size: 0.9rem; font-weight: 600; color: var(--ink); padding: 0; }
-/* « * obligatoire » : pastille au jaune de la charte du RSN, lisible en clair comme en sombre. */
-.champ .oblig { display: inline-block; font-weight: 700; font-size: 0.7rem; line-height: 1.5; margin-left: 0.4rem; padding: 0 0.45rem; border-radius: 999px; white-space: nowrap; vertical-align: 0.08em; background: var(--type-logiciel); color: var(--type-logiciel-sur); }
-.champ .oblig::before { content: "* "; }
+/* « * obligatoire » : texte au jaune de la charte du RSN. Sur fond clair, le jaune pur serait
+   illisible : on prend sa version foncée, de la même teinte. */
+.champ .oblig { font-weight: 700; font-size: 0.75rem; margin-left: 0.35rem; white-space: nowrap; color: #8a6700; }
+.champ .oblig::before { content: "* "; font-size: 0.95rem; }
+[data-theme="dark"] .champ .oblig { color: var(--type-logiciel); }
 .champ .aide { font-size: 0.8rem; color: var(--muted-strong); margin-top: 0.1rem; line-height: 1.4; }
 .champ input[type="text"], .champ input[type="url"], .champ input[type="email"], .champ select, .champ textarea {
     width: 100%; margin-top: 0.35rem; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--rsn-border);
     background: var(--rsn-card-bg); color: var(--rsn-text); font: inherit; font-size: 0.92rem; }
+/* Liste déroulante : flèche dessinée, à bonne distance du bord dans tous les navigateurs. */
+.champ select { appearance: none; -webkit-appearance: none; padding-right: 2.4rem; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23718096' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 0.85rem center; background-size: 16px; }
+[data-theme="dark"] .champ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cbd5e0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); }
 .champ textarea { min-height: 6.5rem; resize: vertical; line-height: 1.45; }
 .champ textarea.court { min-height: 4rem; }
 .champ input:focus, .champ select:focus, .champ textarea:focus { outline: 2px solid var(--rsn-accent); outline-offset: 1px; border-color: var(--rsn-accent); }
@@ -74,6 +81,14 @@
 .f-ajout button { margin-top: 0.35rem; }
 .f-porteur-neuf { margin-top: 0.6rem; padding: 0.6rem 0.75rem; border-radius: 8px; background: var(--rsn-light); font-size: 0.84rem; }
 .f-porteur-neuf label { font-weight: 500; }
+
+/* Dépôt du logo */
+.f-logo { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 0.45rem; }
+.f-logo .aide { margin: 0; }
+.f-logo-apercu { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.84rem; max-width: 100%; }
+.f-logo-apercu img { width: 44px; height: 44px; object-fit: contain; border-radius: 8px; background: #fff; border: 1px solid var(--rsn-border); padding: 3px; }
+.f-logo-apercu span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 14rem; }
+.f-logo-ou { margin-top: 0.55rem; }
 
 /* Boutons */
 .f-bouton { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 40px; padding: 0 1.15rem; border-radius: 8px; border: 1px solid var(--rsn-border); background: var(--rsn-card-bg); color: var(--rsn-text); font: inherit; font-size: 0.92rem; font-weight: 600; cursor: pointer; text-decoration: none; }

@@ -25,11 +25,11 @@ const CHAMPS = [
   choixMultiples('modesAcces'), url('commentAcceder'), choix('frais'), texte('reserveA', 200), coche('environnementSecurise'),
   choix('portee'), choixMultiples('langues'),
   listeOuverte('motsCles'), listeOuverte('normes'), listeOuverte('outils'), listeOuverte('financePar'),
-  url('doi'), { cle: 'contact', saisie: 'courriel', role: 'proposant', section: 'commun', max: 254 }, texte('responsable', 200), url('logo'),
+  url('doi'), { cle: 'contact', saisie: 'courriel', role: 'proposant', section: 'commun', max: 254 }, texte('responsable', 200), url('profilResponsable'), url('logo'),
   texte('population', 200, 'donnees'), texte('periode', 200, 'donnees'), choixMultiples('typesDonnees', 'donnees'),
   choix('collecte', 'donnees'), coche('jumelage', 'donnees'), url('dictionnaire', 'donnees'),
   url('depotCode', 'logiciel'), texte('licence', 200, 'logiciel'),
-  choix('etat', 'commun', 'approbateur'), url('profilResponsable', 'commun', 'approbateur'),
+  choix('etat', 'commun', 'approbateur'),
   fiches('faitPartieDe'), fiches('reposeSur'), fiches('donneAccesA'), fiches('remplace'),
 ];
 

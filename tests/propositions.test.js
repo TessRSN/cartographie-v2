@@ -62,7 +62,7 @@ test('une proposition créée se relit telle quelle, en attente', async () => {
   assert.deepEqual(lue, {
     id, genre: 'modification', ficheId: 'fiche-1', courriel: 'p@exemple.org', nomProposant: 'Pat', lienAvecRessource: 'responsable',
     titre: 'Modification : Cohorte X', proposeLe: '2026-11-24T15:30:00.000Z', statut: 'attente',
-    decidePar: null, decideLe: null, commentaire: '', contenu: base.contenu,
+    decidePar: null, decideLe: null, commentaire: '', logoPropose: null, contenu: base.contenu,
   });
 });
 
@@ -179,4 +179,16 @@ test('lierFiche relie la fiche créée sans toucher au statut', async () => {
   const lue = await propositions.lireProposition(id);
   assert.equal(lue.ficheId, 'fiche-9');
   assert.equal(lue.statut, 'attente');
+});
+
+test('un logo déposé est attaché à la proposition et relu avec son adresse temporaire', async () => {
+  const { client, pages } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  const id = await propositions.creerProposition({ ...base, logoDepot: { id: 'depot-1', nom: 'logo.png' } });
+  assert.deepEqual(pages.get(id).properties[COLONNES.logoPropose], { files: [{ type: 'file_upload', file_upload: { id: 'depot-1' }, name: 'logo.png' }] });
+  // À la relecture, Notion rend le fichier avec une adresse temporaire.
+  pages.get(id).properties[COLONNES.logoPropose] = { files: [{ type: 'file', name: 'logo.png', file: { url: 'https://notion.exemple/x' } }] };
+  assert.deepEqual((await propositions.lireProposition(id)).logoPropose, { nom: 'logo.png', url: 'https://notion.exemple/x' });
+  const sans = await propositions.creerProposition(base);
+  assert.equal((await propositions.lireProposition(sans)).logoPropose, null);
 });
