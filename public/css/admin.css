@@ -316,3 +316,10 @@ del { background: var(--bad-bg); color: var(--bad); text-decoration: line-throug
 .fields .f .note, .fields .f .muted.small { font-weight: 400; }
 .fields .f .chips .muted { align-self: center; }
 .tl .confirm { align-self: stretch; }
+
+/* Lot 3 : la carte du volet d'un porteur (celle du site, chargée à l'ouverture du volet) et les confirmations de l'écran Qualité */
+.map .carte-porteur { height: 280px; border-radius: 8px; border: 1px solid var(--line); background: var(--land); color: var(--muted); font-size: .88rem; display: flex; align-items: center; justify-content: center; cursor: crosshair; }
+.map .carte-porteur.leaflet-container { display: block; font-family: var(--font); }
+.fields .err.wide { grid-column: 1 / -1; }
+.list > div > .confirm { flex: 1 1 100%; }
+@media (max-width: 720px) { .map .carte-porteur { height: 230px; } }

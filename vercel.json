@@ -3,6 +3,10 @@
     {
       "path": "/api/resume",
       "schedule": "0 13 * * 1"
+    },
+    {
+      "path": "/api/liens",
+      "schedule": "0 9 * * 3"
     }
   ],
   "functions": {
@@ -27,6 +31,9 @@
     },
     "api/resume.js": {
       "maxDuration": 30
+    },
+    "api/liens.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [
@@ -57,7 +64,7 @@
   ],
   "headers": [
     {
-      "source": "/(proposer|proposer.html|admin|admin.html|api/lien|api/proposition|api/admin|api/resume)",
+      "source": "/(proposer|proposer.html|admin|admin.html|api/lien|api/proposition|api/admin|api/resume|api/liens)",
       "headers": [
         {
           "key": "X-Robots-Tag",

@@ -47,9 +47,14 @@ function appliquer(fiche, proprietes) {
 }
 
 // notion : ce que lib/ressources.js attend de lib/notion.js, sur des fiches en mémoire.
-function fausseBase({ fiches = [], porteurs = [], pannes = {}, options = OPTIONS } = {}) {
+function fausseBase({ fiches = [], porteurs = [], pannes = {}, options = OPTIONS, titres = {} } = {}) {
   const appels = []; let n = 0;
-  const noter = (nom, args) => { appels.push({ nom, args }); if (pannes[nom]) throw new Error(`${nom} en panne`); };
+  // Une panne est permanente (true) ou décidée appel par appel (fonction des arguments).
+  const noter = (nom, args) => {
+    appels.push({ nom, args });
+    const panne = pannes[nom];
+    if (typeof panne === 'function' ? panne(args, appels.filter((a) => a.nom === nom).length) : panne) throw new Error(`${nom} en panne`);
+  };
   const copie = (v) => JSON.parse(JSON.stringify(v));
   const notion = {
     async lireRessources() { noter('lireRessources'); return copie(fiches); },
@@ -64,6 +69,17 @@ function fausseBase({ fiches = [], porteurs = [], pannes = {}, options = OPTIONS
       appliquer(fiche, proprietes); fiches.push(fiche);
       return fiche.id;
     },
+    // Les porteurs : lecture d'un seul, écriture, mise à la corbeille, et le titre d'une page liée.
+    async lirePorteur(id) { noter('lirePorteur', id); const o = porteurs.find((x) => x.id === id); return o ? copie(o) : null; },
+    async mettreAJourPorteur(id, valeurs) { noter('mettreAJourPorteur', { id, valeurs }); Object.assign(porteurs.find((x) => x.id === id), copie(valeurs)); },
+    async creerPorteur(valeurs) {
+      noter('creerPorteur', valeurs);
+      const o = { id: `id-notion-porteur-${++n}`, nom: '', adresse: '', latitude: null, longitude: null, siteWeb: null, institutionBottinId: null, ...copie(valeurs) };
+      porteurs.push(o);
+      return o.id;
+    },
+    async archiverPorteur(id) { noter('archiverPorteur', id); const i = porteurs.findIndex((x) => x.id === id); if (i >= 0) porteurs.splice(i, 1); },
+    async lireTitrePage(id) { noter('lireTitrePage', id); return titres[id] || ''; },
   };
   const de = (nom) => appels.filter((a) => a.nom === nom).map((a) => a.args);
   return { notion, fiches, porteurs, appels, de };
