@@ -388,3 +388,28 @@ test('une colonne « Rôle » d\'un autre type que le choix simple donne le moin
   assert.equal(await propositions.roleDe('max@exemple.ca'), 'lecture');
   assert.equal(await propositions.roleDe('ancienne@exemple.ca'), 'approbation');
 });
+
+test('une modification de l\'équipe porte son propre genre et se relit comme les autres', async () => {
+  const { client, pages } = fauxNotion();
+  const propositions = creerPropositions(client, env, { maintenant: () => T0 });
+  assert.equal(GENRES.equipe, "Modification de l'équipe");
+  const id = await propositions.creerProposition({ ...base, genre: 'equipe', courriel: 'max@exemple.ca', nomProposant: 'Maxime', lienAvecRessource: 'aucun', titre: "Modification de l'équipe : Cohorte X" });
+  assert.equal(pages.get(id).properties[COLONNES.genre].select.name, "Modification de l'équipe");
+  const lue = await propositions.lireProposition(id);
+  assert.equal(lue.genre, 'equipe');
+  assert.equal(lue.ficheId, 'fiche-1');
+  assert.equal(lue.statut, 'attente');
+  assert.deepEqual((await propositions.listerPropositions({ statut: 'ouvertes' })).map((p) => p.genre), ['equipe'], 'elle compte dans ce qui attend, donc dans le résumé de la semaine');
+});
+
+test('equipe, avec les personnes retirées : elles sont marquées inactives et viennent après les actives', async () => {
+  const ligne = (nom, courriel, actif) => ({ id: courriel, properties: { Nom: { title: [{ plain_text: nom }] }, Courriel: { email: courriel }, Actif: { checkbox: actif }, 'Rôle': { select: { name: 'Approbation' } } } });
+  const { client } = fauxNotion({ approbateurs: [ligne('Odile', 'odile@exemple.ca', false), ligne('Tess', 'tess@exemple.ca', true)] });
+  const propositions = creerPropositions(client, env);
+  assert.deepEqual((await propositions.equipe()).map((x) => x.courriel), ['tess@exemple.ca'], 'par défaut, les actives seulement');
+  assert.ok(!Object.hasOwn((await propositions.equipe())[0], 'actif') || (await propositions.equipe())[0].actif === true);
+  const toutes = await propositions.equipe({ avecInactifs: true });
+  assert.deepEqual(toutes.map((x) => [x.nom, x.courriel, x.actif]), [['Tess', 'tess@exemple.ca', true], ['Odile', 'odile@exemple.ca', false]]);
+  assert.equal(await propositions.roleDe('odile@exemple.ca'), null, 'une personne retirée n\'a aucun rôle');
+  assert.deepEqual(await propositions.approbateursActifs(), ['tess@exemple.ca']);
+});

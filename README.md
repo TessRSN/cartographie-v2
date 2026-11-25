@@ -146,6 +146,7 @@ Variables d'environnement, dans `.env.local` en local et dans le projet Vercel e
 | `JWT_SECRET` | signe les liens envoyés par courriel |
 | `NOTION_DB_PROPOSITIONS` | identifiant de la base « Propositions » |
 | `NOTION_DB_APPROBATEURS` | identifiant de la base « Approbateurs » |
+| `NOTION_DB_JOURNAL` | identifiant de la base « Journal » (qui a fait quoi dans le panneau) ; sans elle, le panneau fonctionne sans journal |
 | `CRON_SECRET` | protège le déclenchement du résumé hebdomadaire ; Vercel le joint lui-même à l'appel planifié |
 | `RESEND_API_KEY` | envoi des courriels ; sans elle, rien ne part et le lien est écrit dans le journal du serveur |
 | `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME` | expéditeur des courriels (facultatives) |

@@ -388,7 +388,7 @@ test('la file rend les quatre états, avec les avis, le type, le nombre de champ
   ]);
   assert.equal(parId[ID3].decidePar, 'Max Lafrenière');
   assert.equal(parId[ID3].corrige, true);
-  assert.equal(parId[ID4].decidePar, 'ancienne@exemple.ca', 'une personne qui n\'est plus dans l\'équipe garde son courriel');
+  assert.equal(parId[ID4].decidePar, null, 'une personne dont la base n\'a plus la ligne n\'est pas montrée par son courriel');
   assert.equal(parId[ID4].commentaire, 'Hors périmètre.');
   assert.equal(parId[ID4].nom, 'Fonds Z');
   assert.equal(parId[ID4].corrige, false);
@@ -432,7 +432,7 @@ test('accueil : compteurs, activité récente dérivée des propositions, état 
     { sorte: 'recue', quand: '2026-11-20T10:00:00.000Z', qui: null, nom: 'Outil Y', genre: 'nouvelle' },
     { sorte: 'approuvee', quand: '2026-11-12T10:00:00.000Z', qui: 'Max Lafrenière', nom: 'Cohorte X', genre: 'modification' },
     { sorte: 'recue', quand: '2026-11-10T10:00:00.000Z', qui: 'Pat', nom: 'Cohorte X', genre: 'modification' },
-    { sorte: 'refusee', quand: '2026-11-06T10:00:00.000Z', qui: 'ancienne@exemple.ca', nom: 'Fonds Z', genre: 'rsn' },
+    { sorte: 'refusee', quand: '2026-11-06T10:00:00.000Z', qui: null, nom: 'Fonds Z', genre: 'rsn' },
     { sorte: 'recue', quand: '2026-11-05T10:00:00.000Z', qui: 'Pat', nom: 'Fonds Z', genre: 'rsn' },
   ]);
   // Ni l'adresse d'essai, ni aucun secret, ni le courriel des proposants.

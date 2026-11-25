@@ -206,10 +206,10 @@ const TEXTES = {
     deconnexion: 'Fermer la session',
     modeClair: 'Mode clair', modeSombre: 'Mode sombre',
     roles: { administration: 'Administration', approbation: 'Approbation', lecture: 'Lecture seule' },
-    routes: { accueil: 'Accueil', propositions: 'Propositions', ressources: 'Ressources', porteurs: 'Porteurs', qualite: 'Qualité des données' },
+    routes: { accueil: 'Accueil', propositions: 'Propositions', ressources: 'Ressources', porteurs: 'Porteurs', qualite: 'Qualité des données', equipe: 'Équipe' },
     vide: 'vide', sansNom: 'Sans nom', anonyme: 'Nom non donné', inconnue: 'une personne inconnue', typeAChoisir: 'Type à choisir', aucun: 'Aucun',
     oui: 'Oui', non: 'Non',
-    genres: { nouvelle: 'Nouvelle ressource', modification: 'Modification', rsn: 'À remplir par le RSN' },
+    genres: { nouvelle: 'Nouvelle ressource', modification: 'Modification', rsn: 'À remplir par le RSN', equipe: 'Équipe' },
     etats: { attente: 'Nouvelle', verification: 'En vérification', approuvee: 'Approuvée', refusee: 'Refusée' },
     colonnes: { attente: 'Nouvelles', verification: 'En vérification', approuvee: 'Approuvées', refusee: 'Refusées' },
     liens: { responsable: 'En est responsable', 'jy-travaille': 'Y travaille', aucun: 'Aucun lien avec la ressource' },
@@ -225,7 +225,7 @@ const TEXTES = {
     },
     activite: {
       titre: 'Activité récente', aucune: 'Rien pour le moment.', quelquun: 'Une personne',
-      objets: { modification: (nom) => `une modification de ${nom}`, nouvelle: (nom) => `la nouvelle ressource ${nom}`, rsn: (nom) => `la fiche à remplir ${nom}` },
+      objets: { modification: (nom) => `une modification de ${nom}`, nouvelle: (nom) => `la nouvelle ressource ${nom}`, rsn: (nom) => `la fiche à remplir ${nom}`, equipe: (nom) => `une modification de l’équipe sur ${nom}` },
       recue: (objet) => `a proposé ${objet}`,
       verification: (objet) => `Second regard demandé sur ${objet}`,
       avis: (sens, objet) => `a donné un avis ${sens === 'favorable' ? 'favorable' : 'défavorable'} sur ${objet}`,
@@ -241,7 +241,7 @@ const TEXTES = {
     },
 
     // Propositions
-    propositionsIntro: 'Tout ce que le public propose arrive ici : une nouvelle ressource, une modification, ou une fiche à remplir par l’équipe. Rien ne change sur le site avant une approbation.',
+    propositionsIntro: 'Tout ce que le public propose arrive ici : une nouvelle ressource, une modification, ou une fiche à remplir par l’équipe. Les modifications de fiches faites par une personne en Approbation y arrivent aussi, avec la pastille « Équipe ». Rien ne change sur le site avant une approbation.',
     chercher: 'Chercher une ressource, une personne, un courriel', chercherNom: 'Chercher une proposition',
     tousGenres: 'Tous les genres', tousTypes: 'Tous les types', typeDeRessource: 'Type de ressource',
     affichage: 'Affichage', enColonnes: 'Colonnes', enListe: 'Liste',
@@ -316,10 +316,20 @@ const TEXTES = {
       libelle: 'Pourquoi cette proposition est refusée', aide: 'obligatoire, envoyé à la personne par courriel',
       confirmer: 'Confirmer le refus', requis: 'Un commentaire est nécessaire pour refuser.',
       ecrire: 'Écrivez un commentaire pour refuser : il est envoyé à la personne.',
+      aideEquipe: 'obligatoire, lu par l’équipe dans le panneau',
+      ecrireEquipe: 'Écrivez un commentaire pour refuser : l’équipe le lira dans le panneau.',
     },
     definitif: (courriel) => `Un courriel sera envoyé à ${courriel || 'la personne'}. Cette décision ne pourra pas être annulée.`,
+    // Une modification de l'équipe : faite dans le panneau par une personne en Approbation, tranchée par l'Administration, sans courriel.
+    deLEquipe: 'Personne de l’équipe',
+    equipeReservee: 'Seule une personne en Administration approuve ou refuse une modification de l’équipe. Vous pouvez donner votre avis ou demander un second regard.',
+    definitifEquipe: 'Aucun courriel ne part. Cette décision ne pourra pas être annulée.',
+    commentaireRefus: 'Commentaire du refus',
     ouvrirLaFiche: 'Ouvrir la fiche',
-    confirmerApprobation: { titre: 'Approuver cette proposition ?', aide: 'Vérifiez ce qui est proposé ci-dessus. La fiche change sur le site dès l’approbation, et la personne est prévenue par courriel.' },
+    confirmerApprobation: {
+      titre: 'Approuver cette proposition ?', aide: 'Vérifiez ce qui est proposé ci-dessus. La fiche change sur le site dès l’approbation, et la personne est prévenue par courriel.',
+      aideEquipe: 'Vérifiez ce qui est proposé ci-dessus. La fiche change sur le site dès l’approbation.',
+    },
     avis: {
       titre: 'Avis de l’équipe', aucun: 'Aucun avis pour l’instant.', aucunCarte: 'Aucun avis pour l’instant', sansCommentaire: 'sans commentaire',
       infobulle: (nom, sens, commentaire) => `${nom} : ${sens === 'favorable' ? 'favorable' : 'défavorable'}${commentaire ? `. ${commentaire}` : ''}`,
@@ -337,11 +347,14 @@ const TEXTES = {
     occupee: 'Un autre geste est en cours sur cette proposition. Réessayez dans une minute : votre saisie est toujours là.',
     occupeeCourt: 'Un autre geste est en cours sur cette proposition. Réessayez dans une minute.',
     sessionExpiree: 'Votre session a expiré. Demandez un nouveau lien et ouvrez-le dans un autre onglet, puis revenez ici et réessayez : votre saisie est toujours là.',
-    roleInsuffisant: 'Votre rôle ne permet pas ce geste : il demande le rôle Approbation ou Administration.',
+    roleInsuffisant: 'Votre rôle ne permet pas ce geste.',
+    reserveAdministration: 'Ce geste est réservé au rôle Administration.',
     doublon: 'Une fiche du même nom avec le même lien existe déjà dans la cartographie.',
     introuvable: 'Cette proposition est introuvable.',
     approuvee: (courriel, historique = true) => `Proposition approuvée. Le changement apparaît sur le site en quelques minutes.${courriel ? '' : " Le courriel d'avis n'a pas pu partir."}${historique ? '' : " L'historique des versions n'a pas pu être écrit."}`,
     refusee: (courriel) => `Proposition refusée.${courriel ? '' : " Le courriel d'avis n'a pas pu partir."}`,
+    approuveeEquipe: (historique = true) => `Modification de l’équipe approuvée. Le changement apparaît sur le site en quelques minutes. Aucun courriel n’est parti.${historique ? '' : " L'historique des versions n'a pas pu être écrit."}`,
+    refuseeEquipe: 'Modification de l’équipe refusée. Aucun courriel n’est parti.',
 
     // Ressources : le tableau des fiches, la fenêtre d'une fiche, l'historique des versions
     // Porteurs
@@ -475,8 +488,10 @@ const TEXTES = {
       jamaisVerifiee: 'Jamais : la fiche affiche « préparée par l’équipe du RSN à partir de sources publiques »',
       enAttenteTitre: 'En attente',
       propositionDe: (genre, nom) => `${genre} de ${nom}`,
+      propositionEquipe: (nom) => `Modification de l’équipe, par ${nom}`,
       onglets: { fiche: 'Fiche', hist: (n) => `Historique des versions (${n})`, apercu: 'Aperçu sur le site' },
       lectureSeule: 'Votre rôle est en lecture seule : vous voyez la fiche et son historique, sans pouvoir la modifier.',
+      ecarteeApprobation: 'Cette fiche est écartée : seule une personne en Administration peut la modifier ou la republier.',
       aides: { phrase: '300 caractères au plus', porteurs: 'rattaché au catalogue des porteurs', logo: 'l’adresse de l’image sur le Web' },
       listeVide: 'Aucune valeur.', aucunPorteurRattache: 'Aucun porteur rattaché.',
       rattacher: 'Rattacher un porteur du catalogue',
@@ -485,6 +500,9 @@ const TEXTES = {
       ressemble: (nom) => `Une fiche existante ressemble à celle-ci : « ${nom} » a le même nom ou le même lien. Si c’est bien une autre ressource, cliquez de nouveau sur « Créer la fiche ».`,
       enregistrer: 'Enregistrer les modifications', creer: 'Créer la fiche',
       enregistrerAide: 'Chaque enregistrement crée une nouvelle version dans l’historique.',
+      proposer: 'Proposer cette modification',
+      proposerAide: 'La fiche ne change pas tout de suite : une personne en Administration doit approuver votre modification. Elle la verra dans « Propositions ».',
+      proposee: (n) => `Modification proposée : ${n} ${n > 1 ? 'champs' : 'champ'}. La fiche n’a pas changé ; une personne en Administration doit l’approuver dans « Propositions ».`,
       verifier: 'Marquer vérifiée aujourd’hui', voirPublique: 'Voir la fiche publique',
       revoir: {
         bouton: 'Marquer à revoir', retirer: 'Retirer « à revoir »', pastille: 'À revoir', titre: 'À revoir', sansNote: 'Aucune note.',
@@ -516,6 +534,7 @@ const TEXTES = {
         creationProposee: (par, qui) => `Fiche créée à partir de la proposition de ${par}, approuvée par ${qui}`,
         proposition: (par, lien, qui) => `Proposition de ${par} (${lien}), approuvée par ${qui}`,
         propositionSans: (qui) => `Proposition approuvée par ${qui}`,
+        propositionEquipe: (par, qui) => `Modification de l’équipe proposée par ${par}, approuvée par ${qui}`,
         retablissement: (note, qui) => `${note} par ${qui}`, retour: 'Retour à une version précédente',
         panneau: (qui) => `Modifiée dans le panneau par ${qui}`,
         qualite: (note, qui) => `${note || 'Correction faite depuis la qualité des données'}, par ${qui}`,
@@ -560,6 +579,59 @@ const TEXTES = {
         ecarter: 'Fiche écartée : elle disparaît du site en quelques minutes.',
         republier: 'Fiche republiée : elle revient sur le site en quelques minutes.',
       },
+    },
+
+    // Équipe : qui a accès, avec quel rôle, et le journal de ce que chacun a fait
+    equipe: {
+      intro: 'Les personnes qui ont accès à ce panneau. Chacune entre par un lien reçu par courriel, puis reste connectée sept jours sur son appareil : aucun mot de passe à retenir.',
+      acces: 'Accès',
+      resumeCompte: (n, total, jour) => `${n} sur ${total} ${total > 1 ? 'personnes' : 'personne'} ${n > 1 ? 'reçoivent' : 'reçoit'} le résumé hebdomadaire du ${jour}.`,
+      vous: 'vous', sansNom: 'Nom non donné',
+      recoitResume: 'Reçoit le résumé hebdomadaire',
+      roleDe: (nom) => `Rôle de ${nom}`,
+      retirer: {
+        bouton: 'Retirer',
+        question: (nom) => `Retirer l’accès de ${nom} ? Sa session est coupée tout de suite. Rien n’est effacé : son nom reste dans l’historique, et vous pourrez l’inviter de nouveau.`,
+        confirmer: 'Retirer l’accès',
+      },
+      inviter: {
+        titre: 'Inviter une personne',
+        courriel: 'Courriel de la personne à inviter', nom: 'Nom de la personne', role: 'Rôle',
+        indiceCourriel: 'courriel de la personne à inviter', indiceNom: 'prénom et nom',
+        nomRequis: 'Donnez le nom de la personne.',
+        bouton: 'Inviter',
+        aide: 'La personne reçoit son lien d’entrée par courriel. Il est valable une heure ; passé ce délai, elle en demande un nouveau sur la page d’entrée du panneau, avec la même adresse.',
+      },
+      permis: {
+        administration: 'tout : modifier les fiches directement, ajouter une ressource, écarter, republier, rétablir une version, approuver ou refuser les modifications de l’équipe, inviter et retirer des personnes.',
+        approbation: 'approuver, corriger ou refuser les propositions du public, donner son avis, marquer une fiche vérifiée ou à revoir, tenir les porteurs. Ses modifications de fiches sont à faire approuver par une personne en Administration.',
+        lecture: 'tout consulter, sans rien modifier.',
+      },
+      journal: {
+        titre: 'Journal de l’équipe',
+        intro: 'Les cinquante derniers gestes faits dans le panneau.',
+        vide: 'Aucun geste noté pour le moment.',
+        absent: 'Le journal n’est pas encore activé : aucun geste n’est noté pour le moment. Le reste du panneau fonctionne normalement.',
+        illisible: 'Le journal n’a pas pu être lu pour le moment. Réessayez dans un instant.',
+        ancienMembre: 'Une personne qui n’est plus dans l’équipe',
+      },
+      // Messages
+      invitee: (nom, courriel) => (courriel
+        ? `${nom} est invitée : son lien d’entrée vient de partir par courriel.`
+        : `${nom} est inscrite, mais le courriel n’a pas pu partir. Elle peut demander son lien elle-même sur la page d’entrée du panneau, avec son adresse.`),
+      reactivee: (nom, courriel) => (courriel
+        ? `${nom} retrouve son accès : son lien d’entrée vient de partir par courriel.`
+        : `${nom} retrouve son accès, mais le courriel n’a pas pu partir. Elle peut demander son lien elle-même sur la page d’entrée du panneau.`),
+      roleChange: (nom, role) => `Rôle de ${nom} : ${role}. Le changement vaut tout de suite.`,
+      retiree: (nom) => `Accès retiré à ${nom}. Sa session est coupée tout de suite.`,
+      resumeActive: (nom, moi) => (moi ? 'Vous recevrez le résumé hebdomadaire.' : `${nom} recevra le résumé hebdomadaire.`),
+      resumeArrete: (nom, moi) => (moi ? 'Vous ne recevrez plus le résumé hebdomadaire.' : `${nom} ne recevra plus le résumé hebdomadaire.`),
+      soiMeme: 'On ne change pas son propre rôle et on ne se retire pas soi-même : demandez-le à une autre personne en Administration.',
+      derniereAdministration: 'Il doit rester au moins une personne active en Administration.',
+      introuvable: 'Cette personne n’est plus dans l’équipe. La liste vient d’être relue.',
+      occupee: 'Un autre changement est en cours sur l’équipe. Réessayez dans un instant.',
+      saisieInvalide: 'L’invitation est à corriger.',
+      sessionExpiree: 'Votre session a expiré. Demandez un nouveau lien et ouvrez-le dans un autre onglet, puis revenez ici et réessayez.',
     },
   },
   portrait: {

@@ -9,6 +9,7 @@ const { CHAMPS } = require('../public/js/champs.js');
 
 const TESS = 'tess@exemple.ca';
 const LECTRICE = 'lea@exemple.ca';
+const MAX = 'max@exemple.ca';
 const T0 = Date.UTC(2026, 10, 25, 19, 0);
 const CLES = CHAMPS.map((c) => c.cle);
 
@@ -28,16 +29,25 @@ function banc({ pannes = {}, pannesVersions = {}, env = { NOTION_DB_VERSIONS: 'b
   const noterJournal = (...ligne) => journal.push(ligne.join(' '));
   const versions = creerVersions(faux.client, env, { maintenant: () => T0, journal: noterJournal });
   let vidages = 0;
+  // Tess administre, Max approuve, Léa lit.
+  const equipe = [
+    { nom: 'Tess Berthier', courriel: TESS, role: 'administration', resume: true },
+    { nom: 'Maxime Lafrenière', courriel: MAX, role: 'approbation', resume: true },
+    { nom: 'Léa Lecture', courriel: LECTRICE, role: 'lecture', resume: true },
+  ];
+  const proposees = [];
   const ressources = creerRessources({
     notion: base.notion, versions, verrous, secret: 'secret-d-essai', maintenant: () => T0, journal: noterJournal,
     viderMemoire: () => { vidages += 1; }, attendre: async () => {},
     propositions: {
-      async peutDecider(courriel) { return courriel === TESS; },
+      async equipe() { return equipe; },
+      async peutDecider(courriel) { return equipe.some((x) => x.courriel === courriel && x.role !== 'lecture'); },
       async listerPropositions() { return propositions; },
+      async creerProposition(p) { if (pannes.creerProposition) throw new Error('creerProposition en panne'); proposees.push(JSON.parse(JSON.stringify(p))); return `id-notion-proposition-${proposees.length}`; },
     },
   });
   // L'ordre de tous les appels, fiches et versions confondues.
-  return { ...base, ressources, versions, faux, journal, vidages: () => vidages };
+  return { ...base, ressources, versions, faux, journal, vidages: () => vidages, proposees };
 }
 const pagesVersions = (b) => [...b.faux.pages.values()];
 const enregistrer = (b, valeurs, depart, extra = {}) => b.ressources.enregistrer({ repere: 'cohorte-x', valeurs, depart, par: TESS, ...extra });
@@ -94,7 +104,7 @@ test('une fiche écartée s\'ouvre par son repère ; un repère inconnu ne donne
 test('enregistrer écrit la fiche, puis une version « Panneau » avec l\'avant et l\'après', async () => {
   const b = banc();
   const retour = await enregistrer(b, { phrase: 'Une autre phrase.', motsCles: ['cancer', 'génomique'] }, { phrase: 'Une phrase.', motsCles: ['cancer'] });
-  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', numero: 2, historique: true, champs: 2 });
+  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', numero: 2, historique: true, champs: 2, nom: 'Cohorte X' });
   const [ecriture] = b.de('mettreAJourFiche');
   assert.equal(ecriture.id, 'id-notion-x');
   assert.deepEqual(Object.keys(ecriture.proprietes).sort(), [PROP.phrase, PROP.motsCles].sort(), 'seuls les champs changés sont écrits');
@@ -212,7 +222,7 @@ test('rétablir ajoute une version « Rétablissement » et n\'en retire aucune'
   await enregistrer(b, { phrase: 'Troisième.', contact: 'c@d.org' }, { phrase: 'Deuxième.', contact: 'a@b.org' });
   const avant = await b.versions.lister('id-notion-x');
   const retour = await b.ressources.retablir({ repere: 'cohorte-x', numero: 1, par: TESS });
-  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', numero: 4, historique: true, champs: 2 });
+  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', numero: 4, historique: true, champs: 2, nom: 'Cohorte X' });
   assert.equal(b.fiches[0].phrase, 'Une phrase.');
   assert.equal(b.fiches[0].contact, 'a@b.org');
   const apres = await b.versions.lister('id-notion-x');
@@ -262,7 +272,7 @@ test('sans la base « Versions » : la fiche se lit et se modifie, l\'historique
   assert.equal(d.historique, false);
   assert.deepEqual(d.versions.map((v) => v.source), ['depart']);
   const retour = await enregistrer(b, { phrase: 'Une autre phrase.' }, { phrase: 'Une phrase.' });
-  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', numero: null, historique: false, champs: 1 });
+  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', numero: null, historique: false, champs: 1, nom: 'Cohorte X' });
   assert.equal(b.fiches[0].phrase, 'Une autre phrase.');
   assert.equal(b.faux.appels.length, 0, 'la base absente n\'est jamais interrogée');
   assert.ok(b.journal.some((ligne) => /NOTION_DB_VERSIONS/.test(ligne)));
@@ -272,7 +282,7 @@ test('sans la base « Versions » : la fiche se lit et se modifie, l\'historique
 test('la version ne peut pas s\'écrire : la fiche reste changée, le geste le dit et le journalise', async () => {
   const b = banc({ pannesVersions: { 'pages.create': true } });
   const retour = await enregistrer(b, { phrase: 'Une autre phrase.' }, { phrase: 'Une phrase.' });
-  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', numero: null, historique: false, champs: 1 });
+  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', numero: null, historique: false, champs: 1, nom: 'Cohorte X' });
   assert.equal(b.fiches[0].phrase, 'Une autre phrase.', 'la fiche n\'est pas remise en arrière');
   assert.ok(b.journal.some((ligne) => /version non écrite/.test(ligne)));
 });
@@ -323,7 +333,7 @@ test('deux enregistrements lancés ensemble sur la même valeur de départ : un 
 test('marquer vérifiée : la date du jour au Québec, par l\'équipe, sans version', async () => {
   const b = banc();
   const retour = await b.ressources.verifier({ repere: 'cohorte-x', par: TESS });
-  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', verifieeLe: '2026-11-25', verifieePar: 'Équipe du RSN' });
+  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', verifieeLe: '2026-11-25', verifieePar: 'Équipe du RSN', nom: 'Cohorte X' });
   assert.deepEqual(b.de('mettreAJourFiche')[0].proprietes, { [PROP.verifieeLe]: { date: { start: '2026-11-25' } }, [PROP.verifieePar]: { select: { name: 'Équipe du RSN' } } });
   assert.equal(pagesVersions(b).length, 0);
   assert.equal(b.vidages(), 1);
@@ -341,7 +351,7 @@ test('écarter puis republier : le statut change, la fiche change de repère, au
   // Une fiche écartée ne se marque pas vérifiée.
   assert.equal((await b.ressources.verifier({ repere: ecartee.id, par: TESS })).code, 'invalide');
   const republiee = await b.ressources.republier({ repere: ecartee.id, par: TESS });
-  assert.deepEqual(republiee, { ok: true, id: 'cohorte-x' });
+  assert.deepEqual(republiee, { ok: true, id: 'cohorte-x', nom: 'Cohorte X' });
   assert.equal(b.fiches[0].statutFiche, 'Publiée');
   assert.equal(pagesVersions(b).length, 0);
   assert.equal(b.vidages(), 2);
@@ -363,7 +373,7 @@ const NEUVE = { nom: 'Plateforme Z', typePrincipal: 'Logiciel ou application', p
 test('ajouter une ressource : fiche « Publiée » et « Actif », version « Création » numéro 1', async () => {
   const b = banc();
   const retour = await b.ressources.creer({ valeurs: NEUVE, par: TESS });
-  assert.deepEqual(retour, { ok: true, id: 'plateforme-z', numero: 1, historique: true });
+  assert.deepEqual(retour, { ok: true, id: 'plateforme-z', numero: 1, historique: true, nom: 'Plateforme Z' });
   const [proprietes] = b.de('creerFiche');
   assert.deepEqual(proprietes[PROP.statutFiche], { select: { name: 'Publiée' } });
   assert.deepEqual(proprietes[PROP.etat], { select: { name: 'Actif' } });
@@ -483,7 +493,7 @@ test('changer le lien principal d\'une fiche efface sa date de panne : elle ne v
 test('marquer une fiche à revoir : une case et une note pour l\'équipe, sans version ; puis retirer la marque', async () => {
   const b = banc();
   const retour = await b.ressources.revoir({ repere: 'cohorte-x', actif: true, note: '  Le lien a changé,\n à confirmer.  ', par: TESS });
-  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', aRevoir: true, note: 'Le lien a changé, à confirmer.' });
+  assert.deepEqual(retour, { ok: true, id: 'cohorte-x', aRevoir: true, note: 'Le lien a changé, à confirmer.', nom: 'Cohorte X' });
   const ecrit = b.de('mettreAJourFiche')[0].proprietes;
   assert.deepEqual(Object.keys(ecrit).sort(), [PROP.aRevoir, PROP.noteARevoir].sort());
   assert.deepEqual(ecrit[PROP.aRevoir], { checkbox: true });
@@ -494,7 +504,7 @@ test('marquer une fiche à revoir : une case et une note pour l\'équipe, sans v
   assert.equal((await b.ressources.lister()).ressources.find((r) => r.id === 'cohorte-x').aRevoir, true);
   // Retirer la marque efface aussi la note.
   const retire = await b.ressources.revoir({ repere: 'cohorte-x', actif: false, note: 'ignorée', par: TESS });
-  assert.deepEqual(retire, { ok: true, id: 'cohorte-x', aRevoir: false, note: '' });
+  assert.deepEqual(retire, { ok: true, id: 'cohorte-x', aRevoir: false, note: '', nom: 'Cohorte X' });
   assert.equal(b.fiches[0].aRevoir, false);
   assert.equal(b.fiches[0].noteARevoir, '');
 });
@@ -506,4 +516,84 @@ test('à revoir : la note est bornée, et une personne en lecture seule ne marqu
   const ecritures = b.de('mettreAJourFiche').length;
   assert.equal((await b.ressources.revoir({ repere: 'cohorte-x', actif: true, note: 'x', par: LECTRICE })).code, 'non-approbateur');
   assert.equal(b.de('mettreAJourFiche').length, ecritures);
+});
+
+// ─── Qui modifie les fiches ───
+const ecrituresDe = (b) => b.de('mettreAJourFiche').length + b.de('creerFiche').length + b.faux.de('pages.create').length;
+
+test('Approbation : créer, rétablir, écarter et republier sont réservés à l\'Administration, rien n\'est écrit', async () => {
+  const b = banc();
+  assert.equal((await enregistrer(b, { phrase: 'Deux.' }, { phrase: 'Une phrase.' })).ok, true, 'une version à rétablir');
+  const avant = ecrituresDe(b);
+  assert.deepEqual(await b.ressources.creer({ valeurs: { nom: 'Plateforme Z', typePrincipal: 'Logiciel ou application', phrase: 'Elle calcule.', lien: 'https://z.org' }, par: MAX }), { ok: false, code: 'role' });
+  assert.deepEqual(await b.ressources.retablir({ repere: 'cohorte-x', numero: 1, par: MAX }), { ok: false, code: 'role' });
+  assert.deepEqual(await b.ressources.ecarter({ repere: 'cohorte-x', par: MAX }), { ok: false, code: 'role' });
+  const ecartee = (await b.ressources.lister()).ressources.find((r) => r.statut === 'ecartee').id;
+  assert.deepEqual(await b.ressources.republier({ repere: ecartee, par: MAX }), { ok: false, code: 'role' });
+  assert.equal(ecrituresDe(b), avant);
+  assert.equal(b.proposees.length, 0);
+});
+
+test('Approbation : marquer vérifiée et marquer « à revoir » restent permis', async () => {
+  const b = banc();
+  assert.equal((await b.ressources.verifier({ repere: 'cohorte-x', par: MAX })).ok, true);
+  assert.equal((await b.ressources.revoir({ repere: 'cohorte-x', actif: true, note: 'À revoir.', par: MAX })).ok, true);
+  assert.equal(b.de('mettreAJourFiche').length, 2);
+});
+
+test('Approbation : enregistrer ne touche pas la fiche et n\'écrit aucune version ; une modification de l\'équipe est proposée', async () => {
+  const b = banc();
+  const r = await enregistrer(b, { phrase: 'Une autre phrase.', contact: 'c@d.org', motsCles: ['cancer'] }, { phrase: 'Une phrase.', contact: 'a@b.org', motsCles: ['cancer'] }, { par: MAX });
+  assert.deepEqual(r, { ok: true, proposee: true, id: 'cohorte-x', champs: 2, nom: 'Cohorte X' });
+  assert.equal(ecrituresDe(b), 0, 'ni fiche, ni version');
+  assert.equal(b.vidages(), 0, 'le site ne change pas');
+  assert.equal(b.fiches[0].phrase, 'Une phrase.');
+  assert.deepEqual(b.proposees, [{
+    genre: 'equipe', ficheId: 'id-notion-x', courriel: MAX, nomProposant: 'Maxime Lafrenière', lienAvecRessource: 'aucun',
+    titre: "Modification de l'équipe : Cohorte X",
+    contenu: { propose: { phrase: { avant: 'Une phrase.', apres: 'Une autre phrase.' }, contact: { avant: 'a@b.org', apres: 'c@d.org' } }, applique: null, porteursNouveaux: {} },
+  }]);
+  assert.ok(!JSON.stringify(r).includes('id-notion'));
+});
+
+test('Approbation : un conflit, une valeur invalide, un porteur inconnu ou un lien inconnu ne créent aucune proposition', async () => {
+  const b = banc();
+  b.fiches[0].phrase = 'Changée entre-temps.';
+  const conflit = await enregistrer(b, { phrase: 'La mienne.' }, { phrase: 'Une phrase.' }, { par: MAX });
+  assert.equal(conflit.code, 'conflit');
+  assert.deepEqual(conflit.conflits, { phrase: 'Changée entre-temps.' });
+  assert.equal((await enregistrer(b, { contact: 'pas-un-courriel' }, { contact: 'a@b.org' }, { par: MAX })).code, 'invalide');
+  assert.equal((await enregistrer(b, { etat: 'Inventé' }, { etat: 'Actif' }, { par: MAX })).code, 'invalide');
+  assert.equal((await enregistrer(b, { porteurs: ['Porteur inconnu'] }, { porteurs: ['CHUM'] }, { par: MAX })).code, 'invalide');
+  assert.equal((await enregistrer(b, { reposeSur: ['fiche-inconnue'] }, { reposeSur: [] }, { par: MAX })).code, 'invalide');
+  assert.equal((await enregistrer(b, { contact: 'c@d.org' }, {}, { par: MAX })).code, 'invalide', 'sans valeur de départ');
+  assert.equal(b.proposees.length, 0);
+  assert.equal(ecrituresDe(b), 0);
+});
+
+test('Approbation : rien de changé, rien de proposé ; une fiche écartée ne reçoit pas de proposition', async () => {
+  const b = banc();
+  assert.deepEqual(await enregistrer(b, { phrase: 'Une phrase.' }, { phrase: 'Une phrase.' }, { par: MAX }), { ok: true, inchangee: true, id: 'cohorte-x' });
+  const ecartee = (await b.ressources.lister()).ressources.find((r) => r.statut === 'ecartee').id;
+  const r = await b.ressources.enregistrer({ repere: ecartee, valeurs: { phrase: 'Autre.' }, depart: { phrase: 'Une phrase.' }, par: MAX });
+  assert.equal(r.code, 'invalide');
+  assert.ok(r.erreurs._);
+  assert.equal(b.proposees.length, 0);
+});
+
+test('Approbation : si la proposition ne peut pas s\'écrire, le geste échoue et rien d\'autre n\'est touché', async () => {
+  const b = banc({ pannes: { creerProposition: true } });
+  assert.deepEqual(await enregistrer(b, { phrase: 'Autre.' }, { phrase: 'Une phrase.' }, { par: MAX }), { ok: false, code: 'notion' });
+  assert.equal(ecrituresDe(b), 0);
+});
+
+test('Administration : enregistrer change la fiche tout de suite, avec sa version, sans proposition', async () => {
+  const b = banc();
+  const r = await enregistrer(b, { phrase: 'Une autre phrase.' }, { phrase: 'Une phrase.' });
+  assert.equal(r.ok, true);
+  assert.equal(r.proposee, undefined);
+  assert.equal(r.nom, 'Cohorte X');
+  assert.equal(b.fiches[0].phrase, 'Une autre phrase.');
+  assert.equal(b.faux.de('pages.create').length, 1);
+  assert.equal(b.proposees.length, 0);
 });

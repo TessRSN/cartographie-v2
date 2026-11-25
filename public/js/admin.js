@@ -2,6 +2,8 @@
  * Page /admin : le panneau d'administration de la cartographie. Lot 1 : accueil et propositions.
  * Lot 2 : ressources (tableau des fiches, modification, historique des versions, export).
  * Lot 3 : porteurs (colonnes, volet avec la carte du site, fusion) et qualité des données.
+ * Lot 4a : équipe (accès, rôles, résumé hebdomadaire, journal) ; une personne en Approbation propose
+ * ses modifications de fiches, que l'Administration approuve.
  * On y entre par un lien reçu par courriel (?jeton=…), qui ouvre une session de sept jours.
  * La structure, les classes et les fonctions de rendu viennent de la maquette validée ; les données
  * viennent de /api/admin. Le rôle est celui de la personne connectée : l'affichage masque ce qu'il
@@ -22,7 +24,7 @@ const $ = (selecteur, racine) => (racine || document).querySelector(selecteur);
 
 const ETATS = ['attente', 'verification', 'approuvee', 'refusee'];
 const OUVERTS = ['attente', 'verification'];
-const ROUTES = ['accueil', 'propositions', 'ressources', 'porteurs', 'qualite'];
+const ROUTES = ['accueil', 'propositions', 'ressources', 'porteurs', 'qualite', 'equipe'];
 const TYPES = ['jeu', 'catalogue', 'plateforme', 'logiciel', 'service'];
 const RELATIONS = ['faitPartieDe', 'reposeSur', 'donneAccesA', 'remplace'];
 // Ce qu'il faut compléter pour une fiche que la personne a laissée à l'équipe.
@@ -48,7 +50,10 @@ const etat = {
   points: null,         // dernière lecture de la qualité des données
   compteurs: null,      // pastilles de la barre latérale : { points, porteursAPlacer }
   q: { confirmation: null, enCours: null, filtre: '', rech: '' }, // écran Qualité : la fusion à confirmer, le geste en cours, le filtre, la recherche
+  equipe: null,         // dernière lecture de l'équipe : { personnes, resume, journal }
+  eq: equipeNeuve(),    // écran Équipe : le geste en cours, la personne à retirer, l'invitation en cours d'écriture
 };
+function equipeNeuve() { return { enCours: null, confirmation: null, invitation: { courriel: '', nom: '', role: 'approbation' }, erreurs: {} }; }
 // Une seule fenêtre à la fois : une proposition, une fiche, l'export ou le volet d'un porteur.
 const fenetreOuverte = () => !!(etat.f || etat.r || etat.csv || etat.o);
 
@@ -68,6 +73,12 @@ async function appel(action, { query = {}, corps } = {}) {
 
 // ─── Outils ───
 const peut = () => !!(etat.moi && etat.moi.permis && etat.moi.permis.decider);
+// L'Administration : modifier une fiche directement, ajouter, écarter, republier, rétablir, tenir l'équipe.
+const administre = () => !!(etat.moi && etat.moi.permis && etat.moi.permis.administrer);
+// Une modification de l'équipe : faite dans le panneau par une personne en Approbation. Seule l'Administration la tranche.
+const deLEquipe = (p) => p.genre === 'equipe';
+const viseUneFiche = (p) => p.genre === 'modification' || deLEquipe(p);
+const peutTrancher = (p) => peut() && (!deLEquipe(p) || administre());
 const ouverte = (p) => OUVERTS.includes(p.statut);
 const pluriel = (n, un, plusieurs) => `${n} ${n > 1 ? plusieurs : un}`;
 const plier = (texte) => String(texte || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -112,6 +123,7 @@ const ICONES = {
   ressources: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
   porteurs: '<path d="M3 20h18M5 20V9l7-5 7 5v11M9 20v-6h6v6"/>',
   qualite: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  equipe: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 14.3c2.1.8 3.5 2.9 3.5 5.7"/>',
   favorable: '<path d="M7 10v11"/><path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9z"/>',
   defavorable: '<path d="M17 14V3"/><path d="M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H20a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/>',
 };
@@ -119,7 +131,7 @@ const icone = (nom) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 const classeAvis = (sens) => (sens === 'favorable' ? 'v-pour' : 'v-contre');
 
 const option = (valeur, courante, nom) => `<option value="${e(valeur)}"${valeur === courante ? ' selected' : ''}>${e(nom || valeur)}</option>`;
-const pastilleGenre = (genre) => `<span class="pill ${{ nouvelle: 'p-ok', modification: 'p-info', rsn: 'p-warn' }[genre] || 'p-mute'}">${e(T.genres[genre] || '')}</span>`;
+const pastilleGenre = (genre) => `<span class="pill ${{ nouvelle: 'p-ok', modification: 'p-info', rsn: 'p-warn', equipe: 'p-mute' }[genre] || 'p-mute'}">${e(T.genres[genre] || '')}</span>`;
 const pastilleEtat = (statut) => `<span class="pill ${{ attente: 'p-warn', verification: 'p-info', approuvee: 'p-ok', refusee: 'p-bad' }[statut] || 'p-mute'}">${e(T.etats[statut] || '')}</span>`;
 function pastilleType(type) {
   if (!type) return `<span class="pill p-mute">${e(T.typeAChoisir)}</span>`;
@@ -155,6 +167,7 @@ function afficherEntree(avertissement) {
   etat.moi = null; etat.accueil = null; etat.liste = null; etat.nouvelles = null; etat.f = null;
   etat.fiches = null; etat.r = null; etat.csv = null;
   etat.porteurs = null; etat.o = null; etat.points = null; etat.compteurs = null; etat.q = { confirmation: null, enCours: null, filtre: '', rech: '' };
+  etat.equipe = null; etat.eq = equipeNeuve();
   dessinerBandeau(); montrerCoque(false); dessinerFenetre();
   $('#main').innerHTML = `<div class="card entree">
     <h1>${e(T.titre)}</h1>
@@ -227,22 +240,22 @@ function filtrees({ tout = false } = {}) {
     if (!tout && !anciennes && !cherche && ancienne(p)) return false;
     if (genre && p.genre !== genre) return false;
     if (type && (!p.type || cleType(p.type) !== type)) return false;
-    if (cherche && !plier(`${p.nom} ${p.nomProposant} ${p.courriel} ${T.genres[p.genre] || ''}`).includes(cherche)) return false;
+    if (cherche && !plier(`${p.nom} ${p.nomProposant} ${p.courriel || ''} ${T.genres[p.genre] || ''}`).includes(cherche)) return false;
     return true;
   });
 }
 function pucesAvis(avis) {
   if (!avis.length) return `<span class="muted small">${e(T.avis.aucunCarte)}</span>`;
-  return `<span class="votes">${avis.map((a) => `<span class="vote ${classeAvis(a.sens)}" title="${e(T.avis.infobulle(a.nom, a.sens, a.commentaire))}">${icone(a.sens)}${e(initiales(a.nom))}</span>`).join('')}</span>`;
+  return `<span class="votes">${avis.map((a) => `<span class="vote ${classeAvis(a.sens)}" title="${e(T.avis.infobulle(a.nom || T.activite.quelquun, a.sens, a.commentaire))}">${icone(a.sens)}${e(initiales(a.nom))}</span>`).join('')}</span>`;
 }
 function carte(p) {
   let suite;
   const id = e(p.id);
   if (p.statut === 'attente') {
-    suite = peut() ? `<span class="row"><button type="button" class="btn sm" data-act="second-regard" data-id="${id}">${e(T.secondRegard)}</button><button type="button" class="btn sm" data-act="approuver-carte" data-id="${id}">${e(T.approuver)}</button></span>` : '';
+    suite = peut() ? `<span class="row"><button type="button" class="btn sm" data-act="second-regard" data-id="${id}">${e(T.secondRegard)}</button>${peutTrancher(p) ? `<button type="button" class="btn sm" data-act="approuver-carte" data-id="${id}">${e(T.approuver)}</button>` : ''}</span>` : '';
   } else if (p.statut === 'verification') {
     suite = `<span class="pill p-info">${e(T.enVerificationDepuis(jour(p.verificationLe)))}</span>${pucesAvis(p.avis)}`
-      + (peut() ? `<span class="row"><button type="button" class="btn sm primary" data-act="approuver-carte" data-id="${id}">${e(T.approuver)}</button><button type="button" class="btn sm" data-act="refuser-carte" data-id="${id}">${e(T.refuser)}</button></span>` : '');
+      + (peutTrancher(p) ? `<span class="row"><button type="button" class="btn sm primary" data-act="approuver-carte" data-id="${id}">${e(T.approuver)}</button><button type="button" class="btn sm" data-act="refuser-carte" data-id="${id}">${e(T.refuser)}</button></span>` : '');
   } else {
     // Une décision ne se défait pas ici : pour revenir dessus, on passe par la fiche de la ressource.
     suite = `<span class="muted small">${e(T.decision(p.statut, p.decidePar, jour(p.decideLe), p.corrige))}</span>`
@@ -254,7 +267,7 @@ function carte(p) {
     <span class="row" style="flex-wrap:nowrap;align-items:flex-start"><b>${e(p.nom || T.sansNom)}</b></span>
     <span class="row">${pastilleGenre(p.genre)}${pastilleType(p.type)}</span>
     <span class="small">${proposant}</span>
-    ${p.genre === 'rsn' ? '' : `<span class="muted small">${e(T.liens[p.lienAvecRessource] || T.liens.aucun)}</span>`}
+    ${p.genre === 'rsn' ? '' : `<span class="muted small">${e(deLEquipe(p) ? T.deLEquipe : (T.liens[p.lienAvecRessource] || T.liens.aucun))}</span>`}
     <span class="muted small num">${e(recue)}</span>
     ${p.ressemble ? `<span class="pill p-warn">${e(T.ressemble.pastille)}</span>` : ''}
     ${suite}</div>`;
@@ -279,7 +292,7 @@ function corpsPropositions() {
   const C = T.tableau;
   return `<div class="scroll"><table><thead><tr><th>${e(C.ressource)}</th><th>${e(C.genre)}</th><th>${e(C.type)}</th><th>${e(C.par)}</th><th>${e(C.recue)}</th><th>${e(C.champs)}</th><th>${e(C.avis)}</th><th>${e(C.etat)}</th></tr></thead><tbody>${liste.map((p) => `
     <tr data-act="ouvrir" data-id="${e(p.id)}" tabindex="0"><td><b>${e(p.nom || T.sansNom)}</b></td><td>${pastilleGenre(p.genre)}</td><td>${pastilleType(p.type)}</td>
-      <td>${e(p.nomProposant || T.anonyme)}<br><span class="muted small">${e(p.courriel || '')}${p.genre === 'rsn' ? '' : ` · ${e(T.liens[p.lienAvecRessource] || T.liens.aucun)}`}</span></td>
+      <td>${e(p.nomProposant || T.anonyme)}<br><span class="muted small">${deLEquipe(p) ? e(T.deLEquipe) : `${e(p.courriel || '')}${p.genre === 'rsn' ? '' : ` · ${e(T.liens[p.lienAvecRessource] || T.liens.aucun)}`}`}</span></td>
       <td class="num">${e(jour(p.proposeLe))}</td><td class="num">${p.nbChamps === null ? '' : Number(p.nbChamps)}</td>
       <td>${p.avis.length ? pucesAvis(p.avis) : `<span class="muted">${e(C.aucunAvis)}</span>`}</td><td>${pastilleEtat(p.statut)}</td></tr>`).join('')}</tbody></table></div>${lienAnciennes}`;
 }
@@ -298,18 +311,19 @@ let demande = 0; // numéro de la dernière lecture d'écran : une réponse plus
 
 function rendre() {
   dessinerBandeau(); montrerCoque(true); dessinerNav();
-  $('#main').innerHTML = { accueil: ecranAccueil, propositions: ecranPropositions, ressources: ecranRessources, porteurs: ecranPorteurs, qualite: ecranQualite }[route()]();
+  $('#main').innerHTML = { accueil: ecranAccueil, propositions: ecranPropositions, ressources: ecranRessources, porteurs: ecranPorteurs, qualite: ecranQualite, equipe: ecranEquipe }[route()]();
 }
 // Redessine ce qui dépend des données sans toucher à la recherche en cours de frappe.
 function rafraichir() {
   const ici = route();
+  if (ici === 'equipe' && $('#ebody')) { redessinerEquipe(); return dessinerNav(); }
   const corps = { propositions: $('#mbody'), ressources: $('#rbody'), porteurs: $('#pbody'), qualite: $('#qbody') }[ici];
   if (!corps) return rendre();
   corps.innerHTML = { propositions: corpsPropositions, ressources: corpsRessources, porteurs: corpsPorteurs, qualite: corpsQualite }[ici]();
   if (ici === 'ressources') $('#rintro').textContent = introRessources();
   dessinerNav();
 }
-const ACTION_DE_ROUTE = { accueil: 'accueil', propositions: 'file', ressources: 'ressources', porteurs: 'porteurs', qualite: 'qualite' };
+const ACTION_DE_ROUTE = { accueil: 'accueil', propositions: 'file', ressources: 'ressources', porteurs: 'porteurs', qualite: 'qualite', equipe: 'equipe' };
 async function charger() {
   const moi = ++demande;
   const ici = route();
@@ -318,13 +332,16 @@ async function charger() {
   if (r.code === 401) {
     // Session échue pendant une saisie : la fenêtre et ce qui y est écrit restent à l'écran.
     if (saisieEnCours()) { noter('warn', T.sessionExpiree); return; }
+    // Une invitation en cours d'écriture reste à l'écran elle aussi.
+    if (saisieEquipe()) { message(EQ.sessionExpiree); return; }
     return afficherEntree(null);
   }
   if (!r.ok) {
-    if ({ accueil: etat.accueil, propositions: etat.liste, ressources: etat.fiches, porteurs: etat.porteurs, qualite: etat.points }[ici]) message(T.indisponible); else afficherPanne();
+    if ({ accueil: etat.accueil, propositions: etat.liste, ressources: etat.fiches, porteurs: etat.porteurs, qualite: etat.points, equipe: etat.equipe }[ici]) message(T.indisponible); else afficherPanne();
     return;
   }
   if (ici === 'accueil') { etat.accueil = r.donnees; etat.nouvelles = r.donnees.compteurs.nouvelles; }
+  else if (ici === 'equipe') etat.equipe = r.donnees;
   else if (ici === 'ressources') { etat.fiches = r.donnees.ressources || []; etat.historique = r.donnees.historique !== false; }
   else if (ici === 'porteurs') {
     etat.porteurs = r.donnees.porteurs || [];
@@ -480,9 +497,11 @@ function controle(cle) {
   return `${saisie}<span class="err" id="erreurSaisie" role="alert"></span>
     <span class="row"><button type="button" class="btn sm primary" data-act="garder">${e(T.garderCorrection)}</button><button type="button" class="btn sm" data-act="annuler-correction">${e(T.annuler)}</button></span>`;
 }
+// Corriger une proposition n'a de sens que pour qui peut l'approuver.
+const corrigeable = () => peutTrancher(etat.f.d.proposition);
 function boutonsCorrection(cle) {
   const f = etat.f;
-  if (!ouverte(f.d.proposition) || !peut()) return '';
+  if (!ouverte(f.d.proposition) || !corrigeable()) return '';
   const corrige = Object.hasOwn(corrections(), cle);
   return `<span class="row">${corrige ? `<span class="pill p-info">${e(T.corrigeParVous)}</span><button type="button" class="linkish small" data-act="defaire" data-k="${cle}">${e(T.annulerCorrection)}</button>` : ''}
     <button type="button" class="btn sm" data-act="corriger" data-k="${cle}"${f.enCours ? ' disabled' : ''}>${e(estVide(valeurFinale(cle)) ? T.completer : T.corriger)}</button></span>`;
@@ -490,7 +509,7 @@ function boutonsCorrection(cle) {
 
 function comparaison() {
   const f = etat.f; const { proposition: p, bouscules, actuelle } = f.d;
-  const ouvert = ouverte(p); const modification = p.genre === 'modification';
+  const ouvert = ouverte(p); const modification = viseUneFiche(p);
   const cles = champsMontres();
   const rangs = cles.map((cle) => {
     const finale = valeurFinale(cle);
@@ -508,7 +527,7 @@ function comparaison() {
   // L'image déposée avec la proposition n'est pas un champ du catalogue : elle a son rang.
   const logo = p.aLogo ? `<div class="k">${e(T.logo.titre)}</div>${modification ? `<div class="b">${VIDE}</div>` : ''}
     <div class="b"><img class="logodepose${f.sansLogo ? ' ecarte' : ''}" src="/api/admin?action=logo&amp;id=${e(encodeURIComponent(p.id))}" alt="${e(T.logo.titre)}">
-      ${ouvert && peut() ? `<span class="row">${f.sansLogo ? `<span class="pill p-info">${e(T.logo.ecarte)}</span>` : ''}<button type="button" class="btn sm" data-act="logo">${e(f.sansLogo ? T.logo.reprendre : T.logo.ecarter)}</button></span>` : ''}</div>` : '';
+      ${ouvert && corrigeable() ? `<span class="row">${f.sansLogo ? `<span class="pill p-info">${e(T.logo.ecarte)}</span>` : ''}<button type="button" class="btn sm" data-act="logo">${e(f.sansLogo ? T.logo.reprendre : T.logo.ecarter)}</button></span>` : ''}</div>` : '';
   const entetes = ouvert
     ? [T.colonnesComparaison.actuelle, modification ? T.colonnesComparaison.proposee : T.colonnesComparaison.propose]
     : p.statut === 'approuvee' ? [T.colonnesComparaison.avant, modification ? T.colonnesComparaison.applique : T.colonnesComparaison.publie]
@@ -517,7 +536,7 @@ function comparaison() {
   return `${modification ? legende() : ''}
     <div class="cmp${modification ? '' : ' one'}"><div class="hd">${e(T.colonnesComparaison.champ)}</div>${modification ? `<div class="hd b">${e(entetes[0])}</div>` : ''}<div class="hd b">${e(entetes[1])}</div>${rangs}${logo}</div>
     ${!rangs && !logo ? `<p class="muted small">${e(T.rienAMontrer)}</p>` : ''}
-    ${ouvert && peut() && restants.length ? `<div class="row"><select id="autreChamp" aria-label="${e(T.autreChamp)}" style="width:auto"${f.enCours ? ' disabled' : ''}><option value="">${e(T.autreChamp)}…</option>${restants.map((c) => option(c.cle, '', libelle(c.cle))).join('')}</select><span class="muted small">${e(T.autreChampAide)}</span></div>` : ''}`;
+    ${ouvert && corrigeable() && restants.length ? `<div class="row"><select id="autreChamp" aria-label="${e(T.autreChamp)}" style="width:auto"${f.enCours ? ' disabled' : ''}><option value="">${e(T.autreChamp)}…</option>${restants.map((c) => option(c.cle, '', libelle(c.cle))).join('')}</select><span class="muted small">${e(T.autreChampAide)}</span></div>` : ''}`;
 }
 
 // La fiche telle qu'elle serait sur le site : les valeurs de la fiche, puis celles de la proposition.
@@ -549,13 +568,13 @@ function cadreApercu(fiche) {
 }
 function apercuSurLeSite() {
   const { proposition: p } = etat.f.d;
-  return `<p class="muted small">${e(p.genre === 'modification' ? T.apercu.modification : T.apercu.nouvelle)}${logoPropose() ? ` ${e(T.apercu.logoPropose)}` : ''}</p>
+  return `<p class="muted small">${e(viseUneFiche(p) ? T.apercu.modification : T.apercu.nouvelle)}${logoPropose() ? ` ${e(T.apercu.logoPropose)}` : ''}</p>
     ${cadreApercu(ficheApercue())}`;
 }
 
 function listeAvis(avis) {
   if (!avis.length) return `<p class="muted small">${e(T.avis.aucun)}</p>`;
-  return `<div class="list">${avis.map((a) => `<div><span class="vote ${classeAvis(a.sens)}">${icone(a.sens)}${e(initiales(a.nom))}</span><div class="grow small"><b>${e(a.nom)}</b>${a.commentaire ? `<br>${e(a.commentaire)}` : ` <span class="muted">· ${e(T.avis.sansCommentaire)}</span>`}</div><span class="muted small">${e(jour(a.le))}</span></div>`).join('')}</div>`;
+  return `<div class="list">${avis.map((a) => `<div><span class="vote ${classeAvis(a.sens)}">${icone(a.sens)}${e(initiales(a.nom))}</span><div class="grow small"><b>${e(a.nom || T.activite.quelquun)}</b>${a.commentaire ? `<br>${e(a.commentaire)}` : ` <span class="muted">· ${e(T.avis.sansCommentaire)}</span>`}</div><span class="muted small">${e(jour(a.le))}</span></div>`).join('')}</div>`;
 }
 function blocAvis() {
   const f = etat.f; const p = f.d.proposition;
@@ -575,7 +594,7 @@ function blocPorteursNouveaux() {
   const f = etat.f; const p = f.d.proposition;
   if (!ouverte(p) || !champsMontres().includes('porteurs')) return '';
   return (f.valeurs.porteurs || []).filter(estNouveauPorteur).map((nom) => `<div class="note info"><b>${e(T.porteurNouveau.titre(nom))}</b><span>${e(T.porteurNouveau.aide)}</span>
-    <label class="f" style="color:inherit">${e(T.porteurNouveau.adresse)}<input type="text" maxlength="300" data-adresse-porteur="${e(nom)}" value="${e(f.porteursNouveaux[nom] || '')}" autocomplete="off"${peut() ? '' : ' disabled'}></label></div>`).join('');
+    <label class="f" style="color:inherit">${e(T.porteurNouveau.adresse)}<input type="text" maxlength="300" data-adresse-porteur="${e(nom)}" value="${e(f.porteursNouveaux[nom] || '')}" autocomplete="off"${corrigeable() ? '' : ' disabled'}></label></div>`).join('');
 }
 
 function contenuFenetre() {
@@ -586,34 +605,39 @@ function contenuFenetre() {
   const nb = Object.keys(corrections()).length;
   const occupe = f.enCours ? ' disabled' : '';
   let actions = '';
+  const equipe = deLEquipe(p);
+  const tranche = peutTrancher(p);
   if (ouvert && peut()) {
-    actions = `<button type="button" class="btn primary" data-act="demander-approbation"${f.enCours || ficheDisparue || approbationVide() ? ' disabled' : ''}>${e(f.enCours ? T.enCours : (nb ? T.approuverCorrige(nb) : T.approuver))}</button>
+    actions = `${tranche ? `<button type="button" class="btn primary" data-act="demander-approbation"${f.enCours || ficheDisparue || approbationVide() ? ' disabled' : ''}>${e(f.enCours ? T.enCours : (nb ? T.approuverCorrige(nb) : T.approuver))}</button>` : ''}
       ${p.statut === 'attente' ? `<button type="button" class="btn" data-act="second-regard" data-id="${e(p.id)}"${occupe}>${e(T.demanderSecondRegard)}</button>` : ''}
-      <button type="button" class="btn danger" data-act="refuser"${occupe}>${e(T.refuser)}</button>`;
+      ${tranche ? `<button type="button" class="btn danger" data-act="refuser"${occupe}>${e(T.refuser)}</button>` : ''}`;
   }
+  // Une modification de l'équipe ne prévient personne par courriel.
+  const definitif = equipe ? T.definitifEquipe : T.definitif(p.courriel || '');
   const recue = jour(p.proposeLe) + (p.statut === 'verification' && p.verificationLe ? ` · ${T.enVerificationDepuis(jour(p.verificationLe)).toLowerCase()}` : '');
-  const confirmation = !ouvert || !peut() ? ''
-    : f.confirmation === 'refus' ? `<div class="confirm" style="flex-direction:column;align-items:stretch"><label class="f" for="refusTxt" style="color:inherit">${e(T.refus.libelle)} <small>${e(T.refus.aide)}</small><textarea class="notes" id="refusTxt" maxlength="2000">${e(f.commentaire)}</textarea></label>
+  const confirmation = !ouvert || !tranche ? ''
+    : f.confirmation === 'refus' ? `<div class="confirm" style="flex-direction:column;align-items:stretch"><label class="f" for="refusTxt" style="color:inherit">${e(T.refus.libelle)} <small>${e(equipe ? T.refus.aideEquipe : T.refus.aide)}</small><textarea class="notes" id="refusTxt" maxlength="2000">${e(f.commentaire)}</textarea></label>
         <span class="err" role="alert">${e(f.erreurs.commentaire || '')}</span>
-        <span><b>${e(T.definitif(p.courriel || ''))}</b></span>
+        <span><b>${e(definitif)}</b></span>
         <span class="row"><button type="button" class="btn sm" data-act="annuler-confirmation"${occupe}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="confirmer-refus"${occupe}>${e(f.enCours ? T.enCours : T.refus.confirmer)}</button></span></div>`
-      : f.confirmation === 'approbation' ? `<div class="note info" id="confirmationApprobation"><b>${e(T.confirmerApprobation.titre)}</b><span>${e(T.confirmerApprobation.aide)}</span><span><b>${e(T.definitif(p.courriel || ''))}</b></span>
+      : f.confirmation === 'approbation' ? `<div class="note info" id="confirmationApprobation"><b>${e(T.confirmerApprobation.titre)}</b><span>${e(equipe ? T.confirmerApprobation.aideEquipe : T.confirmerApprobation.aide)}</span><span><b>${e(definitif)}</b></span>
         <span class="row"><button type="button" class="btn sm" data-act="annuler-confirmation"${occupe}>${e(T.annuler)}</button><button type="button" class="btn sm primary" data-act="approuver"${f.enCours || ficheDisparue || approbationVide() ? ' disabled' : ''}>${e(f.enCours ? T.enCours : T.approuver)}</button></span></div>` : '';
   return `<div class="row" style="flex-wrap:nowrap;align-items:flex-start"><span class="logoimg t-${p.type ? cleType(p.type) : ''}">${e(initiales(p.nom))}</span>
       <div style="min-width:0"><h2 id="titreFenetre">${e(p.nom || T.sansNom)}</h2><span class="row" style="margin-top:.25rem">${pastilleEtat(p.statut)}${pastilleGenre(p.genre)}${pastilleType(p.type)}</span></div>
       <button type="button" class="btn sm x" style="margin-left:auto" data-act="fermer">${e(T.fermer)}</button></div>
     ${f.note ? `<div class="note ${f.note.sorte}" id="noteFenetre" role="alert" tabindex="-1">${e(f.note.texte)}</div>` : ''}
-    <dl class="kv"><dt>${e(T.proposeePar)}</dt><dd><b>${e(p.nomProposant || T.anonyme)}</b> · ${e(p.courriel || '')}</dd>
-      ${p.genre === 'rsn' ? '' : `<dt>${e(T.lienAvecRessource)}</dt><dd>${e(T.liens[p.lienAvecRessource] || T.liens.aucun)}${ouvert && verifieraFiche ? ` <span class="muted small">· ${e(T.marqueraVerifiee)}</span>` : ''}</dd>`}
+    <dl class="kv"><dt>${e(T.proposeePar)}</dt><dd><b>${e(p.nomProposant || T.anonyme)}</b> · ${e(equipe ? T.deLEquipe : (p.courriel || ''))}</dd>
+      ${p.genre === 'rsn' || equipe ? '' : `<dt>${e(T.lienAvecRessource)}</dt><dd>${e(T.liens[p.lienAvecRessource] || T.liens.aucun)}${ouvert && verifieraFiche ? ` <span class="muted small">· ${e(T.marqueraVerifiee)}</span>` : ''}</dd>`}
       <dt>${e(T.recue)}</dt><dd>${e(recue)}</dd>
       ${!ouvert ? `<dt>${e(p.statut === 'approuvee' ? T.approuveePar : T.refuseePar)}</dt><dd>${e(p.decidePar || T.inconnue)}${p.decideLe ? `, ${e(T.le(jour(p.decideLe)))}` : ''}</dd>` : ''}
       ${p.fiche ? `<dt>${e(T.ficheVisee)}</dt><dd><a href="/ressource/${e(encodeURIComponent(p.fiche.adresse))}" target="_blank" rel="noopener">${e(p.fiche.nom)}</a></dd>` : ''}</dl>
-    ${!ouvert && p.commentaire ? `<div class="note warn"><b>${e(T.commentaireEnvoye)}</b><span>${e(p.commentaire)}</span></div>` : ''}
+    ${!ouvert && p.commentaire ? `<div class="note warn"><b>${e(equipe ? T.commentaireRefus : T.commentaireEnvoye)}</b><span>${e(p.commentaire)}</span></div>` : ''}
+    ${ouvert && equipe && peut() && !tranche ? `<div class="note info">${e(T.equipeReservee)}</div>` : ''}
     ${ouvert && ficheDisparue ? `<div class="note bad">${e(T.ficheDisparue)}</div>` : ''}
     ${ouvert && p.illisible ? `<div class="note bad">${e(T.illisible)}</div>` : ''}
     ${ouvert && ressemble ? `<div class="note warn"><b>${e(T.ressemble.titre)}</b><span>${e(T.ressemble.aide(ressemble.nom))}</span><a class="btn sm" href="/ressource/${e(encodeURIComponent(ressemble.adresse))}" target="_blank" rel="noopener">${e(T.ressemble.ouvrir)}</a></div>` : ''}
     ${ouvert && p.genre === 'rsn' ? `<div class="note info"><b>${e(T.rsn.titre)}</b><span>${e(T.rsn.aide)}</span></div>` : ''}
-    <div class="row"><span class="seg" role="group" aria-label="${e(T.vue)}"><button type="button" data-act="onglet" data-v="cmp" aria-pressed="${f.onglet === 'cmp'}">${e(p.genre === 'modification' ? T.ongletComparaison : T.ongletChamps)}</button><button type="button" data-act="onglet" data-v="apercu" aria-pressed="${f.onglet === 'apercu'}">${e(T.apercu.onglet)}</button></span>
+    <div class="row"><span class="seg" role="group" aria-label="${e(T.vue)}"><button type="button" data-act="onglet" data-v="cmp" aria-pressed="${f.onglet === 'cmp'}">${e(viseUneFiche(p) ? T.ongletComparaison : T.ongletChamps)}</button><button type="button" data-act="onglet" data-v="apercu" aria-pressed="${f.onglet === 'apercu'}">${e(T.apercu.onglet)}</button></span>
       <span class="muted small">${e(pluriel(p.nbChamps || 0, T.champTouche, T.champsTouches))}</span></div>
     ${f.onglet === 'cmp' ? comparaison() : apercuSurLeSite()}
     ${blocPorteursNouveaux()}
@@ -700,7 +724,7 @@ async function ouvrir(id, { confirmation = null } = {}) {
   const depart = departPanneau(d.proposition.propose, d.actuelle);
   Object.assign(etat.f, {
     d, chargement: false, depart, valeurs: JSON.parse(JSON.stringify(depart)), porteursNouveaux: { ...d.proposition.porteursNouveaux },
-    confirmation: ouverte(d.proposition) && peut() ? confirmation : null,
+    confirmation: ouverte(d.proposition) && peutTrancher(d.proposition) ? confirmation : null,
   });
   dessinerFenetre();
   const cible = confirmation === 'refus' ? $('#refusTxt') : confirmation === 'approbation' ? $('#confirmationApprobation') : $('#layer .x');
@@ -782,7 +806,8 @@ function echecDuGeste(r) {
 
 async function trancher(action) {
   const f = etat.f;
-  if (!f || !f.d || f.enCours || !peut()) return;
+  if (!f || !f.d || f.enCours || !peutTrancher(f.d.proposition)) return;
+  const equipe = deLEquipe(f.d.proposition);
   const id = f.id;
   let corps;
   if (action === 'refuser') {
@@ -802,7 +827,8 @@ async function trancher(action) {
   f.enCours = false;
   if (r.ok) {
     etat.f = null; dessinerFenetre();
-    message((action === 'refuser' ? T.refusee : T.approuvee)(r.donnees.courriel, r.donnees.historique !== false));
+    if (equipe) message(action === 'refuser' ? T.refuseeEquipe : T.approuveeEquipe(r.donnees.historique !== false));
+    else message((action === 'refuser' ? T.refusee : T.approuvee)(r.donnees.courriel, r.donnees.historique !== false));
     return charger();
   }
   echecDuGeste(r);
@@ -864,8 +890,9 @@ function deplacer(id, vers) {
   if (!ouverte(p)) return message(T.neSeDeplacePlus);
   // Une carte lâchée par erreur ne revient pas en arrière : on demande confirmation.
   if (vers === 'verification') return window.confirm(T.confirmerSecondRegard(p.nom || T.sansNom)) ? demanderSecondRegard(id) : undefined;
+  if ((vers === 'approuvee' || vers === 'refusee') && !peutTrancher(p)) return message(T.equipeReservee);
   if (vers === 'approuvee') return ouvrir(id, { confirmation: 'approbation' });
-  if (vers === 'refusee') { message(T.refus.ecrire); return ouvrir(id, { confirmation: 'refus' }); }
+  if (vers === 'refusee') { message(deLEquipe(p) ? T.refus.ecrireEquipe : T.refus.ecrire); return ouvrir(id, { confirmation: 'refus' }); }
   return message(T.pasDeRetour);
 }
 
@@ -906,7 +933,7 @@ function corpsRessources() {
 function ecranRessources() {
   const f = etat.filtresR;
   return `<div class="head"><div><h1>${e(T.routes.ressources)}</h1><p id="rintro">${e(introRessources())}</p></div>
-      <div class="row"><button type="button" class="btn" data-act="csv">${e(T.ressources.exporter)}</button>${peut() ? `<button type="button" class="btn primary" data-act="nouvelle-fiche">${e(T.ressources.ajouter)}</button>` : ''}</div></div>
+      <div class="row"><button type="button" class="btn" data-act="csv">${e(T.ressources.exporter)}</button>${administre() ? `<button type="button" class="btn primary" data-act="nouvelle-fiche">${e(T.ressources.ajouter)}</button>` : ''}</div></div>
     <div class="tools"><input type="search" id="rq" placeholder="${e(T.ressources.chercher)}" value="${e(f.q)}" aria-label="${e(T.ressources.chercherNom)}">
       <select id="rType" aria-label="${e(T.typeDeRessource)}">${option('', f.type, T.tousTypes)}${TYPES.map((t) => option(t, f.type, TEXTES.typesCourts[t])).join('')}</select>
       <select id="rStatut" aria-label="${e(T.ressources.statut)}">${option('', f.statut, T.ressources.tousStatuts)}${Object.keys(T.ressources.statuts).map((x) => option(x, f.statut, T.ressources.statuts[x])).join('')}</select></div>
@@ -991,6 +1018,12 @@ async function rechargerFiche(id) {
   dessinerFenetre();
 }
 
+// Vrai si la personne peut écrire dans l'onglet « Fiche » : en Approbation, pas sur une fiche écartée,
+// qui ne reçoit pas de proposition.
+function saisissable() {
+  const fiche = etat.r && etat.r.d ? etat.r.d.fiche : null;
+  return peut() && (administre() || !fiche || fiche.statut !== 'ecartee');
+}
 // Les étiquettes d'une liste et son champ d'ajout.
 function pucesListe(cle) {
   const f = etat.r; const champ = PAR_CLE[cle];
@@ -999,10 +1032,10 @@ function pucesListe(cle) {
   const puces = (f.valeurs[cle] || []).map((x, i) => {
     const nom = nomValeur(cle, x);
     const nouvelle = champ.saisie !== 'fiches' && !connues.includes(String(x).toLowerCase());
-    return `<span class="tagx">${e(nom)}${nouvelle ? ` <span class="small">${e(T.nouvelleValeur)}</span>` : ''}${peut() ? `<button type="button" data-act="f-retirer" data-k="${cle}" data-i="${i}" data-v="${i}" aria-label="${e(TC.retirer(nom))}"${fige}>×</button>` : ''}</span>`;
+    return `<span class="tagx">${e(nom)}${nouvelle ? ` <span class="small">${e(T.nouvelleValeur)}</span>` : ''}${saisissable() ? `<button type="button" data-act="f-retirer" data-k="${cle}" data-i="${i}" data-v="${i}" aria-label="${e(TC.retirer(nom))}"${fige}>×</button>` : ''}</span>`;
   }).join('');
   const liste = `<div class="chips">${puces || `<span class="muted small">${e(T.ressources.listeVide)}</span>`}</div>`;
-  if (!peut()) return liste;
+  if (!saisissable()) return liste;
   const soi = f.d.fiche ? f.d.fiche.adresse : null;
   const choix = champ.saisie === 'fiches' ? existantes('fiches').filter((x) => x.adresse !== soi).map(etiquetteFiche) : existantes(cle);
   return `${liste}<div class="ajout"><input type="text" id="fa-${cle}" data-ajout="${cle}" list="fc-${cle}" maxlength="${Number(champ.max) || 200}" value="${e(f.ajouts[cle] || '')}" placeholder="${e(TC.indiceListe)}" autocomplete="off" aria-label="${e(T.ressources.ajouterA(libelle(cle)))}"${fige}>
@@ -1014,9 +1047,9 @@ function pucesListe(cle) {
 function pucesPorteurs() {
   const f = etat.r; const fige = f.enCours ? ' disabled' : '';
   const rattaches = f.valeurs.porteurs || [];
-  const puces = rattaches.map((nom, i) => `<span class="tagx">${e(nom)}${peut() ? `<button type="button" data-act="f-retirer" data-k="porteurs" data-i="${i}" data-v="${i}" aria-label="${e(TC.retirer(nom))}"${fige}>×</button>` : ''}</span>`).join('');
+  const puces = rattaches.map((nom, i) => `<span class="tagx">${e(nom)}${saisissable() ? `<button type="button" data-act="f-retirer" data-k="porteurs" data-i="${i}" data-v="${i}" aria-label="${e(TC.retirer(nom))}"${fige}>×</button>` : ''}</span>`).join('');
   const liste = `<div class="chips">${puces || `<span class="muted small">${e(T.ressources.aucunPorteurRattache)}</span>`}</div>`;
-  if (!peut()) return liste;
+  if (!saisissable()) return liste;
   const restants = existantes('porteurs').filter((nom) => !rattaches.includes(nom));
   return `${liste}<select id="fportAdd" aria-label="${e(T.ressources.rattacher)}"${fige}><option value="">${e(T.ressources.rattacher)}…</option>${restants.map((nom) => option(nom, '')).join('')}</select>`;
 }
@@ -1049,7 +1082,7 @@ function conflitFiche(cle) {
 // Un champ du catalogue dans la fenêtre d'une fiche, avec son contrôle de saisie.
 function champFiche(cle) {
   const f = etat.r; const champ = PAR_CLE[cle]; const v = f.valeurs[cle];
-  const fige = !peut() || f.enCours ? ' disabled' : '';
+  const fige = !saisissable() || f.enCours ? ' disabled' : '';
   const id = `f-${cle}`; const nom = e(libelle(cle));
   const aide = T.ressources.aides[cle] ? ` <small>${e(T.ressources.aides[cle])}</small>` : '';
   const suite = `${f.erreurs[cle] ? `<span class="err" role="alert">${e(f.erreurs[cle])}</span>` : ''}${conflitFiche(cle)}`;
@@ -1082,10 +1115,11 @@ function champFiche(cle) {
 function ongletFiche() {
   const f = etat.r; const fige = f.enCours ? ' disabled' : '';
   const champs = `<div class="fields">${ORDRE_FICHE.map(champFiche).join('')}</div>`;
-  if (!peut()) return `<p class="muted small">${e(T.ressources.lectureSeule)}</p>${champs}`;
-  const enregistrer = `<div class="row"><button type="button" class="btn primary" data-act="f-enregistrer"${fige}>${e(f.enCours ? T.enCours : (f.nouvelle ? T.ressources.creer : T.ressources.enregistrer))}</button>${f.nouvelle ? '' : `<span class="muted small">${e(T.ressources.enregistrerAide)}</span>`}</div>`;
-  if (f.nouvelle) return champs + enregistrer;
-  return champs + enregistrer;
+  if (!saisissable()) return `<p class="muted small">${e(peut() ? T.ressources.ecarteeApprobation : T.ressources.lectureSeule)}</p>${champs}`;
+  // En Approbation, la fiche ne change pas : la modification part se faire approuver par l'Administration.
+  const libelleBouton = f.nouvelle ? T.ressources.creer : administre() ? T.ressources.enregistrer : T.ressources.proposer;
+  const aide = f.nouvelle ? '' : `<span class="muted small">${e(administre() ? T.ressources.enregistrerAide : T.ressources.proposerAide)}</span>`;
+  return `${champs}<div class="row"><button type="button" class="btn primary" data-act="f-enregistrer"${fige}>${e(f.enCours ? T.enCours : libelleBouton)}</button>${aide}</div>`;
 }
 
 // Ce qu'une version raconte : qui, et d'où vient le changement.
@@ -1095,6 +1129,7 @@ function titreVersion(v) {
   const p = v.proposition;
   if (v.source === 'depart') return H.depart;
   if (v.source === 'creation') return p ? H.creationProposee(p.nomProposant || T.anonyme, qui) : H.creation(qui);
+  if (v.source === 'proposition' && p && p.genre === 'equipe') return H.propositionEquipe(p.nomProposant || T.anonyme, qui);
   if (v.source === 'proposition') return p ? H.proposition(p.nomProposant || T.anonyme, (T.liens[p.lien] || T.liens.aucun).toLowerCase(), qui) : H.propositionSans(qui);
   if (v.source === 'retablissement') return H.retablissement(v.note || H.retour, qui);
   if (v.source === 'qualite') return H.qualite(v.note, qui);
@@ -1115,7 +1150,7 @@ function ongletHistorique() {
     return `<div class="${actuelle ? 'cur' : ''}"><span class="row"><b>${e(H.version(n))}</b>${actuelle ? `<span class="pill p-ok">${e(H.actuelle)}</span>` : ''}<span class="muted small num">${e(v.le ? jourEtHeure(v.le) : '')}</span></span>
       <span class="small">${e(titreVersion(v))}</span>
       ${cles.length ? `<span class="tgs">${cles.map((cle) => `<span class="tg">${e(libelle(cle))}</span>`).join('')}</span>` : (v.illisible ? `<span class="muted small">${e(H.illisible)}</span>` : '')}
-      <span class="row">${precedente !== null ? `<button type="button" class="btn sm" data-act="v-comparer" data-a="${precedente}" data-b="${n}" data-v="${precedente}-${n}">${e(H.avecPrecedente)}</button>` : ''}${actuelle ? '' : `<button type="button" class="btn sm" data-act="v-comparer" data-a="${n}" data-b="${Number(derniere)}" data-v="${n}-${Number(derniere)}">${e(H.avecActuelle)}</button>${peut() && f.d.historique ? `<button type="button" class="btn sm" data-act="v-demander" data-v="${n}"${fige}>${e(H.retablir)}</button>` : ''}`}</span>
+      <span class="row">${precedente !== null ? `<button type="button" class="btn sm" data-act="v-comparer" data-a="${precedente}" data-b="${n}" data-v="${precedente}-${n}">${e(H.avecPrecedente)}</button>` : ''}${actuelle ? '' : `<button type="button" class="btn sm" data-act="v-comparer" data-a="${n}" data-b="${Number(derniere)}" data-v="${n}-${Number(derniere)}">${e(H.avecActuelle)}</button>${administre() && f.d.historique ? `<button type="button" class="btn sm" data-act="v-demander" data-v="${n}"${fige}>${e(H.retablir)}</button>` : ''}`}</span>
       ${f.confirmation === `retablir:${n}` ? `<div class="confirm" id="confirmationFiche"><span>${e(H.confirmer(n, v.le ? jour(v.le) : ''))}</span><button type="button" class="btn sm" data-act="f-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="v-retablir" data-v="${n}"${fige}>${e(f.enCours ? T.enCours : H.retablirCourt)}</button></div>` : ''}</div>`;
   }).reverse().join('');
   // Deux versions côte à côte : chacune est retrouvée à partir de la fiche d'aujourd'hui.
@@ -1156,10 +1191,11 @@ function gestesFiche() {
   const revoir = fiche.aRevoir
     ? `<button type="button" class="btn sm" data-act="f-retirer-revoir"${fige}>${e(R.revoir.retirer)}</button>`
     : `<button type="button" class="btn sm" data-act="f-demander" data-v="revoir"${fige}>${e(R.revoir.bouton)}</button>`;
+  // Écarter et republier sont réservés à l'Administration : absents pour les autres.
   const boutons = fiche.statut === 'publiee'
-    ? `<button type="button" class="btn sm" data-act="f-verifier"${fige}>${e(R.verifier)}</button>${revoir}${publique}<button type="button" class="btn sm danger" data-act="f-demander" data-v="ecarter"${fige}>${e(R.ecarter.bouton)}</button>`
-    : `<button type="button" class="btn sm primary" data-act="f-republier"${fige}>${e(R.republier)}</button>${revoir}`;
-  const confirmation = f.confirmation === 'ecarter'
+    ? `<button type="button" class="btn sm" data-act="f-verifier"${fige}>${e(R.verifier)}</button>${revoir}${publique}${administre() ? `<button type="button" class="btn sm danger" data-act="f-demander" data-v="ecarter"${fige}>${e(R.ecarter.bouton)}</button>` : ''}`
+    : `${administre() ? `<button type="button" class="btn sm primary" data-act="f-republier"${fige}>${e(R.republier)}</button>` : ''}${revoir}`;
+  const confirmation = f.confirmation === 'ecarter' && administre()
     ? `<div class="confirm" id="confirmationFiche"><span>${e(R.ecarter.question(fiche.nom || T.sansNom))}</span><button type="button" class="btn sm" data-act="f-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="f-ecarter"${fige}>${e(f.enCours ? T.enCours : R.ecarter.confirmer)}</button></div>`
     : f.confirmation === 'revoir'
       ? `<div class="confirm" id="confirmationFiche" style="flex-direction:column;align-items:stretch"><label class="f" for="noteRevoir" style="color:inherit">${e(R.revoir.question)} <small>${e(R.revoir.aide)}</small><textarea class="notes" id="noteRevoir" maxlength="500"${fige}>${e(f.noteRevoir || '')}</textarea></label>
@@ -1182,7 +1218,7 @@ function contenuFiche() {
   const verifiee = fiche.verifieeLe
     ? e(T.ressources.verifieeLe(jour(fiche.verifieeLe), T.ressources.verifieePar[fiche.verifieePar] || fiche.verifieePar || '')) + pastilleAncienne(fiche.verifieeLe)
     : e(T.ressources.jamaisVerifiee);
-  const attente = enAttente.length ? `<dt>${e(T.ressources.enAttenteTitre)}</dt><dd>${enAttente.map((p) => `<button type="button" class="linkish" data-act="ouvrir" data-id="${e(p.id)}">${e(T.ressources.propositionDe(T.genres[p.genre] || T.genres.modification, p.nomProposant || T.anonyme))}</button>`).join(' · ')}</dd>` : '';
+  const attente = enAttente.length ? `<dt>${e(T.ressources.enAttenteTitre)}</dt><dd>${enAttente.map((p) => `<button type="button" class="linkish" data-act="ouvrir" data-id="${e(p.id)}">${e(p.genre === 'equipe' ? T.ressources.propositionEquipe(p.nomProposant || T.anonyme) : T.ressources.propositionDe(T.genres[p.genre] || T.genres.modification, p.nomProposant || T.anonyme))}</button>`).join(' · ')}</dd>` : '';
   const onglet = (cle, nom) => `<button type="button" data-act="f-onglet" data-v="${cle}" aria-pressed="${f.onglet === cle}">${e(nom)}</button>`;
   return `<div class="row" style="flex-wrap:nowrap;align-items:flex-start"><span class="logoimg t-${type ? cleType(type) : ''}">${e(initiales(fiche.nom))}</span>
       <div style="min-width:0"><h2 id="titreFenetre">${e(fiche.nom || T.sansNom)}</h2><span class="row" style="margin-top:.25rem">${pastilleStatut(fiche.statut)}${fiche.aRevoir ? `<span class="pill p-info">${e(T.ressources.revoir.pastille)}</span>` : ''}${pastilleType(type)}${valeurs.secondType ? pastilleType(valeurs.secondType) : ''}</span></div>${fermer}</div>
@@ -1217,7 +1253,7 @@ function echecFiche(r) {
 
 async function enregistrerFiche() {
   const f = etat.r;
-  if (!f || !f.d || f.enCours || !peut()) return;
+  if (!f || !f.d || f.enCours || !peut() || (f.nouvelle && !administre())) return;
   // Un mot tapé dans un champ d'ajout sans « Ajouter » compte quand même.
   for (const cle of Object.keys(f.ajouts)) {
     if (String(f.ajouts[cle]).trim() && !ajouterALaListe(cle, { focus: false })) {
@@ -1249,6 +1285,12 @@ async function enregistrerFiche() {
     f.enCours = false; f.depart = copieProfonde(f.valeurs); dessinerFenetre();
     return message(T.ressources.inchangee);
   }
+  if (r.donnees.proposee) {
+    // La fiche n'a pas changé : la fenêtre la relit, et montre la proposition qui l'attend.
+    message(T.ressources.proposee(Number(r.donnees.champs)));
+    await rechargerFiche(r.donnees.id);
+    return charger();
+  }
   message(T.ressources.enregistree(Number(r.donnees.champs), r.donnees.numero ? Number(r.donnees.numero) : 0));
   await rechargerFiche(r.donnees.id);
   charger();
@@ -1257,6 +1299,7 @@ async function enregistrerFiche() {
 // Marquer vérifiée, écarter, republier : la saisie en cours dans la fenêtre n'est pas touchée.
 async function gesteFiche(action) {
   const f = etat.r;
+  if ((action === 'ecarter' || action === 'republier') && !administre()) return;
   if (!f || !f.d || f.nouvelle || f.enCours || !peut()) return;
   f.enCours = true; f.note = null; f.confirmation = null; dessinerFenetre();
   const marquer = action === 'revoir' || action === 'retirer-revoir';
@@ -1281,7 +1324,7 @@ async function gesteFiche(action) {
 
 async function retablirVersion(numero) {
   const f = etat.r; const H = T.ressources.historique;
-  if (!f || !f.d || f.nouvelle || f.enCours || !peut()) return;
+  if (!f || !f.d || f.nouvelle || f.enCours || !administre()) return;
   // Rétablir relit la fiche : ce qui est écrit dans l'onglet « Fiche » sans être enregistré serait remplacé.
   if (saisieFiche() && !window.confirm(H.perdreSaisie)) return;
   f.enCours = true; f.note = null; dessinerFenetre();
@@ -1339,6 +1382,7 @@ function gesteFenetreFiche(act, cible) {
   if (act === 'v-retablir') return retablirVersion(Number(v));
   if (act === 'f-annuler') { f.confirmation = null; return dessinerFenetre(); }
   if (act === 'f-demander' || act === 'v-demander') {
+    if ((act === 'v-demander' || v !== 'revoir') && !administre()) return;
     f.confirmation = act === 'f-demander' ? (v === 'revoir' ? 'revoir' : 'ecarter') : `retablir:${Number(v)}`;
     dessinerFenetre();
     const zone = $('#confirmationFiche');
@@ -1837,6 +1881,153 @@ function gesteEcranQualite(act, cible) {
   return undefined;
 }
 
+// ─── Équipe : qui a accès, avec quel rôle, et le journal de ce que chacun a fait ───
+const EQ = T.equipe;
+// Vrai si une invitation est en cours d'écriture.
+function saisieEquipe() { const i = etat.eq.invitation; return !!(i.courriel.trim() || i.nom.trim()); }
+// Une personne de l'équipe : son résumé hebdomadaire, son rôle, et le retrait de son accès.
+// Chacun règle son propre résumé ; le reste est réservé à l'Administration, jamais sur sa propre ligne.
+function lignePersonne(x) {
+  const q = etat.eq; const fige = q.enCours ? ' disabled' : '';
+  const nom = x.nom || EQ.sansNom; const id = e(x.id);
+  const autre = administre() && !x.moi;
+  const resume = `<label class="switch mini"><input type="checkbox" role="switch" data-resume="${id}"${x.resume ? ' checked' : ''}${(administre() || x.moi) && !q.enCours ? '' : ' disabled'}><span>${e(EQ.recoitResume)}</span></label>`;
+  const role = `<select data-role="${id}" aria-label="${e(EQ.roleDe(nom))}" style="width:auto"${autre && !q.enCours ? '' : ' disabled'}>${Object.keys(T.roles).map((r) => option(r, x.role, T.roles[r])).join('')}</select>`;
+  const retirer = autre ? `<button type="button" class="btn sm danger" data-act="e-demander-retrait" data-id="${id}"${fige}>${e(EQ.retirer.bouton)}</button>` : '';
+  const confirmation = autre && q.confirmation === x.id
+    ? `<div class="confirm" id="confirmationEquipe"><span>${e(EQ.retirer.question(nom))}</span><button type="button" class="btn sm" data-act="e-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="e-retirer" data-id="${id}"${fige}>${e(q.enCours ? T.enCours : EQ.retirer.confirmer)}</button></div>` : '';
+  return `<div><span class="avatar">${e(initiales(nom))}</span><div class="grow"><b>${e(nom)}</b>${x.moi ? ` <span class="pill p-mute">${e(EQ.vous)}</span>` : ''}<br><span class="muted small">${e(x.courriel)}</span></div>${resume}${role}${retirer}${confirmation}</div>`;
+}
+// Le formulaire d'invitation, pour l'Administration seulement.
+function formulaireInvitation() {
+  if (!administre()) return '';
+  const q = etat.eq; const i = q.invitation; const I = EQ.inviter; const fige = q.enCours ? ' disabled' : '';
+  const erreurs = ['courriel', 'nom', 'role'].filter((cle) => q.erreurs[cle]).map((cle) => `<span class="err" role="alert">${e(q.erreurs[cle])}</span>`).join('');
+  return `<form id="invitation" class="sep invite" novalidate><h3>${e(I.titre)}</h3>
+    <div class="row"><input type="email" id="invCourriel" maxlength="254" value="${e(i.courriel)}" placeholder="${e(I.indiceCourriel)}" aria-label="${e(I.courriel)}" autocomplete="off"${q.erreurs.courriel ? ' aria-invalid="true"' : ''}${fige}>
+      <input type="text" id="invNom" maxlength="200" value="${e(i.nom)}" placeholder="${e(I.indiceNom)}" aria-label="${e(I.nom)}" autocomplete="off"${q.erreurs.nom ? ' aria-invalid="true"' : ''}${fige}>
+      <select id="invRole" aria-label="${e(I.role)}"${fige}>${['approbation', 'lecture', 'administration'].map((r) => option(r, i.role, T.roles[r])).join('')}</select>
+      <button type="submit" class="btn primary"${fige}>${e(q.enCours === 'inviter' ? T.enCours : I.bouton)}</button></div>
+    ${erreurs}<p class="muted small">${e(I.aide)}</p></form>`;
+}
+function journalDeLEquipe() {
+  const j = etat.equipe.journal; const J = EQ.journal;
+  if (!j.actif) return `<p class="muted">${e(J.absent)}</p>`;
+  if (!j.lu) return `<div class="note warn">${e(J.illisible)}</div>`;
+  if (!j.lignes.length) return `<p class="muted">${e(J.vide)}</p>`;
+  return `<p class="muted small">${e(J.intro)}</p><div class="list">${j.lignes.map((l) => `<div><div class="grow"><b>${e(l.qui || J.ancienMembre)}</b> ${e(l.phrase)}</div><span class="muted small">${e(jourEtHeure(l.le))}</span></div>`).join('')}</div>`;
+}
+function corpsEquipe() {
+  if (!etat.equipe) return `<p class="muted" role="status">${e(T.chargement)}</p>`;
+  const { personnes, resume } = etat.equipe;
+  const recoivent = personnes.filter((x) => x.resume).length;
+  return `<section class="card"><div class="row" style="justify-content:space-between"><h3>${e(EQ.acces)}</h3><span class="muted small">${e(EQ.resumeCompte(recoivent, personnes.length, resume.jour))}</span></div>
+      <div class="list">${personnes.map(lignePersonne).join('')}</div>
+      ${formulaireInvitation()}
+      <p class="muted small">${Object.keys(T.roles).map((r) => `<b>${e(T.roles[r])}</b> : ${e(EQ.permis[r])}`).join(' ')}</p></section>
+    <section class="card"><h3>${e(EQ.journal.titre)}</h3>${journalDeLEquipe()}</section>`;
+}
+function ecranEquipe() {
+  return `<div class="head"><div><h1>${e(T.routes.equipe)}</h1><p>${e(EQ.intro)}</p></div></div><div id="ebody">${corpsEquipe()}</div>`;
+}
+// Redessine l'écran en gardant le focus là où il était : ce qui est écrit dans l'invitation est dans l'état.
+function redessinerEquipe() {
+  const zone = $('#ebody');
+  if (!zone) return;
+  const actif = zone.contains(document.activeElement) ? document.activeElement : null;
+  const repere = actif ? { id: actif.id, role: actif.dataset.role, resume: actif.dataset.resume, act: actif.dataset.act, pour: actif.dataset.id } : null;
+  let curseur = null;
+  try { if (actif && actif.type === 'text') curseur = [actif.selectionStart, actif.selectionEnd]; } catch (err) { /* sans position */ }
+  zone.innerHTML = corpsEquipe();
+  if (!repere) return;
+  const pareil = (x) => (repere.id ? x.id === repere.id : repere.role ? x.dataset.role === repere.role : repere.resume ? x.dataset.resume === repere.resume : x.dataset.act === repere.act && x.dataset.id === repere.pour);
+  const retrouve = [...zone.querySelectorAll('button, input, select')].find((x) => !x.disabled && pareil(x));
+  if (!retrouve) return;
+  retrouve.focus({ preventScroll: true });
+  try { if (curseur) retrouve.setSelectionRange(curseur[0], curseur[1]); } catch (err) { /* sans position */ }
+}
+// Un geste sur l'équipe : un seul à la fois, tout est figé pendant l'envoi. Le serveur vérifie tout.
+async function gesteEquipe(cle, action, corps, reussite) {
+  const q = etat.eq;
+  if (q.enCours) return undefined;
+  q.enCours = cle; q.erreurs = {}; redessinerEquipe();
+  const r = await appel(action, { corps });
+  q.enCours = null;
+  if (r.ok) {
+    q.confirmation = null;
+    if (action === 'inviter') q.invitation = equipeNeuve().invitation;
+    message(reussite(r.donnees));
+    redessinerEquipe();
+    return charger();
+  }
+  const code = r.donnees.code;
+  if (r.code === 401) {
+    // Session échue : l'invitation en cours d'écriture reste à l'écran.
+    if (!saisieEquipe()) return afficherEntree(null);
+    message(EQ.sessionExpiree);
+    return redessinerEquipe();
+  }
+  q.confirmation = null;
+  if (r.code === 403) { message(T.reserveAdministration); redessinerEquipe(); await relireMoi(); return charger(); }
+  if (action === 'inviter' && r.donnees.erreurs && (code === 'invalide' || code === 'deja-inscrite')) {
+    q.erreurs = { ...r.donnees.erreurs };
+    redessinerEquipe();
+    const fautif = $(q.erreurs.courriel ? '#invCourriel' : q.erreurs.nom ? '#invNom' : '#invRole');
+    if (fautif) fautif.focus();
+    return undefined;
+  }
+  message(code === 'soi-meme' ? EQ.soiMeme : code === 'derniere-administration' ? EQ.derniereAdministration : code === 'introuvable' ? EQ.introuvable : code === 'occupee' ? EQ.occupee : T.indisponible);
+  // Les réglages reprennent ce que le serveur a vraiment gardé.
+  redessinerEquipe();
+  return charger();
+}
+const personneDe = (id) => ((etat.equipe && etat.equipe.personnes) || []).find((x) => x.id === id) || null;
+function inviter() {
+  const q = etat.eq; const i = q.invitation;
+  if (!administre() || q.enCours) return undefined;
+  const courriel = i.courriel.trim(); const nom = i.nom.replace(/\s+/g, ' ').trim();
+  const erreurs = {};
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courriel)) erreurs.courriel = T.courrielInvalide;
+  if (!nom) erreurs.nom = EQ.inviter.nomRequis;
+  if (Object.keys(erreurs).length) {
+    q.erreurs = erreurs; redessinerEquipe();
+    const fautif = $(erreurs.courriel ? '#invCourriel' : '#invNom');
+    if (fautif) fautif.focus();
+    return undefined;
+  }
+  return gesteEquipe('inviter', 'inviter', { courriel, nom, role: i.role }, (d) => (d.reactivee ? EQ.reactivee : EQ.invitee)(nom, !!d.courriel));
+}
+function gesteEcranEquipe(act, cible) {
+  const q = etat.eq; const x = personneDe(cible.dataset.id);
+  if (q.enCours) return undefined;
+  if (act === 'e-annuler') { q.confirmation = null; return redessinerEquipe(); }
+  if (!administre() || !x || x.moi) return undefined;
+  // Retirer une personne passe toujours par une confirmation.
+  if (act === 'e-demander-retrait') {
+    q.confirmation = x.id; redessinerEquipe();
+    const zone = $('#confirmationEquipe');
+    if (zone) { zone.scrollIntoView({ block: 'center' }); const oui = zone.querySelector('.danger'); if (oui) oui.focus(); }
+    return undefined;
+  }
+  if (act === 'e-retirer' && q.confirmation === x.id) return gesteEquipe(`retirer:${x.id}`, 'retirer', { personne: x.id }, () => EQ.retiree(x.nom || EQ.sansNom));
+  return undefined;
+}
+// Un rôle choisi dans la liste, ou l'interrupteur du résumé hebdomadaire.
+function reglageEquipe(cible) {
+  const role = cible.dataset.role !== undefined;
+  const x = personneDe(role ? cible.dataset.role : cible.dataset.resume);
+  if (!x || etat.eq.enCours) return redessinerEquipe();
+  const nom = x.nom || EQ.sansNom;
+  if (role) {
+    if (!administre() || x.moi || !T.roles[cible.value] || cible.value === x.role) return redessinerEquipe();
+    const choisi = cible.value;
+    return gesteEquipe(`role:${x.id}`, 'changer-role', { personne: x.id, role: choisi }, () => EQ.roleChange(nom, T.roles[choisi]));
+  }
+  if (!administre() && !x.moi) return redessinerEquipe();
+  const actif = cible.checked;
+  return gesteEquipe(`resume:${x.id}`, 'regler-resume', { personne: x.id, actif }, () => (actif ? EQ.resumeActive : EQ.resumeArrete)(nom, x.moi));
+}
+
 // ─── Export en CSV, à partir des fiches lues par le tableau ───
 function lignesCsv(liste) {
   // Une cellule qui commencerait par un signe de formule est neutralisée pour les tableurs.
@@ -1903,7 +2094,7 @@ document.addEventListener('click', async (evenement) => {
 
   // Ressources : le tableau, puis les fenêtres de l'export et d'une fiche.
   if (act === 'ouvrir-fiche') return ouvrirFiche(id);
-  if (act === 'nouvelle-fiche') return peut() ? ouvrirFiche(null) : undefined;
+  if (act === 'nouvelle-fiche') return administre() ? ouvrirFiche(null) : undefined;
   if (act === 'csv') {
     if (fenetreOuverte() && !fermerFenetre()) return;
     etat.csv = { toutes: false }; dessinerFenetre();
@@ -1915,6 +2106,7 @@ document.addEventListener('click', async (evenement) => {
   if (act === 'nouveau-porteur') return peut() ? ouvrirPorteur(null) : undefined;
   if (act === 'vue-porteurs') { etat.vueP = v === 'liste' ? 'liste' : 'colonnes'; return rendre(); }
   if (act && act.startsWith('q-')) return gesteEcranQualite(act, cible);
+  if (act && act.startsWith('e-')) return gesteEcranEquipe(act, cible);
   if (etat.csv) return gesteCsv(act, v);
   if (etat.r) return gesteFenetreFiche(act, cible);
   if (etat.o) return gesteVolet(act);
@@ -1978,6 +2170,9 @@ document.addEventListener('input', (evenement) => {
   if (cible.id === 'rq') { etat.filtresR.q = cible.value; return rafraichir(); }
   if (cible.id === 'pq') { etat.rechP = cible.value; return rafraichir(); }
   if (cible.id === 'noteRevoir' && etat.r) { etat.r.noteRevoir = cible.value; return; }
+  // Écran Équipe : chaque frappe de l'invitation est gardée, sans redessiner.
+  if (cible.id === 'invCourriel') { etat.eq.invitation.courriel = cible.value; return; }
+  if (cible.id === 'invNom') { etat.eq.invitation.nom = cible.value; return; }
   // Volet d'un porteur : chaque frappe est gardée, et le repère suit les coordonnées écrites.
   const o = etat.o;
   if (o && o.d) {
@@ -2006,6 +2201,8 @@ document.addEventListener('change', (evenement) => {
   if (cible.id === 'fType') { etat.filtres.type = cible.value; return rafraichir(); }
   if (cible.id === 'rType') { etat.filtresR.type = cible.value; return rafraichir(); }
   if (cible.id === 'rStatut') { etat.filtresR.statut = cible.value; return rafraichir(); }
+  if (cible.id === 'invRole') { if (T.roles[cible.value]) etat.eq.invitation.role = cible.value; return; }
+  if (cible.dataset.role !== undefined || cible.dataset.resume !== undefined) return void reglageEquipe(cible);
   if (cible.id === 'fusionVers' && etat.o && etat.o.d && !etat.o.enCours) { etat.o.fusionVers = cible.value; etat.o.confirmation = false; return dessinerFenetre(); }
   const r = etat.r;
   if (r && r.d) {
@@ -2036,6 +2233,7 @@ document.addEventListener('change', (evenement) => {
 document.addEventListener('submit', (evenement) => {
   evenement.preventDefault();
   if (evenement.target.id === 'demandeLien') demanderLien(evenement.target);
+  if (evenement.target.id === 'invitation') inviter();
 });
 
 // Glisser une carte d'une colonne à l'autre.
@@ -2059,13 +2257,13 @@ document.addEventListener('drop', (evenement) => {
 });
 
 // Fermer l'onglet ou recharger la page avec une saisie en cours : le navigateur demande confirmation.
-window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours()) { evenement.preventDefault(); evenement.returnValue = ''; } });
+window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours() || saisieEquipe()) { evenement.preventDefault(); evenement.returnValue = ''; } });
 
 // Changer d'écran. Une fenêtre avec une saisie en cours reste ouverte.
 window.addEventListener('hashchange', () => {
   if (!etat.moi) return;
   if (fenetreOuverte() && !saisieEnCours()) { etat.f = null; etat.r = null; etat.csv = null; etat.o = null; dessinerFenetre(); }
-  etat.q.confirmation = null;
+  etat.q.confirmation = null; etat.eq.confirmation = null;
   rendre(); window.scrollTo(0, 0);
   charger();
 });

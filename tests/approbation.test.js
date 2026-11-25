@@ -84,7 +84,7 @@ test('proposition introuvable ou déjà tranchée', async () => {
 
 test('une nouvelle ressource est créée une fois, « Publiée » et « Actif »', async () => {
   const b = banc();
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X' });
   const [proprietes] = b.de('creerFiche');
   assert.equal(b.de('creerFiche').length, 1);
   assert.deepEqual(proprietes[PROP.statutFiche], { select: { name: 'Publiée' } });
@@ -112,7 +112,7 @@ test("si l'enregistrement de la décision échoue, une seconde tentative ne recr
   const b = banc({ pannes: { marquerDecision: () => { if (premier) { premier = false; return new Error('Notion en panne'); } return null; } } });
   assert.deepEqual(await approuver(b), { ok: false, code: 'notion' });
   assert.equal(b.prop.statut, 'attente');
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X' });
   assert.equal(b.de('creerFiche').length, 1);
 });
 
@@ -134,7 +134,7 @@ test("si l'écriture de la fiche échoue, la proposition reste en attente", asyn
 
 test('une modification met à jour la fiche visée, seulement pour les champs proposés', async () => {
   const b = banc({ proposition: { genre: 'modification', ficheId: 'fiche-1', titre: 'Modification : Cohorte X', contenu: { propose: { contact: { avant: 'a@b.org', apres: 'c@d.org' } }, applique: null, porteursNouveaux: {} } } });
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-1', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-1', courriel: true, genre: 'modification', nom: 'Cohorte X' });
   const [{ id, p }] = b.de('mettreAJourFiche');
   assert.equal(id, 'fiche-1');
   assert.deepEqual(Object.keys(p).sort(), [PROP.contact, PROP.statutFiche].sort());
@@ -225,7 +225,7 @@ test('fiche visée disparue : erreur claire, aucune écriture', async () => {
 });
 
 test('courriel en échec : la décision tient, la réponse le signale', async () => {
-  assert.deepEqual(await approuver(banc({ pannes: { courriel: true } })), { ok: true, ficheId: 'fiche-neuve', courriel: false });
+  assert.deepEqual(await approuver(banc({ pannes: { courriel: true } })), { ok: true, ficheId: 'fiche-neuve', courriel: false, genre: 'nouvelle', nom: 'Outil X' });
 });
 
 test('un refus exige un commentaire, enregistre la décision et prévient le proposant', async () => {
@@ -233,7 +233,7 @@ test('un refus exige un commentaire, enregistre la décision et prévient le pro
   assert.equal((await sans.approbation.refuser({ propositionId: 'prop-1', commentaire: '   ', approbateur: APPROBATEUR })).code, 'invalide');
   assert.equal(sans.de('marquerDecision').length, 0);
   const b = banc();
-  assert.deepEqual(await b.approbation.refuser({ propositionId: 'prop-1', commentaire: ' Hors du périmètre. ', approbateur: APPROBATEUR }), { ok: true, courriel: true });
+  assert.deepEqual(await b.approbation.refuser({ propositionId: 'prop-1', commentaire: ' Hors du périmètre. ', approbateur: APPROBATEUR }), { ok: true, courriel: true, genre: 'nouvelle', titre: 'Nouvelle : Outil X' });
   assert.deepEqual(b.de('marquerDecision')[0], { id: 'prop-1', statut: 'refusee', approbateur: APPROBATEUR, commentaire: 'Hors du périmètre.' });
   assert.deepEqual(b.de('courriel.refusee')[0], { a: 'p@exemple.org', titre: 'Nouvelle : Outil X', commentaire: 'Hors du périmètre.' });
   assert.equal(b.de('creerFiche').length + b.de('mettreAJourFiche').length + b.de('trouverFiche').length, 0);
@@ -269,7 +269,7 @@ test("une panne de lecture ne laisse pas la proposition verrouillée", async () 
   let premier = true;
   const b = banc({ pannes: { lireProposition: () => { if (premier) { premier = false; return new Error('Notion en panne'); } return null; } } });
   assert.deepEqual(await approuver(b), { ok: false, code: 'notion' });
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X' });
 });
 
 // Verrou partagé factice, comme celui du stockage clé-valeur.
@@ -327,7 +327,7 @@ test('seconde tentative avec un nom corrigé : la fiche déjà créée est mise 
   let premier = true;
   const b = banc({ pannes: { marquerDecision: () => { if (premier) { premier = false; return new Error('panne'); } return null; } } });
   assert.equal((await approuver(b)).code, 'notion');
-  assert.deepEqual(await approuver(b, { corrections: { nom: 'Outil X corrigé' } }), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b, { corrections: { nom: 'Outil X corrigé' } }), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X corrigé' });
   assert.equal(b.de('creerFiche').length, 1);
   const [{ id, p }] = b.de('mettreAJourFiche');
   assert.equal(id, 'fiche-neuve');
@@ -427,7 +427,7 @@ test('une personne en lecture seule ne peut faire aucun geste, même en appelant
 test('demander un second regard : la proposition passe en vérification, rien d\'autre ne bouge', async () => {
   const verrous = verrousPartages();
   const b = banc({ verrous });
-  assert.deepEqual(await enVerification(b), { ok: true });
+  assert.deepEqual(await enVerification(b), { ok: true, genre: 'nouvelle', titre: 'Nouvelle : Outil X' });
   assert.deepEqual(b.de('marquerVerification'), ['prop-1']);
   assert.equal(b.prop.statut, 'verification');
   assert.equal(ecritures(b), 1, 'ni fiche, ni décision, ni courriel');
@@ -436,7 +436,7 @@ test('demander un second regard : la proposition passe en vérification, rien d\
 
 test('second regard : déjà en vérification, rien n\'est réécrit ; tranchée ou introuvable, refusé', async () => {
   const deja = banc({ proposition: { statut: 'verification' } });
-  assert.deepEqual(await enVerification(deja), { ok: true });
+  assert.deepEqual(await enVerification(deja), { ok: true, inchangee: true });
   assert.equal(ecritures(deja), 0);
   for (const statut of ['approuvee', 'refusee', null]) {
     const b = banc({ proposition: { statut } });
@@ -530,12 +530,12 @@ test('si Notion échoue pendant l\'avis : code « notion », verrou rendu', asyn
 
 test('une proposition en vérification s\'approuve et se refuse comme une proposition en attente', async () => {
   const b = banc({ proposition: { statut: 'verification' } });
-  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true });
+  assert.deepEqual(await approuver(b), { ok: true, ficheId: 'fiche-neuve', courriel: true, genre: 'nouvelle', nom: 'Outil X' });
   assert.equal(b.de('creerFiche').length, 1);
   assert.equal(b.de('marquerDecision')[0].statut, 'approuvee');
   assert.deepEqual(await approuver(b), { ok: false, code: 'deja-tranchee' }, 'pas appliquée deux fois');
   const c = banc({ proposition: { statut: 'verification' } });
-  assert.deepEqual(await c.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Doublon.', approbateur: APPROBATEUR }), { ok: true, courriel: true });
+  assert.deepEqual(await c.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Doublon.', approbateur: APPROBATEUR }), { ok: true, courriel: true, genre: 'nouvelle', titre: 'Nouvelle : Outil X' });
   assert.equal(c.de('marquerDecision')[0].statut, 'refusee');
 });
 
@@ -623,4 +623,106 @@ test('la fiche visée est verrouillée pendant l\'approbation : occupée, rien n
   await verrous.rendreVerrou('fiche:fiche-1');
   assert.equal((await approuver(b)).ok, true);
   assert.equal(await verrous.prendreVerrou('fiche:fiche-1'), true, 'le verrou de la fiche est rendu');
+});
+
+// ─── Modifications de l'équipe : l'Administration seule tranche, sans courriel ───
+const MAXIME = 'maxime@exemple.ca';
+const DE_L_EQUIPE = {
+  genre: 'equipe', ficheId: 'fiche-1', courriel: MAXIME, nomProposant: 'Maxime Lafrenière', lienAvecRessource: 'aucun', titre: "Modification de l'équipe : Cohorte X",
+  contenu: { propose: { contact: { avant: 'a@b.org', apres: 'c@d.org' } }, applique: null, porteursNouveaux: {} },
+};
+const EQUIPE_4A = [{ nom: 'Tess Berthier', courriel: APPROBATEUR, role: 'administration' }, { nom: 'Maxime Lafrenière', courriel: MAXIME, role: 'approbation' }];
+const bancEquipe = (options = {}) => banc({ proposition: DE_L_EQUIPE, approbateurs: [APPROBATEUR, MAXIME], equipe: EQUIPE_4A, avecVersions: true, ...options });
+
+test('une modification de l\'équipe : une personne en Approbation ne peut ni l\'approuver ni la refuser, rien n\'est écrit', async () => {
+  const b = bancEquipe();
+  assert.deepEqual(await approuver(b, { approbateur: MAXIME }), { ok: false, code: 'role' });
+  assert.deepEqual(await b.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Non.', approbateur: MAXIME }), { ok: false, code: 'role' });
+  for (const nom of ['mettreAJourFiche', 'versions.ecrire', 'marquerDecision', 'courriel.approuvee', 'courriel.refusee']) assert.equal(b.de(nom).length, 0, nom);
+  assert.equal(b.prop.statut, 'attente');
+  // Le verrou est rendu : l'Administration peut trancher ensuite.
+  assert.equal((await approuver(b)).ok, true);
+});
+
+test('une modification de l\'équipe approuvée par l\'Administration : fiche changée, version « Proposition », aucun courriel, jamais « Vérifiée »', async () => {
+  const b = bancEquipe();
+  const retour = await approuver(b);
+  assert.equal(retour.ok, true);
+  assert.equal(retour.courriel, false);
+  assert.equal(retour.historique, true);
+  const [ecrit] = b.de('mettreAJourFiche');
+  assert.equal(ecrit.id, 'fiche-1');
+  assert.deepEqual(ecrit.p[PROP.contact], { email: 'c@d.org' });
+  assert.ok(!Object.hasOwn(ecrit.p, PROP.verifieeLe) && !Object.hasOwn(ecrit.p, PROP.verifieePar));
+  assert.deepEqual(b.de('versions.ecrire'), [{
+    ficheId: 'fiche-1', nom: 'Cohorte X', source: 'proposition', par: APPROBATEUR, propositionId: 'prop-1',
+    changements: { contact: { avant: 'a@b.org', apres: 'c@d.org' } },
+  }]);
+  assert.equal(b.de('marquerDecision')[0].statut, 'approuvee');
+  assert.equal(b.de('marquerDecision')[0].approbateur, APPROBATEUR);
+  assert.equal(b.de('courriel.approuvee').length + b.de('courriel.refusee').length, 0);
+  assert.equal(b.de('creerFiche').length, 0);
+});
+
+test('une modification de l\'équipe ne marque jamais la fiche « vérifiée », même si elle se dit « responsable »', async () => {
+  for (const lienAvecRessource of ['responsable', 'jy-travaille']) {
+    const b = bancEquipe({ proposition: { ...DE_L_EQUIPE, lienAvecRessource, courriel: 'dehors@exemple.org' } });
+    assert.equal((await approuver(b)).ok, true);
+    const [ecrit] = b.de('mettreAJourFiche');
+    assert.ok(!Object.hasOwn(ecrit.p, PROP.verifieeLe) && !Object.hasOwn(ecrit.p, PROP.verifieePar), lienAvecRessource);
+    assert.equal(b.de('courriel.approuvee').length, 0);
+  }
+});
+
+test('une modification de l\'équipe refusée par l\'Administration : commentaire obligatoire et gardé, aucun courriel', async () => {
+  const b = bancEquipe();
+  const sans = await b.approbation.refuser({ propositionId: 'prop-1', commentaire: '  ', approbateur: APPROBATEUR });
+  assert.equal(sans.code, 'invalide');
+  assert.ok(sans.erreurs.commentaire);
+  const retour = await b.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Le contact est le bon.', approbateur: APPROBATEUR });
+  assert.equal(retour.ok, true);
+  assert.equal(retour.courriel, false);
+  assert.deepEqual(b.de('marquerDecision').map((d) => [d.statut, d.commentaire]), [['refusee', 'Le contact est le bon.']]);
+  assert.equal(b.de('courriel.refusee').length + b.de('courriel.approuvee').length, 0);
+  assert.equal(b.de('mettreAJourFiche').length, 0);
+});
+
+test('une modification de l\'équipe : le second regard et les avis restent ouverts au rôle Approbation', async () => {
+  const b = bancEquipe();
+  assert.equal((await b.approbation.mettreEnVerification({ propositionId: 'prop-1', par: MAXIME })).ok, true);
+  assert.equal(b.prop.statut, 'verification');
+  assert.equal((await b.approbation.donnerAvis({ propositionId: 'prop-1', par: MAXIME, sens: 'favorable', commentaire: '' })).ok, true);
+  assert.equal(b.de('ecrireAvis').length, 1);
+});
+
+test('une modification de l\'équipe sur une fiche disparue ou écartée ne s\'approuve pas', async () => {
+  const b = bancEquipe({ fiche: { id: 'fiche-1', nom: 'Cohorte X', statutFiche: 'Écartée', porteurIds: [] } });
+  assert.equal((await approuver(b)).code, 'fiche-introuvable');
+  assert.equal(b.de('mettreAJourFiche').length, 0);
+});
+
+test('les propositions du public ne changent pas : une personne en Approbation les tranche, et le courriel part', async () => {
+  const publique = { ...DE_L_EQUIPE, genre: 'modification', courriel: 'pat@exemple.org', nomProposant: 'Pat', titre: 'Modification : Cohorte X' };
+  const b = bancEquipe({ proposition: publique });
+  const retour = await approuver(b, { approbateur: MAXIME });
+  assert.equal(retour.ok, true);
+  assert.equal(retour.courriel, true);
+  assert.deepEqual(b.de('courriel.approuvee').map((m) => m.a), ['pat@exemple.org']);
+  const c = bancEquipe({ proposition: publique });
+  const refus = await c.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Non.', approbateur: MAXIME });
+  assert.equal(refus.ok, true);
+  assert.equal(refus.courriel, true);
+  assert.deepEqual(c.de('courriel.refusee').map((m) => m.a), ['pat@exemple.org']);
+});
+
+test('les gestes réussis disent sur quoi ils portaient, pour le journal de l\'équipe', async () => {
+  const b = bancEquipe();
+  assert.deepEqual(await b.approbation.mettreEnVerification({ propositionId: 'prop-1', par: MAXIME }), { ok: true, genre: 'equipe', titre: "Modification de l'équipe : Cohorte X" });
+  const retour = await approuver(b);
+  assert.equal(retour.genre, 'equipe');
+  assert.equal(retour.nom, 'Cohorte X');
+  const c = bancEquipe();
+  const refus = await c.approbation.refuser({ propositionId: 'prop-1', commentaire: 'Non.', approbateur: APPROBATEUR });
+  assert.equal(refus.genre, 'equipe');
+  assert.equal(refus.titre, "Modification de l'équipe : Cohorte X");
 });

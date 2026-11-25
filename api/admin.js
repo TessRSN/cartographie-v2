@@ -13,10 +13,12 @@
  *   POST refuser      { id, commentaire }
  *   GET  ressources                             → toutes les fiches, publiques et écartées
  *   GET  ressource    ?fiche= (ou ?neuve=1)     → une fiche, son historique et les listes de choix
- *   POST enregistrer  { fiche, valeurs, depart } → modifie une fiche ; 409 si un champ a changé entre-temps
- *   POST retablir     { fiche, numero }         → la fiche reprend les valeurs d'une version
- *   POST verifier | ecarter | republier { fiche }
- *   POST creer        { valeurs }               → ajoute une ressource
+ *   POST enregistrer  { fiche, valeurs, depart } → modifie une fiche ; 409 si un champ a changé entre-temps.
+ *                                                 Administration : la fiche change. Approbation : une « Modification
+ *                                                 de l'équipe » part dans les propositions ({ proposee: true })
+ *   POST retablir     { fiche, numero }         → la fiche reprend les valeurs d'une version (Administration)
+ *   POST verifier { fiche } ; ecarter | republier { fiche } (Administration)
+ *   POST creer        { valeurs }               → ajoute une ressource (Administration)
  *   GET  porteurs                               → tous les porteurs, et la clé du fond de carte
  *   GET  porteur      ?porteur=                 → un porteur, ses ressources et les autres porteurs
  *   POST enregistrer-porteur { porteur, valeurs } | creer-porteur { valeurs }
@@ -26,19 +28,27 @@
  *   POST fusionner-valeurs { cle, de, vers }    → une seule écriture pour un mot-clé ou une norme
  *   POST revoir         { fiche, actif, note }  → marque une fiche « à revoir » pour l'équipe, ou retire la marque
  *   POST revisiter-lien { fiche }               → revisite le lien principal d'une fiche
+ *   GET  equipe                                 → les personnes qui ont accès, et le journal de l'équipe
+ *   POST inviter        { courriel, nom, role } → inscrit une personne et lui envoie son lien d'entrée (Administration)
+ *   POST changer-role   { personne, role }      → (Administration) ; jamais le sien
+ *   POST retirer        { personne }            → coupe l'accès sans rien supprimer (Administration) ; jamais soi-même
+ *   POST regler-resume  { personne, actif }     → le résumé hebdomadaire : le sien, ou celui de tous en Administration
  * Une fiche est désignée par son adresse publique, ou par un repère opaque si elle est écartée ;
- * un porteur, toujours par un repère opaque : jamais par un identifiant Notion.
+ * un porteur ou une personne, toujours par un repère opaque : jamais par un identifiant Notion.
+ * Les courriels de l'équipe ne sortent que par « equipe » ; partout ailleurs, une personne est un nom.
+ * Chaque geste réussi est noté dans le journal de l'équipe, qui ne fait jamais échouer le geste.
  * Hors « session » et « deconnexion », chaque appel exige un témoin de session valide ET une
  * personne toujours inscrite et active, dont le rôle, relu à chaque appel, suffit pour l'action.
  * Tout envoi doit venir du site lui-même.
  */
 const { signer, verifier } = require('../lib/jetons');
 const { CHAMPS, egales } = require('../public/js/champs.js');
-const { avisDe } = require('../lib/propositions');
+const { avisDe, ROLES } = require('../lib/propositions');
 const { verifierOctets } = require('../lib/images');
 const { ouvertes, origineSure, memeOrigineStricte, corpsDe, dependances } = require('../lib/contributions');
 const { repereValide } = require('../lib/ressources');
 const { reperePorteurValide } = require('../lib/porteurs');
+const { reperePersonneValide } = require('../lib/equipe');
 
 const TEMOIN = 'carto_session';
 const DUREE_SESSION_S = 7 * 24 * 3600;
@@ -50,14 +60,19 @@ const ACTIONS = {
   verification: { methode: 'POST', role: 'approbation' }, avis: { methode: 'POST', role: 'approbation' },
   approuver: { methode: 'POST', role: 'approbation' }, refuser: { methode: 'POST', role: 'approbation' },
   ressources: { methode: 'GET', role: 'lecture' }, ressource: { methode: 'GET', role: 'lecture' },
-  enregistrer: { methode: 'POST', role: 'approbation' }, retablir: { methode: 'POST', role: 'approbation' },
-  verifier: { methode: 'POST', role: 'approbation' }, ecarter: { methode: 'POST', role: 'approbation' },
+  // Modifier une fiche reste ouvert au rôle Approbation, mais sa modification part alors en proposition.
+  enregistrer: { methode: 'POST', role: 'approbation' }, retablir: { methode: 'POST', role: 'administration' },
+  verifier: { methode: 'POST', role: 'approbation' }, ecarter: { methode: 'POST', role: 'administration' },
   revoir: { methode: 'POST', role: 'approbation' },
-  republier: { methode: 'POST', role: 'approbation' }, creer: { methode: 'POST', role: 'approbation' },
+  republier: { methode: 'POST', role: 'administration' }, creer: { methode: 'POST', role: 'administration' },
   porteurs: { methode: 'GET', role: 'lecture' }, porteur: { methode: 'GET', role: 'lecture' }, qualite: { methode: 'GET', role: 'lecture' },
   'enregistrer-porteur': { methode: 'POST', role: 'approbation' }, 'creer-porteur': { methode: 'POST', role: 'approbation' },
   geocoder: { methode: 'POST', role: 'approbation' }, 'fusionner-porteurs': { methode: 'POST', role: 'approbation' },
   'fusionner-valeurs': { methode: 'POST', role: 'approbation' }, 'revisiter-lien': { methode: 'POST', role: 'approbation' },
+  equipe: { methode: 'GET', role: 'lecture' },
+  inviter: { methode: 'POST', role: 'administration' }, 'changer-role': { methode: 'POST', role: 'administration' }, retirer: { methode: 'POST', role: 'administration' },
+  // Chaque personne règle son propre résumé : le module de l'équipe vérifie que c'est bien le sien.
+  'regler-resume': { methode: 'POST', role: 'lecture' },
 };
 // Les gestes du lot 3 : ce que le corps doit porter, puis l'appel, toujours au nom de la personne en session.
 const texteCourt = (v, max) => typeof v === 'string' && v.length <= max;
@@ -68,6 +83,13 @@ const GESTES_LOT3 = {
   'fusionner-porteurs': { lisible: (c) => reperePorteurValide(c.doublon) && reperePorteurValide(c.garde), faire: (d, c, par) => d.porteurs.fusionner({ doublon: c.doublon, garde: c.garde, par }) },
   'fusionner-valeurs': { lisible: (c) => texteCourt(c.cle, 40) && texteCourt(c.de, 200) && texteCourt(c.vers, 200), faire: (d, c, par) => d.qualite.fusionnerValeurs({ cle: c.cle, de: c.de, vers: c.vers, par }) },
   'revisiter-lien': { lisible: (c) => repereValide(c.fiche), faire: (d, c, par) => d.qualite.revisiterLien({ repere: c.fiche, par }) },
+};
+// Les gestes sur l'équipe. Les garde-fous (son propre rôle, la dernière Administration…) sont dans lib/equipe.js.
+const GESTES_EQUIPE = {
+  inviter: { lisible: (c) => texteCourt(c.courriel, 254) && texteCourt(c.nom, 400) && texteCourt(c.role, 40), faire: (d, c, par, origine) => d.equipe.inviter({ courriel: c.courriel, nom: c.nom, role: c.role, par, origine }) },
+  'changer-role': { lisible: (c) => reperePersonneValide(c.personne) && texteCourt(c.role, 40), faire: (d, c, par) => d.equipe.changerRole({ personne: c.personne, role: c.role, par }) },
+  retirer: { lisible: (c) => reperePersonneValide(c.personne), faire: (d, c, par) => d.equipe.retirer({ personne: c.personne, par }) },
+  'regler-resume': { lisible: (c) => reperePersonneValide(c.personne) && typeof c.actif === 'boolean', faire: (d, c, par) => d.equipe.reglerResume({ personne: c.personne, actif: c.actif, par }) },
 };
 // Les gestes qui portent sur une fiche existante.
 const GESTES_FICHE = ['enregistrer', 'retablir', 'verifier', 'revoir', 'ecarter', 'republier'];
@@ -81,7 +103,12 @@ const CONTENUS_TRANCHEES_MAX = 40;
 const ACTIVITE_MAX = 20;
 // Jour d'envoi du résumé hebdomadaire : celui du planificateur (« crons » dans vercel.json), vérifié par un essai.
 const JOUR_RESUME = 'lundi';
-const CODES = { 'adresse-introuvable': 404, 'a-poursuivre': 409, interrompue: 502, 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
+const LIGNES_JOURNAL = 50;
+const MESSAGES_ROLE = {
+  approbation: 'Votre rôle ne permet pas ce geste : il demande le rôle Approbation ou Administration.',
+  administration: 'Votre rôle ne permet pas ce geste : il est réservé au rôle Administration.',
+};
+const CODES = { role: 403, 'soi-meme': 409, 'derniere-administration': 409, 'deja-inscrite': 409, 'adresse-introuvable': 404, 'a-poursuivre': 409, interrompue: 502, 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
 const CLES = new Set(CHAMPS.map((c) => c.cle));
 const idValide = (id) => typeof id === 'string' && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(id);
 const estObjet = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -107,21 +134,74 @@ function poserTemoin(res, valeur, dureeS, origine) {
   res.setHeader('Set-Cookie', `${TEMOIN}=${valeur}; HttpOnly;${secure} SameSite=Strict; Path=/api/admin; Max-Age=${dureeS}`);
 }
 
-// Le nom d'une personne de l'équipe d'après son courriel ; à défaut, ce qu'on a sous la main.
+// Le nom d'une personne de l'équipe d'après son courriel ; à défaut, le nom qu'on a sous la main.
+// Jamais le courriel : hors de l'écran « Équipe », une personne de l'équipe n'est qu'un nom.
+// « equipe » compte ici les personnes retirées : leur nom reste dans l'historique.
 const nomDans = (equipe, courriel, sinon) => {
   const personne = courriel ? equipe.find((x) => x.courriel === courriel) : null;
-  return (personne && personne.nom) || sinon || courriel || null;
+  return (personne && personne.nom) || sinon || null;
 };
 // Les avis tels que le panneau les montre : le nom, jamais le courriel ; « moi » marque le sien.
 function avisPublics(avis, equipe, moi) {
-  return avis.map((a) => ({ nom: nomDans(equipe, a.courriel, a.nom), sens: a.sens, commentaire: a.commentaire, le: a.le, moi: a.courriel === moi }));
+  return avis.map((a) => ({ nom: nomDans(equipe, a.courriel, a.nom) || '', sens: a.sens, commentaire: a.commentaire, le: a.le, moi: a.courriel === moi }));
+}
+// Une modification, du public ou de l'équipe, vise une fiche qui existe déjà.
+const viseUneFiche = (genre) => genre === 'modification' || genre === 'equipe';
+
+// ─── Le journal de l'équipe ───
+// Pour chaque action : le geste noté, ce sur quoi il porte et la phrase, à partir de ce que le
+// module a répondu (r) et de ce qui était demandé (c). null : rien à noter (rien n'a changé).
+const sansPrefixe = (titre) => String(titre || '').replace(/^[^:]{1,40} : /, '');
+const OBJETS = {
+  nouvelle: (nom) => `la nouvelle ressource ${nom}`, modification: (nom) => `la modification de ${nom}`,
+  rsn: (nom) => `la fiche à remplir ${nom}`, equipe: (nom) => `la modification de l'équipe sur ${nom}`,
+};
+const objetDe = (genre, nom) => (OBJETS[genre] || OBJETS.modification)(nom);
+const champs = (n) => `${n} ${n > 1 ? 'champs' : 'champ'}`;
+const ligne = (geste, sur, phrase) => ({ geste, sur, phrase });
+const JOURNAL = {
+  approuver: (r) => ligne('Approbation', r.nom, `a approuvé ${objetDe(r.genre, r.nom)}`),
+  refuser: (r) => ligne('Refus', sansPrefixe(r.titre), `a refusé ${objetDe(r.genre, sansPrefixe(r.titre))}`),
+  verification: (r) => (r.inchangee ? null : ligne('Second regard', sansPrefixe(r.titre), `a demandé un second regard sur ${objetDe(r.genre, sansPrefixe(r.titre))}`)),
+  enregistrer: (r) => (r.inchangee ? null : r.proposee
+    ? ligne('Modification proposée', r.nom, `a proposé une modification de ${r.nom} (${champs(r.champs)}), à faire approuver`)
+    : ligne('Fiche modifiée', r.nom, `a modifié la fiche de ${r.nom} (${champs(r.champs)})`)),
+  creer: (r) => ligne('Fiche créée', r.nom, `a ajouté la ressource ${r.nom}`),
+  retablir: (r, c) => (r.inchangee ? null : ligne('Version rétablie', r.nom, `a rétabli la version ${Number(c.numero)} de ${r.nom}`)),
+  ecarter: (r) => (r.inchangee ? null : ligne('Fiche écartée', r.nom, `a écarté la fiche de ${r.nom}`)),
+  republier: (r) => (r.inchangee ? null : ligne('Fiche republiée', r.nom, `a republié la fiche de ${r.nom}`)),
+  verifier: (r) => ligne('Fiche vérifiée', r.nom, `a marqué ${r.nom} comme vérifiée`),
+  revoir: (r) => ligne('Fiche à revoir', r.nom, r.aRevoir ? `a marqué ${r.nom} « à revoir »` : `a retiré la marque « à revoir » de ${r.nom}`),
+  'creer-porteur': (r) => ligne('Porteur créé', r.nom, `a ajouté le porteur ${r.nom}`),
+  'enregistrer-porteur': (r) => (r.inchange ? null : ligne('Porteur modifié', r.nom, `a modifié le porteur ${r.nom}`)),
+  'fusionner-porteurs': (r) => ligne('Porteurs fusionnés', r.nom, `a fusionné le porteur ${r.nomDoublon} dans ${r.nom}`),
+  'fusionner-valeurs': (r, c) => (r.faites ? ligne('Valeurs fusionnées', c.vers, `a fusionné « ${c.de} » dans « ${c.vers} » (${r.faites} ${r.faites > 1 ? 'fiches' : 'fiche'})`) : null),
+  inviter: (r) => ligne('Invitation', r.nom, `${r.reactivee ? "a redonné l'accès à" : 'a invité'} ${r.nom} (${ROLES[r.role]})`),
+  'changer-role': (r) => (r.inchange ? null : ligne('Rôle changé', r.nom, `a changé le rôle de ${r.nom} : ${ROLES[r.role]}`)),
+  retirer: (r) => ligne('Personne retirée', r.nom, `a retiré l'accès de ${r.nom}`),
+  'regler-resume': (r) => (r.inchange ? null : ligne('Résumé réglé', r.nom, `${r.resume ? 'a activé' : 'a arrêté'} le résumé hebdomadaire pour ${r.nom}`)),
+};
+// Note un geste réussi. Ne lève jamais et ne change rien à la réponse : une panne va au journal du serveur.
+async function consigner(d, action, par, retour, corps) {
+  try {
+    if (!d.journalEquipe || !Object.hasOwn(JOURNAL, action) || !retour || !retour.ok) return;
+    const aNoter = JOURNAL[action](retour, corps || {});
+    if (aNoter) await d.journalEquipe.noter({ ...aNoter, par });
+  } catch (err) {
+    try { d.journal(`[admin] journal de l'équipe non écrit (${action}) :`, err && err.message); } catch (e) { /* rien de plus à faire */ }
+  }
+}
+// Ce qu'un geste réussi répond : sans ce que le module a ajouté pour le journal.
+function reponseDe(retour) {
+  const { nom, nomDoublon, titre, genre, ...reste } = retour;
+  return reste;
 }
 // Une adresse web réduite à ce qui la distingue : sans protocole, sans « www. », sans barre finale, en minuscules.
 const lienReduit = (lien) => (typeof lien === 'string' ? lien.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/[/#?]+$/, '') : '');
 const nomReduit = (nom) => (typeof nom === 'string' ? nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim() : '');
 // Une nouvelle ressource qui a le lien principal ou le nom d'une fiche publique : { adresse, nom }, sinon null.
 function ressemblance(p, propose, ressources) {
-  if (p.genre === 'modification' || !OUVERTS.includes(p.statut)) return null;
+  if (viseUneFiche(p.genre) || !OUVERTS.includes(p.statut)) return null;
   const lien = lienReduit(propose.lien && propose.lien.apres);
   const nom = nomReduit(propose.nom && propose.nom.apres);
   const fiche = (ressources || []).find((r) => (lien && lienReduit(r.lien) === lien) || (nom && nomReduit(r.nom) === nom));
@@ -147,14 +227,17 @@ function resume(p, contenu, { adresseParId, ficheParAdresse, ressources }, equip
   const applique = objet(contenu).applique ? duCatalogue(objet(contenu).applique) : null;
   const nomPropose = propose.nom && typeof propose.nom.apres === 'string' ? propose.nom.apres.trim() : '';
   const typePropose = propose.typePrincipal && typeof propose.typePrincipal.apres === 'string' ? propose.typePrincipal.apres : null;
+  // Une modification de l'équipe porte le nom de la personne, jamais son courriel.
+  const deLEquipe = p.genre === 'equipe';
   return {
     id: p.id, genre: p.genre,
     // Le nom de la ressource : celui de la fiche visée, sinon le nom proposé, sinon le titre sans son préfixe.
     nom: (fiche && fiche.nom) || nomPropose || String(p.titre || '').replace(/^[^:]{1,40} : /, ''),
-    statut: p.statut, proposeLe: p.proposeLe, verificationLe: p.verificationLe || null, courriel: p.courriel, nomProposant: p.nomProposant,
+    statut: p.statut, proposeLe: p.proposeLe, verificationLe: p.verificationLe || null,
+    courriel: deLEquipe ? null : p.courriel, nomProposant: deLEquipe ? (nomDans(equipe, p.courriel, p.nomProposant) || '') : p.nomProposant,
     lienAvecRessource: p.lienAvecRessource, decidePar: nomDans(equipe, p.decidePar), decideLe: p.decideLe, commentaire: p.commentaire, aLogo: !!p.logoPropose,
     fiche: adresse ? { adresse, nom: (fiche && fiche.nom) || adresse } : null,
-    type: p.genre === 'modification' ? ((fiche && fiche.typePrincipal) || null) : typePropose,
+    type: viseUneFiche(p.genre) ? ((fiche && fiche.typePrincipal) || null) : typePropose,
     nbChamps: lu ? Object.keys(propose).length + (p.logoPropose ? 1 : 0) : null,
     avis: avisPublics(avisDe(contenu), equipe, moi),
     ressemble: !!ressemblance(p, propose, ressources),
@@ -236,25 +319,28 @@ function creerGestionnaire(donnees) {
       // compte tout de suite, même avec un témoin encore valide.
       const session = verifier(temoinDe(req), 'session', secret);
       if (!session) return refuse();
-      const equipe = await d.propositions.equipe();
+      // « annuaire » : toute la base, personnes retirées comprises, pour montrer un nom dans
+      // l'historique. Seules les personnes actives (« equipe ») ont accès.
+      const annuaire = await d.propositions.equipe({ avecInactifs: true });
+      const equipe = annuaire.filter((x) => x.actif !== false);
       const personne = equipe.find((x) => x.courriel === session.courriel);
       if (!personne) return refuse();
-      if (rang(personne.role) < RANGS[roleMinimal]) {
-        return res.status(403).json({ code: 'role', erreur: 'Votre rôle ne permet pas ce geste : il demande le rôle Approbation ou Administration.' });
-      }
+      const roleRefuse = () => res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE[roleMinimal] || MESSAGES_ROLE.administration });
+      if (rang(personne.role) < RANGS[roleMinimal]) return roleRefuse();
       const approbateur = personne.courriel;
+      const administre = rang(personne.role) >= RANGS.administration;
 
       if (action === 'moi') {
         return res.status(200).json({
           nom: personne.nom || '', courriel: personne.courriel, role: personne.role,
-          permis: { decider: rang(personne.role) >= RANGS.approbation, administrer: rang(personne.role) >= RANGS.administration },
+          permis: { decider: rang(personne.role) >= RANGS.approbation, administrer: administre },
         });
       }
 
       if (action === 'file' || action === 'accueil') {
         const { propositions, contenus, publiques } = await tableau(d, contenusTranches);
         const r = reperes(publiques);
-        const resumes = propositions.map((p) => resume(p, contenus.get(p.id), r, equipe, approbateur));
+        const resumes = propositions.map((p) => resume(p, contenus.get(p.id), r, annuaire, approbateur));
         if (action === 'file') return res.status(200).json({ courriel: approbateur, propositions: resumes });
         return res.status(200).json({
           compteurs: { nouvelles: resumes.filter((x) => x.statut === 'attente').length, verification: resumes.filter((x) => x.statut === 'verification').length },
@@ -273,14 +359,14 @@ function creerGestionnaire(donnees) {
       if (action === 'ressources') {
         const { ressources, historique } = await d.ressources.lister();
         // Le nom de la personne, jamais son courriel.
-        return res.status(200).json({ historique, ressources: ressources.map((r) => ({ ...r, dernier: r.dernier ? { ...r.dernier, par: nomDans(equipe, r.dernier.par) } : null })) });
+        return res.status(200).json({ historique, ressources: ressources.map((r) => ({ ...r, dernier: r.dernier ? { ...r.dernier, par: nomDans(annuaire, r.dernier.par) } : null })) });
       }
       if (action === 'ressource') {
         if (req.query.neuve) return res.status(200).json(await d.ressources.neuve());
         if (!repereValide(req.query.fiche)) return illisible();
         const vue = await d.ressources.lire(req.query.fiche);
         if (!vue) return res.status(404).json({ code: 'introuvable', erreur: 'Cette fiche est introuvable.' });
-        return res.status(200).json({ ...vue, versions: vue.versions.map((v) => ({ ...v, par: nomDans(equipe, v.par) })) });
+        return res.status(200).json({ ...vue, versions: vue.versions.map((v) => ({ ...v, par: nomDans(annuaire, v.par) })) });
       }
       if (action === 'creer' || GESTES_FICHE.includes(action)) {
         // La personne qui agit est celle de la session : rien de ce que dit le corps ne la remplace.
@@ -298,7 +384,40 @@ function creerGestionnaire(donnees) {
           if (action === 'revoir') Object.assign(demande, { actif: corps.actif === true, note: typeof corps.note === 'string' ? corps.note : '' });
           retour = await d.ressources[action](demande);
         }
-        if (retour.ok) return res.status(200).json(retour);
+        if (retour.ok) {
+          await consigner(d, action, approbateur, retour, corps);
+          return res.status(200).json(reponseDe(retour));
+        }
+        if (retour.code === 'role') return roleRefuse();
+        const { ok, code, ...detail } = retour;
+        return res.status(CODES[code] || 502).json({ code, ...detail });
+      }
+
+      // ─── Équipe et journal ───
+      if (action === 'equipe') {
+        const actif = !!(d.journalEquipe && d.journalEquipe.active());
+        // Le journal illisible n'empêche pas de voir l'équipe.
+        const lireJournal = async () => {
+          if (!actif) return { lu: true, lignes: [] };
+          try { return { lu: true, lignes: await d.journalEquipe.lire({ limite: LIGNES_JOURNAL }) }; } catch (err) { d.journal("[admin] journal de l'équipe illisible :", err.message); return { lu: false, lignes: [] }; }
+        };
+        const [personnes, lecture] = await Promise.all([d.equipe.lister({ moi: approbateur }), lireJournal()]);
+        return res.status(200).json({
+          personnes,
+          resume: { jour: JOUR_RESUME },
+          // Le nom de la personne, jamais son courriel ; null si elle n'a plus de ligne ou pas de nom.
+          journal: { actif, lu: lecture.lu, lignes: lecture.lignes.map((l) => ({ qui: nomDans(annuaire, l.par), phrase: l.phrase, le: l.le })) },
+        });
+      }
+      if (Object.hasOwn(GESTES_EQUIPE, action)) {
+        const geste = GESTES_EQUIPE[action];
+        if (!geste.lisible(corps)) return illisible();
+        const retour = await geste.faire(d, corps, approbateur, origine);
+        if (retour.ok) {
+          await consigner(d, action, approbateur, retour, corps);
+          return res.status(200).json(reponseDe(retour));
+        }
+        if (retour.code === 'role') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
         const { ok, code, ...detail } = retour;
         return res.status(CODES[code] || 502).json({ code, ...detail });
       }
@@ -319,7 +438,10 @@ function creerGestionnaire(donnees) {
         const geste = GESTES_LOT3[action];
         if (!geste.lisible(corps)) return illisible();
         const retour = await geste.faire(d, corps, approbateur);
-        if (retour.ok) return res.status(200).json(retour);
+        if (retour.ok) {
+          await consigner(d, action, approbateur, retour, corps);
+          return res.status(200).json(reponseDe(retour));
+        }
         const { ok, code, ...detail } = retour;
         return res.status(CODES[code] || 502).json({ code, ...detail });
       }
@@ -345,7 +467,7 @@ function creerGestionnaire(donnees) {
         const r = reperes(publiques);
         const contenu = objet(proposition.contenu);
         // « ressemble » sort à part, avec la fiche qui ressemble.
-        const { ressemble, ...vue } = resume(proposition, proposition.contenu === undefined ? null : proposition.contenu, r, equipe, approbateur);
+        const { ressemble, ...vue } = resume(proposition, proposition.contenu === undefined ? null : proposition.contenu, r, annuaire, approbateur);
         const publique = vue.fiche ? r.ficheParAdresse.get(vue.fiche.adresse) : null;
         const fermes = CHAMPS.filter((c) => c.saisie === 'choix' || c.saisie === 'choixMultiples');
         const listes = CHAMPS.filter((c) => c.saisie === 'listeOuverte' && c.cle !== 'porteurs');
@@ -380,13 +502,25 @@ function creerGestionnaire(donnees) {
           ? await d.approbation.mettreEnVerification({ propositionId: id, par: approbateur })
           : await d.approbation.donnerAvis({ propositionId: id, par: approbateur, sens: typeof corps.sens === 'string' ? corps.sens : '', commentaire });
         if (!retour.ok) return res.status(CODES[retour.code] || 502).json({ code: retour.code, erreurs: retour.erreurs });
-        return res.status(200).json(action === 'avis' ? { ok: true, avis: avisPublics(avisDe({ avis: retour.avis }), equipe, approbateur) } : { ok: true });
+        // Un avis ne se note pas dans le journal : la table n'a pas de ligne pour lui.
+        await consigner(d, action, approbateur, retour, corps);
+        return res.status(200).json(action === 'avis' ? { ok: true, avis: avisPublics(avisDe({ avis: retour.avis }), annuaire, approbateur) } : { ok: true });
       }
 
+      // Une modification de l'équipe ne se tranche qu'en Administration. Le module de l'approbation
+      // le vérifie de son côté, sous le verrou ; ici, une personne en Approbation est arrêtée avant.
+      if (!administre) {
+        const visee = await d.propositions.lireProposition(id);
+        if (visee && visee.genre === 'equipe') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
+      }
       const resultat = action === 'approuver'
         ? await d.approbation.approuver({ propositionId: id, corrections: objet(corps.corrections), porteursNouveaux: adressesDe(corps.porteursNouveaux), sansLogo: corps.sansLogo === true, approbateur, origine })
         : await d.approbation.refuser({ propositionId: id, commentaire, approbateur });
-      if (resultat.ok) return res.status(200).json({ ok: true, courriel: !!resultat.courriel, historique: resultat.historique !== false });
+      if (resultat.ok) {
+        await consigner(d, action, approbateur, resultat, corps);
+        return res.status(200).json({ ok: true, courriel: !!resultat.courriel, historique: resultat.historique !== false });
+      }
+      if (resultat.code === 'role') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
       return res.status(CODES[resultat.code] || 502).json({ code: resultat.code, erreurs: resultat.erreurs });
     } catch (err) {
       d.journal(`[admin] ${action} impossible :`, err.message);
