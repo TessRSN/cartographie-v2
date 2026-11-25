@@ -72,7 +72,13 @@ function creerGestionnaire({ source = donneesPubliques, gabarit = lireGabarit, j
     }
 
     const adresse = String((req.query && req.query.adresse) || '');
-    const fiche = /^[a-z0-9-]{1,200}$/.test(adresse) ? donnees.ressources.find((r) => r.adresse === adresse) : null;
+    const valide = /^[a-z0-9-]{1,200}$/.test(adresse);
+    let fiche = valide ? donnees.ressources.find((r) => r.adresse === adresse) : null;
+    // Fiche inconnue de la lecture gardée : elle vient peut-être d'être approuvée. On relit Notion
+    // une fois avant de répondre « introuvable », pour que le lien du courriel d'approbation marche aussitôt.
+    if (!fiche && valide && typeof source.rafraichir === 'function') {
+      try { fiche = (await source.rafraichir()).ressources.find((r) => r.adresse === adresse) || null; } catch (err) { /* la réponse reste « introuvable » */ }
+    }
     if (!fiche) return html(404, rendreIntrouvable(gabarit(), { origine }), 'no-store');
     const page = rendrePage(gabarit(), fiche, { origine, indexation });
     if (page.manquants.length) journal('[ressource] Repères absents du gabarit :', page.manquants.join(', '));

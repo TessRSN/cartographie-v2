@@ -842,8 +842,18 @@ function demarrer() {
   brancherPortrait();
   brancherDemandeLien();
 
-  fetch('/api/export', { cache: 'no-cache' })
-    .then((rep) => { if (!rep.ok) throw new Error(`export ${rep.status}`); return rep.json(); })
+  const lireExport = (adresse) => fetch(adresse, { cache: 'no-cache' })
+    .then((rep) => { if (!rep.ok) throw new Error(`export ${rep.status}`); return rep.json(); });
+  lireExport('/api/export')
+    .then((donnees) => {
+      // Le serveur a servi la page d'une fiche que cette lecture ne connaît pas : elle vient d'être
+      // approuvée et la copie gardée est en retard. On redemande une lecture à jour, une seule fois.
+      const adresse = adresseDansUrl();
+      const servie = !!document.querySelector('#ficheStatique .fiche');
+      const connue = (donnees.ressources || []).some((r) => r.adresse === adresse);
+      if (adresse && servie && !connue) return lireExport(`/api/export?frais=${Date.now()}`).catch(() => donnees);
+      return donnees;
+    })
     .then((donnees) => {
       etat.ressources = donnees.ressources || [];
       etat.carte = donnees.carte || { cle: '' };

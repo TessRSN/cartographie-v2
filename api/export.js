@@ -31,6 +31,7 @@ function delai(ms, message) {
 function creerSource({
   lire = lireNotion, maintenant = Date.now, dureeMs = DUREE_MEMOIRE_MS, journal = console.error,
   attenteMs = ATTENTE_AVEC_GARDE_MS, attenteSansGardeMs = ATTENTE_SANS_GARDE_MS, repriseMs = REPRISE_APRES_ECHEC_MS,
+  intervalleRafraichirMs = 15000,
 } = {}) {
   let garde = null;        // { a, donnees }
   let enCours = null;      // lecture en vol, partagée entre appels simultanés
@@ -77,6 +78,21 @@ function creerSource({
   }
   // Oublie la lecture gardée : la prochaine demande relit Notion (après une approbation).
   source.vider = () => { garde = null; dernierEchec = null; };
+  // Relit Notion sans attendre la fin de la mémoire : sert quand on demande une fiche que la lecture
+  // gardée ne connaît pas (elle vient peut-être d'être approuvée). Au plus une relecture par
+  // intervalle, pour qu'une série d'adresses inconnues ne fasse pas relire Notion à chaque fois.
+  let dernierRafraichissement = null;
+  source.rafraichir = async () => {
+    const trop = dernierRafraichissement !== null && maintenant() - dernierRafraichissement < intervalleRafraichirMs;
+    if (trop || (garde && maintenant() - garde.a < intervalleRafraichirMs)) return garde ? garde.donnees : source();
+    dernierRafraichissement = maintenant();
+    try {
+      return await lancer();
+    } catch (err) {
+      if (garde) { journal('[export] relecture impossible, données gardées servies :', err.message); return garde.donnees; }
+      throw err;
+    }
+  };
   return source;
 }
 
@@ -87,8 +103,11 @@ function creerGestionnaire({ source, journal = console.error } = {}) {
       return res.status(405).json({ erreur: 'Méthode non permise.' });
     }
     try {
-      const donnees = await source();
-      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=3600');
+      // « ?frais=… » : la page demande une lecture à jour (fiche tout juste approuvée, pas encore dans
+      // la copie gardée par le CDN). La réponse n'est alors gardée nulle part.
+      const frais = !!(req.query && req.query.frais) && typeof source.rafraichir === 'function';
+      const donnees = frais ? await source.rafraichir() : await source();
+      res.setHeader('Cache-Control', frais ? 'no-store' : 'public, max-age=0, s-maxage=300, stale-while-revalidate=3600');
       return res.status(200).json({
         genereLe: donnees.genereLe,
         ressources: donnees.ressources,

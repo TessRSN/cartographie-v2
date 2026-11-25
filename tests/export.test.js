@@ -140,3 +140,37 @@ test('contributions suit la variable CONTRIBUTIONS, fermé par défaut', async (
   assert.equal(res.corps.contributions, true);
   if (avant === undefined) delete process.env.CONTRIBUTIONS; else process.env.CONTRIBUTIONS = avant;
 });
+
+test('rafraichir relit Notion même si la mémoire est fraîche, mais pas plus d\'une fois par quinzaine de secondes', async () => {
+  let appels = 0; let maintenant = 0;
+  const source = creerSource({ lire: async () => { appels++; return { ...donnees, n: appels }; }, maintenant: () => maintenant, dureeMs: 300000, intervalleRafraichirMs: 15000 });
+  await source();
+  maintenant = 20000;
+  assert.equal((await source.rafraichir()).n, 2, 'la mémoire de 5 minutes ne retient pas une relecture demandée');
+  maintenant = 25000;
+  assert.equal((await source.rafraichir()).n, 2, 'une seconde demande trop proche ne relit pas');
+  assert.equal((await source()).n, 2, 'la lecture rafraîchie devient la lecture gardée');
+  maintenant = 36000;
+  assert.equal((await source.rafraichir()).n, 3);
+  assert.equal(appels, 3);
+});
+
+test('rafraichir en panne rend la lecture gardée', async () => {
+  let echoue = false; let maintenant = 0;
+  const source = creerSource({ lire: async () => { if (echoue) throw new Error('panne'); return donnees; }, maintenant: () => maintenant, journal: () => {} });
+  await source(); echoue = true; maintenant = 60000;
+  assert.deepEqual((await source.rafraichir()).ressources, donnees.ressources);
+});
+
+test('?frais relit Notion et la réponse n\'est pas gardée par le CDN', async () => {
+  let appels = 0; let maintenant = 0;
+  const source = creerSource({ lire: async () => { appels++; return donnees; }, maintenant: () => maintenant });
+  const gestionnaire = creerGestionnaire({ source });
+  await gestionnaire({ method: 'GET', query: {} }, reponse());
+  maintenant = 60000;
+  const res = reponse();
+  await gestionnaire({ method: 'GET', query: { frais: '1764100000000' } }, res);
+  assert.equal(res.code, 200);
+  assert.equal(res.entetes['Cache-Control'], 'no-store');
+  assert.equal(appels, 2);
+});

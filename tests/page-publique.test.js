@@ -251,3 +251,26 @@ test("le formulaire et le panneau sont exclus de l'indexation", () => {
   assert.ok(ouvert.includes('Disallow: /admin'));
   assert.ok(ouvert.includes('Disallow: /api/'));
 });
+
+test('une fiche absente de la mémoire mais présente dans Notion est servie après une relecture', async () => {
+  let relectures = 0;
+  const source = async () => ({ ressources: [], porteurs: [] });
+  source.rafraichir = async () => { relectures++; return { ressources: [fiche()], porteurs: [] }; };
+  const g = creerGestionnaire({ source, gabarit: () => gabarit });
+  const res = reponse(); await g(requete({ vue: 'page', adresse: 'cartagene' }), res);
+  assert.equal(res.code, 200);
+  assert.ok(res.corps.includes('<title>CARTaGENE | Cartographie du RSN</title>'));
+  assert.equal(relectures, 1);
+  const res2 = reponse(); await g(requete({ vue: 'page', adresse: 'toujours-inconnue' }), res2);
+  assert.equal(res2.code, 404);
+});
+
+test('une adresse mal formée ne déclenche aucune relecture', async () => {
+  let relectures = 0;
+  const source = async () => ({ ressources: [], porteurs: [] });
+  source.rafraichir = async () => { relectures++; return { ressources: [], porteurs: [] }; };
+  const g = creerGestionnaire({ source, gabarit: () => gabarit });
+  const res = reponse(); await g(requete({ vue: 'page', adresse: '../etc/passwd' }), res);
+  assert.equal(res.code, 404);
+  assert.equal(relectures, 0);
+});
