@@ -275,12 +275,12 @@ test('courriel en panne : la proposition est créée, la réponse le signale', a
   assert.equal(b.de('creerProposition').length, 1);
 });
 
-test("la proposition d'un approbateur est approuvée aussitôt", async () => {
+test("la proposition d'un approbateur entre dans la file comme les autres, sans approbation d'office", async () => {
   const b = banc({ approbateurs: ['tess@exemple.ca'] });
   const res = await appeler(b.proposition, envoi(jeton('proposer', { courriel: 'tess@exemple.ca' })));
-  assert.deepEqual(res.corps, { ok: true, approuvee: true, courriel: true });
-  assert.deepEqual(b.de('approuver')[0], { propositionId: 'prop-1', approbateur: 'tess@exemple.ca', origine: 'https://carto.exemple' });
-  assert.equal(b.de('nouvelleProposition').length, 0, 'pas de courriel « à examiner » pour une proposition déjà approuvée');
+  assert.deepEqual(res.corps, { ok: true, approuvee: false, courriel: true });
+  assert.equal(b.de('approuver').length, 0, 'rien ne change sur le site sans passer par le panneau');
+  assert.equal(b.de('nouvelleProposition').length, 1, "l'équipe est prévenue comme pour toute proposition");
 });
 
 test('Notion en panne à la création : 502, sans détail', async () => {

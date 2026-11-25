@@ -131,18 +131,16 @@ function creerGestionnaire(donnees) {
 
       // À partir d'ici la proposition est enregistrée : rien ne doit faire échouer la réponse.
       const origine = origineSure(req, env);
-      let approuvee = false; let recu = { envoye: false };
+      let recu = { envoye: false };
       const suite = async (quoi, faire) => {
         try { return await faire(); } catch (err) { d.journal(`[proposition] ${quoi} impossible :`, err.message); return null; }
       };
       recu = (await suite('accusé de réception', () => d.courriels.propositionRecue({ a: charge.courriel, titre }))) || recu;
-      // La proposition d'un approbateur est approuvée d'office ; sinon, l'équipe est prévenue.
-      approuvee = (await suite("approbation d'office", async () => (await d.propositions.estApprobateur(charge.courriel))
-        && (await d.approbation.approuver({ propositionId, approbateur: charge.courriel, origine })).ok === true)) === true;
-      if (!approuvee) {
-        await suite("avis à l'équipe", async () => d.courriels.nouvelleProposition({ a: await d.propositions.approbateursActifs(), titre, lienPanneau: `${origine}/admin` }));
-      }
-      return res.status(200).json({ ok: true, approuvee, courriel: !!(recu && recu.envoye) });
+      // Toute proposition passe par le panneau, y compris celle d'un approbateur (décision de Tess,
+      // 25 novembre 2026) : rien ne change sur le site sans un geste dans le panneau.
+      await suite("avis à l'équipe", async () => d.courriels.nouvelleProposition({ a: await d.propositions.approbateursActifs(), titre, lienPanneau: `${origine}/admin` }));
+      // « approuvee » reste dans la réponse, toujours faux, pour la page du formulaire.
+      return res.status(200).json({ ok: true, approuvee: false, courriel: !!(recu && recu.envoye) });
     } catch (err) {
       d.journal('[proposition] échec :', err.message);
       return res.status(502).json({ erreur: 'Le service est indisponible pour le moment. Réessayez dans quelques minutes.' });
