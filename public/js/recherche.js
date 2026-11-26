@@ -277,7 +277,10 @@ function suggestions(ressources, requete, langue) {
   const debuteUnMot = (plie) => plie.split(/[^a-z0-9]+/).some((m) => m.startsWith(q)) || plie.startsWith(q);
   // Deux ou trois lettres : seulement en début de mot, pour ne pas proposer « sociaux » à qui tape « ia ».
   const contient = (plie) => (q.length < LONGUEUR_FLOUE ? debuteUnMot(plie) : plie.includes(q));
+  // Ce qui est tapé désigne un sujet entier (« ia », « ai », « irm ») : ce sujet passe en premier.
+  const cleTapee = mots.cleMotCle(requete);
   const rangSujet = (s) => {
+    if (cleTapee && s.cle === cleTapee) return 0.5;
     if (debuteUnMot(s.plie)) return 1;
     if (contient(s.plie)) return 2;
     return s.autresFormes.some(debuteUnMot) ? 3 : 0;

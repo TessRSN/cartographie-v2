@@ -126,6 +126,13 @@ test('suggestions : deux ou trois lettres ne proposent que des débuts de mot', 
   assert.deepEqual(suggestions(liste, 'ia').map((x) => x.libelle), ['intelligence artificielle']);
 });
 
+test('suggestions : un sigle tapé propose son sujet, même si aucune fiche n\'écrit le sigle', () => {
+  const liste = [fiche('A', { motsCles: ['intelligence artificielle'] }), fiche('B', { motsCles: ['aide à la décision'] })];
+  assert.equal(suggestions(liste, 'ia')[0].libelle, 'intelligence artificielle');
+  assert.equal(suggestions(liste, 'AI')[0].libelle, 'intelligence artificielle');
+  assert.equal(suggestions(liste, 'ai', 'en')[0].libelle, 'artificial intelligence');
+});
+
 test('la recherche lit aussi les normes et les outils d\'une fiche', () => {
   const liste = [fiche('Avec', { normes: ['HL7 FHIR', 'DICOM'], outils: ['Docker'] }), fiche('Sans')];
   const docs = documents(liste);
