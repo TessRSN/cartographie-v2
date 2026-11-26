@@ -41,6 +41,9 @@ function documentDeRecherche(r) {
     r, nom: r.nom, autresNoms: r.autresNoms, motsCles, normes, porteurs, phrase: r.phrase, description: r.description,
     canon: canoniques.join(' '), plie: mots.plier(tout),
     motsEntiers: new Set(decouper(tout)), motsCanoniques: new Set(canoniques), clesSujets,
+    // Mots comparés à une faute près : ceux du texte canonisé et ceux des clés de ses sujets
+    // (« neuroimaging » pour « neuro-imagerie »), d'au moins quatre lettres, chacun une fois.
+    motsApproches: [...new Set(canoniques.concat([...clesSujets].flatMap((cle) => cle.split('+'))))].filter((m) => m.length >= LONGUEUR_FAUTE - 1),
   };
 }
 
@@ -61,6 +64,71 @@ function trouveMotCourt(doc, mot) {
   return (SIGLES[mot] || []).some((expression) => doc.plie.includes(expression));
 }
 
+// Tolérance aux fautes de frappe sur le texte canonisé, pour qu'un mot anglais mal tapé
+// (« oncolgy ») retrouve les fiches françaises comme la recherche floue le fait pour un mot
+// français. À partir de cinq lettres : une faute de cinq à sept lettres, deux au-delà.
+const LONGUEUR_FAUTE = 5;
+const LONGUEUR_DEUX_FAUTES = 8;
+function fautesPermises(mot) {
+  if (mot.length < LONGUEUR_FAUTE) return 0;
+  return mot.length < LONGUEUR_DEUX_FAUTES ? 1 : 2;
+}
+
+// Distance d'édition entre deux mots (insertion, suppression, substitution, inversion de deux
+// lettres voisines), ou maximum + 1 dès qu'elle le dépasse.
+function distance(a, b, maximum) {
+  if (Math.abs(a.length - b.length) > maximum) return maximum + 1;
+  let avant = null;
+  let ligne = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const suivante = [i];
+    let plusPetit = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cout = a[i - 1] === b[j - 1] ? 0 : 1;
+      let d = Math.min(ligne[j] + 1, suivante[j - 1] + 1, ligne[j - 1] + cout);
+      if (avant && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d = Math.min(d, avant[j - 2] + 1);
+      suivante.push(d);
+      if (d < plusPetit) plusPetit = d;
+    }
+    if (plusPetit > maximum) return maximum + 1;
+    avant = ligne;
+    ligne = suivante;
+  }
+  return ligne[b.length];
+}
+
+// Mots connus d'un catalogue : tous les mots de ses fiches, tels qu'écrits et canonisés.
+// Calculés une fois par liste de documents.
+const motsConnusPar = new WeakMap();
+function motsConnus(liste) {
+  if (!motsConnusPar.has(liste)) {
+    const connus = new Set();
+    for (const d of liste) {
+      for (const m of d.motsEntiers) connus.add(m);
+      for (const m of d.motsCanoniques) connus.add(m);
+    }
+    motsConnusPar.set(liste, connus);
+  }
+  return motsConnusPar.get(liste);
+}
+
+// Un mot bien écrit n'est pas une faute de frappe : s'il est dans le catalogue ou dans le
+// dictionnaire, il n'est cherché que tel quel (« cadre » n'est pas « care » mal tapé).
+function peutEtreUneFaute(liste, mot) {
+  return fautesPermises(mot) > 0 && !(mot in mots.DICTIONNAIRE_FR_EN) && !motsConnus(liste).has(mot);
+}
+
+// Le mot tapé est-il à une faute près d'un mot entier de la fiche ? Même première lettre exigée ;
+// jamais en sous-chaîne (« souche » ne trouve pas « system »).
+function aUneFautePres(doc, mot) {
+  const permises = fautesPermises(mot);
+  if (!permises) return false;
+  for (const candidat of doc.motsApproches || []) {
+    if (candidat[0] === mot[0] && distance(mot, candidat, permises) <= permises) return true;
+  }
+  return false;
+}
+
 // Un mot tapé est-il le début d'un mot canonique de la fiche ? « oncol » trouve « oncology »,
 // donc « oncologie » ; « rare » ne trouve pas « infrared ».
 function debuteUnMotCanonique(doc, mot) {
@@ -78,6 +146,7 @@ function debuteUnMotCanonique(doc, mot) {
 // Ordre : les fiches dont le nom contient la requête, puis celles qui portent le sujet,
 // puis les autres ; dans chaque groupe, l'ordre de la recherche par mots.
 const SCORE_MOT_CANONIQUE = 0.3;
+const SCORE_FAUTE = 0.8;   // après toute correspondance exacte ou floue du mot tapé
 function chercher(documents, requete, rechercheFloue) {
   const liste = documents || [];
   const demandes = motsDeRequete(requete);
@@ -92,9 +161,11 @@ function chercher(documents, requete, rechercheFloue) {
       if (rechercheFloue) for (const res of rechercheFloue(mot) || []) noter(res.item.r, res.score);
       else for (const d of liste) if (d.plie.includes(mot)) noter(d.r, 0.5);
       const canonique = mots.canoniser(mot);
+      const fautePossible = peutEtreUneFaute(liste, mot);
       for (const d of liste) {
         if (debuteUnMotCanonique(d, mot)) noter(d.r, rechercheFloue ? SCORE_MOT_CANONIQUE : 0.5);
         else if (canonique && canonique !== mot && d.motsCanoniques.has(canonique)) noter(d.r, rechercheFloue ? SCORE_MOT_CANONIQUE : 0.5);
+        else if (fautePossible && !trouves.has(d.r) && aUneFautePres(d, mot)) noter(d.r, SCORE_FAUTE);
       }
     }
     if (scores === null) scores = trouves;
@@ -226,7 +297,7 @@ function suggestions(ressources, requete, langue) {
   return sortie;
 }
 
-const api = { SIGLES, LONGUEUR_FLOUE, documentDeRecherche, motsDeRequete, trouveMotCourt, chercher, denombrer, statistiquesBandeau, suggestions };
+const api = { SIGLES, LONGUEUR_FLOUE, LONGUEUR_FAUTE, distance, documentDeRecherche, motsDeRequete, trouveMotCourt, chercher, denombrer, statistiquesBandeau, suggestions };
 if (serveur) module.exports = api;
 else Object.assign(racine, api);
 })(typeof window !== 'undefined' ? window : globalThis);

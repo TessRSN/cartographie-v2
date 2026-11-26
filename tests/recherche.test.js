@@ -332,3 +332,71 @@ test('suggestions : le nombre d\'un sujet compte les fiches qui le portent en mo
   // Le portrait, lui, ne compte que les mots-clés : les normes y ont leur propre ligne.
   assert.ok(!statistiquesBandeau(pourSuggestions, 20).sujets.some((s) => s.sujet === 'BIDS' && s.nombre !== 1));
 });
+
+// ─── Une faute de frappe dans un mot anglais retrouve les fiches françaises ───
+
+const pourFautes = fige.concat([
+  fiche('Oncologie', { motsCles: ['oncologie'] }),
+  fiche('Epidemiologie', { description: 'Un service d\'épidémiologie.' }),
+  fiche('Genomique', { motsCles: ['génomique'] }),
+]);
+
+test('un mot d\'au moins cinq lettres est accepté à une faute près d\'un mot entier du texte canonisé', () => {
+  const docs = documents(pourFautes);
+  const trouve = (requete) => noms(chercher(docs, requete)).sort();
+  assert.deepEqual(trouve('oncolgy'), ['Oncologie']);
+  assert.deepEqual(trouve('neuroimagng'), ['Neuro']);
+  assert.deepEqual(trouve('epidemiolgy'), ['Epidemiologie']);
+  assert.deepEqual(trouve('genomcs'), ['Genomique']);
+  assert.deepEqual(trouve('ocnology'), ['Oncologie'], 'deux lettres voisines inversées : une seule faute');
+  assert.deepEqual(trouve('epidemoilgy'), ['Epidemiologie'], 'deux fautes à partir de huit lettres');
+  assert.deepEqual(trouve('oncolgi'), [], 'deux fautes sur sept lettres : trop');
+  assert.deepEqual(trouve('uncology'), [], 'la première lettre doit être la bonne');
+  // Avec la recherche floue aussi, et sans lui passer autre chose que le mot tapé.
+  const appels = [];
+  assert.deepEqual(noms(chercher(docs, 'oncolgy', (forme) => { appels.push(forme); return []; })), ['Oncologie']);
+  assert.deepEqual(appels, ['oncolgy']);
+});
+
+test('la tolérance aux fautes ne ramène pas le bruit, et ne joue jamais sous cinq lettres', () => {
+  const docs = documents(pourFautes);
+  const trouve = (requete) => noms(chercher(docs, requete)).sort();
+  assert.deepEqual(trouve('rare'), ['Rares'], 'pas « infrared »');
+  assert.deepEqual(trouve('souche'), ['Souches', 'Stem'], 'pas « system »');
+  assert.deepEqual(trouve('proche'), ['Aidants', 'Infrarouge'], 'pas « linear »');
+  assert.deepEqual(trouve('longue'), ['Longue'], 'pas « longitudinal »');
+  assert.deepEqual(trouve('apprenant'), ['Apprenant'], 'pas « learning »');
+  // Quatre lettres : seulement le mot tapé, en sous-chaîne du texte comme avant (« système », « system ») ; « lung » ne trouve pas « long ».
+  assert.deepEqual(trouve('stem'), ['Apprenant', 'Souches', 'Stem', 'Systeme']);
+  assert.deepEqual(trouve('lung'), []);
+  assert.deepEqual(trouve('rars'), []);
+  // Les sept gains restent.
+  assert.deepEqual(trouve('machine learning'), ['Automatique']);
+  assert.deepEqual(trouve('neuroimaging'), ['Neuro']);
+  assert.deepEqual(trouve('ICD-10'), ['Neuro']);
+  assert.deepEqual(trouve('high performance computing'), ['Calcul']);
+  assert.deepEqual(trouve('data sharing'), ['Partage']);
+  assert.deepEqual(trouve('fmri'), ['Fonctionnelle']);
+  assert.deepEqual(trouve('gpu'), ['Graphique']);
+});
+
+test('un mot bien écrit, connu du catalogue ou du dictionnaire, n\'est pas pris pour une faute', () => {
+  const docs = documents([
+    fiche('Cadre', { motsCles: ['cadre légal'] }), fiche('Soins', { description: 'Primary care for all.' }),
+    fiche('Intelligence', { motsCles: ['intelligence artificielle'] }), fiche('Genetique', { description: 'A text about genetics.' }),
+    fiche('Genomique', { motsCles: ['génomique'] }),
+  ]);
+  const trouve = (requete) => noms(chercher(docs, requete)).sort();
+  assert.deepEqual(trouve('cadre'), ['Cadre'], '« cadre » n\'est pas « care » mal tapé');
+  assert.deepEqual(trouve('intelligent'), [], '« intelligent » est au dictionnaire : pas « intelligence » à deux fautes');
+  assert.deepEqual(trouve('genomics'), ['Genomique'], '« genomics » n\'est pas « genetics » mal tapé');
+  assert.deepEqual(trouve('genomcs'), ['Genomique']);
+  assert.deepEqual(trouve('intelligance'), ['Intelligence']);
+});
+
+test('une fiche trouvée à une faute près passe après celles que la recherche floue a trouvées', () => {
+  const docs = documents([fiche('Proche', { motsCles: ['oncologie'] }), fiche('Floue', { description: 'Texte.' })]);
+  assert.deepEqual(noms(chercher(docs, 'oncolgy')), ['Proche']);
+  const floue = (forme) => (forme === 'oncolgy' ? [{ item: docs[1], score: 0.6 }] : []);
+  assert.deepEqual(noms(chercher(docs, 'oncolgy', floue)), ['Floue', 'Proche']);
+});
