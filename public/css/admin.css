@@ -338,7 +338,7 @@ table.qtable td { vertical-align: middle; }
 .list select:disabled, .switch input:disabled { cursor: not-allowed; opacity: .6; }
 @media (max-width: 520px) { .invite .row > * { flex: 1 1 100%; } }
 /* Les blocs d'un même écran respirent : même écart qu'entre les sections principales. */
-#mbody, #rbody, #pbody, #qbody, #ebody, #cbody { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+#mbody, #rbody, #pbody, #qbody, #ebody, #cbody, #gbody, #sbody { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
 #qbody .chipsf { margin-bottom: 0; }
 /* Qui a fait le geste, et la famille du geste : ce qui se lit d'abord dans une liste. */
 .qui { color: var(--info); }
@@ -356,3 +356,8 @@ table.qtable td { vertical-align: middle; }
 .mail [aria-invalid="true"] { border-color: var(--bad); }
 .card > .confirm { align-self: stretch; }
 @media (max-width: 520px) { .apercu-courriel { height: 440px; } }
+/* Réglages et sauvegardes (lot 4c) */
+#gbody input[readonly], #gbody textarea[readonly] { background: var(--surface2); cursor: default; }
+#gbody [aria-invalid="true"] { border-color: var(--bad); }
+#gbody .lock .pill { margin: .1rem 0; }
+#gbody .lock .row { display: flex; }

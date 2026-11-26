@@ -27,10 +27,10 @@
       "maxDuration": 15
     },
     "api/admin.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/resume.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "api/liens.js": {
       "maxDuration": 60

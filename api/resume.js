@@ -5,6 +5,10 @@
  * Rien ne part s'il n'y a aucune proposition en attente, ni quand les contributions sont fermées.
  * Une « Modification de l'équipe » n'est annoncée qu'aux personnes en Administration, les seules à
  * pouvoir la trancher ; les autres ne reçoivent que les propositions du public, et rien s'il n'y en a pas.
+ * La même tâche fait la copie de sauvegarde de la semaine (lib/sauvegardes.js), pour ne pas ajouter
+ * une tâche planifiée. Les deux partent en même temps et ne dépendent pas l'une de l'autre : une
+ * copie qui échoue n'empêche pas le résumé, un résumé qui échoue n'empêche pas la copie.
+ * La réponse dit où en est la copie : « faite », « inactive » (pas de base « Sauvegardes ») ou « echec ».
  */
 const crypto = require('node:crypto');
 const { ouvertes, origineSure, dependances } = require('../lib/contributions');
@@ -27,10 +31,22 @@ function creerGestionnaire(donnees) {
     }
 
     const d = dependances(donnees);
+    // La copie de la semaine : jamais d'erreur vers le résumé, seulement son état.
+    const copie = (async () => {
+      if (!d.sauvegardes) return null;
+      try {
+        const retour = await d.sauvegardes.hebdomadaire();
+        return retour && ['faite', 'inactive'].includes(retour.etat) ? retour.etat : 'echec';
+      } catch (err) {
+        d.journal('[résumé] copie de sauvegarde impossible :', err.message);
+        return 'echec';
+      }
+    })();
+    const avecCopie = async (corps) => { const sauvegarde = await copie; return sauvegarde ? { ...corps, sauvegarde } : corps; };
     try {
       // Tout ce qui attend encore une décision : les nouvelles et celles en vérification.
       const enAttente = await d.propositions.listerPropositions({ statut: 'ouvertes' });
-      if (!enAttente.length) return res.status(200).json({ ok: true, enAttente: 0, envoyes: 0 });
+      if (!enAttente.length) return res.status(200).json(await avecCopie({ ok: true, enAttente: 0, envoyes: 0 }));
       const ligne = (x) => ({ titre: x.titre, proposeLe: x.proposeLe });
       const toutes = enAttente.map(ligne);
       const duPublic = enAttente.filter((x) => x.genre !== 'equipe').map(ligne);
@@ -47,10 +63,10 @@ function creerGestionnaire(donnees) {
           d.journal('[résumé] envoi impossible :', err.message);
         }
       }
-      return res.status(200).json({ ok: true, enAttente: enAttente.length, envoyes });
+      return res.status(200).json(await avecCopie({ ok: true, enAttente: enAttente.length, envoyes }));
     } catch (err) {
       d.journal('[résumé] échec :', err.message);
-      return res.status(502).json({ erreur: 'Le service est indisponible pour le moment.' });
+      return res.status(502).json(await avecCopie({ erreur: 'Le service est indisponible pour le moment.' }));
     }
   };
 }

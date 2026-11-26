@@ -42,6 +42,13 @@
  *                                                 et à elle seule (Administration) ; objet et texte : un brouillon à essayer
  *   POST mode-essai     { actif, confirme }     → active ou coupe le mode d'essai des courriels (Administration) ;
  *                                                 le couper exige « confirme: true »
+ *   GET  reglages                               → l'écran « Réglages » : contributions ouvertes ou fermées, message de
+ *                                                 fermeture, texte des conditions, et ce qui est fixé à l'installation
+ *   POST enregistrer-reglages { ouvertes, messageFerme, conditions } → enregistre ceux qui sont donnés (Administration)
+ *   GET  sauvegardes                            → les copies de sauvegarde (Administration)
+ *   POST sauvegarder                            → fait une copie maintenant (Administration)
+ *   GET  sauvegarde     ?id=                    → le fichier d'une copie, servi par le serveur lui-même (Administration) ;
+ *                                                 seulement le fichier d'une ligne de la base « Sauvegardes »
  * Une fiche est désignée par son adresse publique, ou par un repère opaque si elle est écartée ;
  * un porteur ou une personne, toujours par un repère opaque : jamais par un identifiant Notion.
  * Les courriels de l'équipe ne sortent que par « equipe » ; partout ailleurs, une personne est un nom.
@@ -62,6 +69,9 @@ const { repereValide } = require('../lib/ressources');
 const { reperePorteurValide } = require('../lib/porteurs');
 const { reperePersonneValide } = require('../lib/equipe');
 const { lireModeEssai, CLES: CLES_REGLAGES } = require('../lib/reglages');
+const { lireEtatPublic } = require('../lib/reglages-site');
+const { SEMAINES_GARDEES } = require('../lib/sauvegardes');
+const zlib = require('node:zlib');
 const { courrielDe } = require('../public/js/gabarits.js');
 
 const TEMOIN = 'carto_session';
@@ -91,6 +101,11 @@ const ACTIONS = {
   courriels: { methode: 'GET', role: 'lecture' },
   'enregistrer-courriel': { methode: 'POST', role: 'administration' }, 'retablir-courriel': { methode: 'POST', role: 'administration' },
   'essai-courriel': { methode: 'POST', role: 'administration' }, 'mode-essai': { methode: 'POST', role: 'administration' },
+  // Les réglages du site : tout le monde les lit, l'Administration seule les change. Les modules le vérifient aussi.
+  reglages: { methode: 'GET', role: 'lecture' }, 'enregistrer-reglages': { methode: 'POST', role: 'administration' },
+  // Les copies de sauvegarde portent les courriels des proposants : tout y est réservé à l'Administration.
+  sauvegardes: { methode: 'GET', role: 'administration' }, sauvegarder: { methode: 'POST', role: 'administration' },
+  sauvegarde: { methode: 'GET', role: 'administration' },
 };
 // Les gestes du lot 3 : ce que le corps doit porter, puis l'appel, toujours au nom de la personne en session.
 const texteCourt = (v, max) => typeof v === 'string' && v.length <= max;
@@ -123,6 +138,17 @@ const GESTES_COURRIEL = {
     faire: (d, c, par, origine) => d.courriels.essai({ id: c.id, a: par, ...(c.objet === undefined ? {} : { objet: c.objet, texte: c.texte }), site: origine }),
   },
 };
+// Les réglages du site. Le texte est vérifié dans lib/reglages-site.js ; ici, seulement sa forme et
+// une taille au-delà de laquelle la demande n'est pas lue. Au moins un des trois réglages est donné.
+const REGLAGES_SITE = ['ouvertes', 'messageFerme', 'conditions'];
+const reglagesLisibles = (c) => REGLAGES_SITE.some((cle) => c[cle] !== undefined)
+  && (c.ouvertes === undefined || typeof c.ouvertes === 'boolean')
+  && (c.messageFerme === undefined || texteCourt(c.messageFerme, 2000))
+  && (c.conditions === undefined || texteCourt(c.conditions, TEXTE_BRUT_MAX));
+// Au-delà de cette taille, le fichier d'une copie part comprimé : la réponse d'une fonction est limitée par l'hébergeur.
+const COPIE_A_COMPRIMER = 3 * 1024 * 1024;
+// Les jours des tâches planifiées (« crons » dans vercel.json), vérifiés par un essai.
+const JOUR_LIENS = 'mercredi';
 // Les gestes qui portent sur une fiche existante.
 const GESTES_FICHE = ['enregistrer', 'retablir', 'verifier', 'revoir', 'ecarter', 'republier'];
 // Un rôle inconnu a le rang le plus bas : il ne permet que la lecture.
@@ -140,7 +166,7 @@ const MESSAGES_ROLE = {
   approbation: 'Votre rôle ne permet pas ce geste : il demande le rôle Approbation ou Administration.',
   administration: 'Votre rôle ne permet pas ce geste : il est réservé au rôle Administration.',
 };
-const CODES = { 'reglages-absents': 409, 'sans-adresse': 409, envoi: 502, limite: 429, confirmation: 400, role: 403, 'soi-meme': 409, 'derniere-administration': 409, 'deja-inscrite': 409, 'adresse-introuvable': 404, 'a-poursuivre': 409, interrompue: 502, 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
+const CODES = { 'sauvegardes-absentes': 409, 'reglages-absents': 409, 'sans-adresse': 409, envoi: 502, limite: 429, confirmation: 400, role: 403, 'soi-meme': 409, 'derniere-administration': 409, 'deja-inscrite': 409, 'adresse-introuvable': 404, 'a-poursuivre': 409, interrompue: 502, 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
 const CLES = new Set(CHAMPS.map((c) => c.cle));
 const idValide = (id) => typeof id === 'string' && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(id);
 const estObjet = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -218,6 +244,17 @@ const JOURNAL = {
   'mode-essai': (r) => (r.inchange ? null : ligne("Mode d'essai changé", 'Courriels', r.actif
     ? "a activé le mode d'essai des courriels : ils vont tous à l'adresse d'essai"
     : "a coupé le mode d'essai des courriels : ils partent aux vraies personnes")),
+  // Les textes des réglages ne sont jamais recopiés au journal : seulement ce qui a changé.
+  'enregistrer-reglages': (r) => {
+    if (r.inchange) return null;
+    const textes = [r.change.messageFerme ? 'le message de fermeture' : '', r.change.conditions ? 'le texte des conditions' : ''].filter(Boolean).join(' et ');
+    if (!r.change.contributions) return ligne('Réglages modifiés', 'Réglages', `a modifié ${textes}`);
+    const ouvertes = r.change.contributions === 'ouvertes';
+    return ligne(ouvertes ? 'Contributions ouvertes' : 'Contributions fermées', 'Réglages', `${ouvertes ? 'a ouvert' : 'a fermé'} les contributions du public${textes ? `, et a modifié ${textes}` : ''}`);
+  },
+  sauvegarder: (r) => ligne('Sauvegarde faite', 'Sauvegardes', `a fait une copie de sauvegarde${r.incomplete ? ' (incomplète)' : ''}`),
+  // Télécharger une copie sort des données du site : c'est noté.
+  sauvegarde: (r) => ligne('Sauvegarde téléchargée', 'Sauvegardes', `a téléchargé la copie de sauvegarde du ${String(r.faiteLe || '').slice(0, 10) || 'jour inconnu'}`),
 };
 // Un geste de masse arrêté en route (échec, ou « à poursuivre ») qui a déjà changé des fiches : il
 // est noté quand même, avec le compte des fiches faites. Les noms des porteurs sont relus ici, la
@@ -418,7 +455,8 @@ function creerGestionnaire(donnees) {
           // L'état des envois : ce qui est vrai, sans l'adresse d'essai ni aucune valeur secrète.
           envois: {
             resume: { jour: JOUR_RESUME, destinataires: equipe.filter((x) => x.resume).length },
-            contributions: ouvertes(env),
+            // Ce qui vaut pour le public : le verrou d'installation, puis le réglage du panneau.
+            contributions: (await lireEtatPublic(d.reglages, env)).ouvertes,
             // Le mode d'essai en vigueur : la valeur du panneau, sinon la variable de Vercel.
             essaiCourriels: (await lireModeEssai(d.reglages, env)).actif,
           },
@@ -536,6 +574,69 @@ function creerGestionnaire(donnees) {
         // Le courriel tel qu'il est maintenant, pour que l'écran n'ait pas à relire la base.
         const vue = (await d.courriels.lister()).liste.find((c) => c.id === corps.id);
         return res.status(200).json({ ...reponseDe(retour), courriel: vueCourriel(vue) });
+      }
+
+      // ─── Réglages du site ───
+      // « Modifié par » est un nom, jamais un courriel.
+      const vueReglages = (vue) => {
+        const nomme = (x) => ({ ...x, modifiePar: nomDans(annuaire, x.modifiePar) });
+        return { ...vue, contributions: nomme(vue.contributions), messageFerme: nomme(vue.messageFerme), conditions: nomme(vue.conditions) };
+      };
+      if (action === 'reglages') {
+        return res.status(200).json({
+          ...vueReglages(await d.reglagesSite.lire()),
+          // Ce qui est en place, sans aucune valeur secrète : seulement « défini » ou non.
+          installation: { ...d.reglagesSite.installation({ origine }), taches: { resume: JOUR_RESUME, liens: JOUR_LIENS } },
+          sauvegardes: { actives: !!(d.sauvegardes && d.sauvegardes.active()) },
+        });
+      }
+      if (action === 'enregistrer-reglages') {
+        if (!reglagesLisibles(corps)) return illisible();
+        const retour = await d.reglagesSite.enregistrer({ ouvertes: corps.ouvertes, messageFerme: corps.messageFerme, conditions: corps.conditions, par: approbateur });
+        if (!retour.ok) {
+          if (retour.code === 'role') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
+          const { ok, code, ...detail } = retour;
+          return res.status(CODES[code] || 502).json({ code, ...detail });
+        }
+        await consigner(d, action, approbateur, retour, corps);
+        // L'écran tel qu'il est maintenant, pour qu'il n'ait pas à relire la base.
+        return res.status(200).json({ ...retour, reglages: vueReglages(await d.reglagesSite.lire()) });
+      }
+
+      // ─── Sauvegardes ───
+      if (action === 'sauvegardes' || action === 'sauvegarder' || action === 'sauvegarde') {
+        // La personne est celle de la session : rien de ce que dit la demande ne la remplace.
+        const copiePublique = (c) => ({ ...c, par: nomDans(annuaire, c.par) });
+        const refuser = (retour) => {
+          if (retour.code === 'role') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
+          return res.status(retour.code === 'invalide' ? 404 : (CODES[retour.code] || 502)).json({ code: retour.code });
+        };
+        if (action === 'sauvegardes') {
+          const liste = await d.sauvegardes.lister({ par: approbateur });
+          if (!liste.ok) return refuser(liste);
+          return res.status(200).json({ actives: liste.actives, copies: liste.copies.map(copiePublique), jour: JOUR_RESUME, semaines: SEMAINES_GARDEES });
+        }
+        if (action === 'sauvegarder') {
+          const retour = await d.sauvegardes.faire({ par: approbateur });
+          if (!retour.ok) return refuser(retour);
+          await consigner(d, action, approbateur, retour, corps);
+          return res.status(200).json({ ok: true, copie: copiePublique({ id: retour.id, faiteLe: retour.faiteLe, origine: 'demande', par: approbateur, taille: retour.taille, fichier: true, incomplete: retour.incomplete }) });
+        }
+        // Le fichier d'une copie : lu par le serveur dans la base « Sauvegardes » et rendu tel quel,
+        // en pièce jointe. Jamais de renvoi vers une autre adresse.
+        if (!idValide(req.query.id)) return illisible();
+        const retour = await d.sauvegardes.telecharger({ id: req.query.id, par: approbateur });
+        if (!retour.ok) return refuser(retour);
+        await consigner(d, action, approbateur, retour, {});
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${retour.nom.replace(/[^A-Za-z0-9._-]/g, '')}"`);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        const accepte = /\bgzip\b/i.test(String((req.headers && req.headers['accept-encoding']) || ''));
+        if (retour.octets.length > COPIE_A_COMPRIMER && accepte) {
+          res.setHeader('Content-Encoding', 'gzip');
+          return res.status(200).send(zlib.gzipSync(retour.octets));
+        }
+        return res.status(200).send(retour.octets);
       }
 
       // ─── Porteurs et qualité des données ───

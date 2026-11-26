@@ -620,6 +620,16 @@ async function envoyerDemandeLien(ev) {
       bouton.disabled = false; bouton.textContent = T.envoyer; champ.focus();
       return;
     }
+    // L'équipe a fermé les contributions (ou leur état ne peut pas être lu) : son message, sans formulaire.
+    if (rep.status === 403 || rep.status === 503) {
+      const corps = await rep.json().catch(() => ({}));
+      if (/^contributions-/.test(String(corps.code || '')) && typeof corps.erreur === 'string' && corps.erreur.trim()) {
+        $('formulaireLien').hidden = true;
+        messageLien(corps.erreur, 'error');
+        $('fermerLien').focus();
+        return;
+      }
+    }
     if (!rep.ok) throw new Error(`lien ${rep.status}`);
     // Même message que l'adresse soit connue ou non : le serveur ne le dit pas.
     $('formulaireLien').hidden = true;
