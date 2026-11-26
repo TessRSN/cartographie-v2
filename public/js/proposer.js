@@ -191,13 +191,24 @@ function htmlType() {
     <p class="champ"><span class="erreur" role="alert">${e(etat.erreurs.typePrincipal || '')}</span></p>`;
 }
 
+// Le texte de la case à cocher : celui que le serveur donne (réglé dans le panneau), sinon celui du code.
+function texteConditions() {
+  const texte = etat.donnees && etat.donnees.conditions;
+  return typeof texte === 'string' && texte.trim() ? texte : T.conditions;
+}
+// Le serveur dit que les contributions sont fermées (ou momentanément indisponibles) : son message, sinon celui du code.
+function messageDeFermeture(statut, corps) {
+  if ((statut !== 403 && statut !== 503) || !corps || !/^contributions-/.test(String(corps.code || ''))) return null;
+  return typeof corps.erreur === 'string' && corps.erreur.trim() ? corps.erreur : (statut === 503 ? T.indisponibles : T.fermees);
+}
+
 function htmlVous() {
   const liens = Object.entries(T.liens).map(([cle, libelle]) => `<label class="f-case"><input type="radio" name="lienAvecRessource" value="${cle}" ${etat.lienAvecRessource === cle ? 'checked' : ''}>${e(libelle)}</label>`).join('');
   return `<section class="f-groupe"><h3>${e(T.vousTitre)}</h3>
     <div class="champ"><label for="nomProposant">${e(T.nomProposant.libelle)}</label><p class="aide">${e(T.nomProposant.aide)}</p>
       <input type="text" id="nomProposant" maxlength="200" value="${e(etat.nomProposant)}" autocomplete="name"></div>
     ${etat.genre === 'rsn' ? '' : `<fieldset class="champ"><legend>${e(T.lienQuestion)}</legend><div class="f-cases">${liens}</div></fieldset>`}
-    <div class="champ coche${etat.erreurs.conditions ? ' en-erreur' : ''}"><label class="f-case"><input type="checkbox" id="conditions" ${etat.conditions ? 'checked' : ''}>${e(T.conditions)}</label>
+    <div class="champ coche${etat.erreurs.conditions ? ' en-erreur' : ''}"><label class="f-case"><input type="checkbox" id="conditions" ${etat.conditions ? 'checked' : ''}><span class="f-conditions">${e(texteConditions())}</span></label>
       <p class="erreur" role="alert">${e(etat.erreurs.conditions || '')}</p></div>
   </section>`;
 }
@@ -329,6 +340,9 @@ async function envoyer() {
   if (reponse && reponse.ok) { oublier(); return afficherMerci(corps.approuvee); }
   if (reponse && reponse.status === 401) return afficherDemandeDeLien(T.lienExpire);
   if (reponse && reponse.status === 410) return afficherMessage(T.ficheIntrouvable);
+  // Contributions fermées entre-temps : le message de l'équipe, et la saisie reste gardée dans ce navigateur.
+  const ferme = reponse ? messageDeFermeture(reponse.status, corps) : null;
+  if (ferme) { etat.avis = { sorte: 'alerte', texte: ferme }; return afficher({ haut: true }); }
   if (reponse && reponse.status === 400 && corps.erreurs) {
     etat.erreurs = corps.erreurs;
     const liste = etapes();
@@ -370,14 +384,16 @@ function afficherDemandeDeLien(message) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(courriel)) { erreur.textContent = T.courrielInvalide; return; }
     const bouton = evenement.target.querySelector('button[type="submit"]');
     bouton.disabled = true;
-    let ok = false;
+    let ok = false; let ferme = null;
     try {
       const reponse = await fetch('/api/lien', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ courriel, but: adresse ? 'modifier' : 'proposer', adresse: adresse || undefined, site: document.getElementById('siteLien').value }),
       });
       ok = reponse.ok;
+      if (!ok) ferme = messageDeFermeture(reponse.status, await reponse.json().catch(() => ({})));
     } catch (err) { ok = false; }
+    if (ferme) return afficherMessage(ferme);
     if (ok) racine.innerHTML = `<div class="f-carte f-merci"><h2 class="f-titre">${e(T.lienTitre)}</h2><p>${e(T.lienEnvoye)}</p><a class="f-bouton" href="/">${e(T.retourCarte)}</a></div>`;
     else { bouton.disabled = false; erreur.textContent = T.indisponible; }
   });
@@ -446,12 +462,23 @@ document.getElementById('boutonTheme').addEventListener('click', () => {
 
 // ─── Départ ───
 (async function demarrer() {
-  if (!jeton) return afficherDemandeDeLien(null);
+  if (!jeton) {
+    // Sans lien : si l'équipe a fermé les contributions, son message remplace la demande de lien.
+    try {
+      const reponse = await fetch('/api/proposition?etat=1');
+      const public_ = reponse.ok ? await reponse.json().catch(() => null) : null;
+      if (public_ && public_.ouvertes === false && typeof public_.message === 'string' && public_.message.trim()) return afficherMessage(public_.message);
+    } catch (err) { /* état illisible : la demande de lien s'affiche, le serveur tranchera */ }
+    return afficherDemandeDeLien(null);
+  }
   let reponse; let corps = {};
   try {
     reponse = await fetch(`/api/proposition?jeton=${encodeURIComponent(jeton)}`);
     corps = await reponse.json().catch(() => ({}));
   } catch (err) { reponse = null; }
+  // Contributions fermées par l'équipe : son message, à la place du formulaire.
+  const ferme = reponse ? messageDeFermeture(reponse.status, corps) : null;
+  if (ferme) return afficherMessage(ferme);
   if (!reponse || (!reponse.ok && reponse.status !== 401 && reponse.status !== 410)) {
     racine.innerHTML = `<div class="f-carte"><p class="f-avis erreur">${e(T.indisponible)}</p></div>`;
     return;

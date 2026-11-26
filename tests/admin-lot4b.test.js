@@ -410,14 +410,12 @@ test('les gestes du lot existent dans le journal, et la page leur donne une coul
 
 test('les réglages sont branchés sur les vrais modules, et leur base est un réglage documenté', () => {
   const assemblage = fs.readFileSync(path.join(__dirname, '..', 'lib', 'contributions.js'), 'utf8');
-  assert.match(assemblage, /creerReglages\(client, env\)/);
+  assert.match(assemblage, /creerReglages\(clientPartage\(\), process\.env\)/);
   assert.match(assemblage, /creerCourriels\(\{ env, reglages \}\)/);
   assert.match(assemblage, /creerEquipe\(\{[^}]*\breglages\b/);
   assert.match(assemblage, /assemblage = \{[^}]*\breglages\b/);
   const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
   assert.match(readme, /`NOTION_DB_REGLAGES`/);
-  // /api/export ne gagne aucun champ : il ne connaît pas les réglages.
-  assert.ok(!/reglages|Réglages/.test(fs.readFileSync(path.join(__dirname, '..', 'api', 'export.js'), 'utf8')));
 });
 
 // ─── La page ───

@@ -67,6 +67,8 @@
 .f-case input { margin-top: 0.2rem; width: 16px; height: 16px; flex: none; accent-color: var(--rsn-secondary); }
 .champ > label.f-case { display: inline-flex; }
 .champ.coche > .f-case { font-weight: 600; color: var(--ink); }
+/* Le texte des conditions peut tenir en plusieurs paragraphes (il se règle dans le panneau). */
+.f-conditions { white-space: pre-line; overflow-wrap: anywhere; }
 [data-theme="dark"] .champ.coche > .f-case { color: #f1f5f9; }
 
 /* Listes ouvertes : puces et ajout */

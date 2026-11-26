@@ -2,9 +2,14 @@
  * GET /api/export : les fiches publiques de la cartographie, en JSON.
  * La lecture de Notion est gardée quelques minutes en mémoire par instance ;
  * si Notion ne répond plus, la dernière lecture réussie est servie.
+ * La réponse dit aussi si les contributions du public sont ouvertes : le verrou d'installation
+ * (CONTRIBUTIONS), puis le réglage du panneau (lib/reglages-site.js). Le message de fermeture
+ * n'est pas ici : il vient des routes qui refusent (/api/lien, /api/proposition).
+ * Ce réglage ne fait jamais tomber la page : dans le doute, il dit « fermé ».
  */
 const { lireRessources, lirePorteurs } = require('../lib/notion');
 const { assembler } = require('../lib/fiches');
+const { lireEtatPublic } = require('../lib/reglages-site');
 
 const DUREE_MEMOIRE_MS = 5 * 60 * 1000;
 const MESSAGE_INDISPONIBLE = 'Les données ne sont pas disponibles pour le moment.';
@@ -96,7 +101,19 @@ function creerSource({
   return source;
 }
 
-function creerGestionnaire({ source, journal = console.error } = {}) {
+// reglages : le socle des réglages du panneau, ou une fonction qui le rend (il n'est assemblé qu'à
+// la première demande). Sans lui, les contributions suivent la variable CONTRIBUTIONS, comme avant.
+function creerGestionnaire({ source, journal = console.error, reglages = null, env = null } = {}) {
+  // Ne lève jamais : un socle qui ne peut pas être assemblé vaut « rien de connu ».
+  async function contributions() {
+    const e = env || process.env;
+    let socle;
+    try { socle = typeof reglages === 'function' ? reglages() : reglages; } catch (err) {
+      journal('[export] réglages indisponibles :', err.message);
+      socle = { active: () => true, lireTousVite: async () => ({ etat: 'inconnu' }) };
+    }
+    return lireEtatPublic(socle, e);
+  }
   return async function gestionnaire(req, res) {
     if (req.method !== 'GET') {
       res.setHeader('Allow', 'GET');
@@ -106,15 +123,17 @@ function creerGestionnaire({ source, journal = console.error } = {}) {
       // « ?frais=… » : la page demande une lecture à jour (fiche tout juste approuvée, pas encore dans
       // la copie gardée par le CDN). La réponse n'est alors gardée nulle part.
       const frais = !!(req.query && req.query.frais) && typeof source.rafraichir === 'function';
-      const donnees = frais ? await source.rafraichir() : await source();
-      res.setHeader('Cache-Control', frais ? 'no-store' : 'public, max-age=0, s-maxage=300, stale-while-revalidate=3600');
+      // Les fiches et l'état des contributions sont lus en même temps.
+      const [donnees, etat] = await Promise.all([frais ? source.rafraichir() : source(), contributions()]);
+      // Un état « par précaution » (réglages illisibles) n'est gardé nulle part : il passe avec la panne.
+      res.setHeader('Cache-Control', frais || etat.source === 'precaution' ? 'no-store' : 'public, max-age=0, s-maxage=300, stale-while-revalidate=3600');
       return res.status(200).json({
         genereLe: donnees.genereLe,
         ressources: donnees.ressources,
         porteurs: donnees.porteurs,
         carte: { cle: process.env.CARTO_BASEMAP_KEY || '' },
         // Les boutons « Proposer » n'existent dans la page que si les contributions sont ouvertes.
-        contributions: process.env.CONTRIBUTIONS === 'oui',
+        contributions: etat.ouvertes,
       });
     } catch (err) {
       // Le détail reste dans les journaux du serveur, jamais dans la réponse.
@@ -126,7 +145,8 @@ function creerGestionnaire({ source, journal = console.error } = {}) {
 
 const donneesPubliques = creerSource();
 
-module.exports = creerGestionnaire({ source: donneesPubliques });
+// Le socle des réglages est celui de l'assemblage : une seule mémoire par instance pour toutes les routes.
+module.exports = creerGestionnaire({ source: donneesPubliques, reglages: () => require('../lib/contributions').socleReglages() });
 module.exports.creerGestionnaire = creerGestionnaire;
 module.exports.creerSource = creerSource;
 module.exports.donneesPubliques = donneesPubliques;

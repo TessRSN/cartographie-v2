@@ -5,6 +5,8 @@
  * Lot 4a : équipe (accès, rôles, résumé hebdomadaire, journal) ; une personne en Approbation propose
  * ses modifications de fiches, que l'Administration approuve.
  * Lot 4b : courriels (mode d'essai, texte des six courriels, aperçu, essai à soi-même).
+ * Lot 4c : réglages (contributions ouvertes ou fermées, texte des conditions, ce qui est fixé à
+ * l'installation) et sauvegardes (liste des copies, copie à la demande, téléchargement).
  * On y entre par un lien reçu par courriel (?jeton=…), qui ouvre une session de sept jours.
  * La structure, les classes et les fonctions de rendu viennent de la maquette validée ; les données
  * viennent de /api/admin. Le rôle est celui de la personne connectée : l'affichage masque ce qu'il
@@ -25,7 +27,9 @@ const $ = (selecteur, racine) => (racine || document).querySelector(selecteur);
 
 const ETATS = ['attente', 'verification', 'approuvee', 'refusee'];
 const OUVERTS = ['attente', 'verification'];
-const ROUTES = ['accueil', 'propositions', 'ressources', 'porteurs', 'qualite', 'equipe', 'courriels'];
+const ROUTES = ['accueil', 'propositions', 'ressources', 'porteurs', 'qualite', 'equipe', 'courriels', 'reglages', 'sauvegardes'];
+// Les écrans que seule l'Administration voit dans la barre latérale.
+const ROUTES_ADMINISTRATION = ['sauvegardes'];
 const TYPES = ['jeu', 'catalogue', 'plateforme', 'logiciel', 'service'];
 const RELATIONS = ['faitPartieDe', 'reposeSur', 'donneAccesA', 'remplace'];
 // Ce qu'il faut compléter pour une fiche que la personne a laissée à l'équipe.
@@ -55,7 +59,12 @@ const etat = {
   eq: equipeNeuve(),    // écran Équipe : le geste en cours, la personne à retirer, l'invitation en cours d'écriture
   courriels: null,      // dernière lecture de l'écran Courriels : { reglages, essai, service, courriels }
   co: courrielsNeufs(), // écran Courriels : le courriel choisi, les textes en cours d'écriture, le geste en cours, la confirmation
+  reglages: null,       // dernière lecture de l'écran Réglages : { reglages, contributions, messageFerme, conditions, limites, installation, sauvegardes }
+  rg: reglagesNeufs(),  // écran Réglages : ce qui est en cours d'écriture ({ ouvertes, messageFerme, conditions }), les erreurs, l'envoi en cours
+  copies: null,         // dernière lecture de l'écran Sauvegardes : { actives, copies, jour, semaines }
+  sv: { enCours: null }, // écran Sauvegardes : le geste en cours (« faire », ou « telecharger:<id> »)
 };
+function reglagesNeufs() { return { brouillon: null, erreurs: {}, enCours: false }; }
 function equipeNeuve() { return { enCours: null, confirmation: null, invitation: { courriel: '', nom: '', role: 'approbation' }, erreurs: {} }; }
 // champ : le dernier champ de l'éditeur où était le curseur, pour y insérer un repère.
 function courrielsNeufs() { return { choisi: 'lien', brouillons: {}, erreurs: {}, enCours: null, confirmation: null, champ: 'mBody' }; }
@@ -130,6 +139,9 @@ const ICONES = {
   qualite: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
   equipe: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 14.3c2.1.8 3.5 2.9 3.5 5.7"/>',
   courriels: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7.5 8.5 6 8.5-6"/>',
+  reglages: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+  sauvegardes: '<path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+  cadenas: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   favorable: '<path d="M7 10v11"/><path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7a2 2 0 0 1-1.9 1.4H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9z"/>',
   defavorable: '<path d="M17 14V3"/><path d="M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H20a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/>',
 };
@@ -161,7 +173,7 @@ function dessinerNav() {
   const ici = route();
   const c = etat.compteurs || {};
   const pastilles = { propositions: etat.nouvelles, porteurs: c.porteursAPlacer, qualite: c.points };
-  $('#nav').innerHTML = ROUTES.map((r) => `<a href="#${r}"${r === ici ? ' aria-current="page"' : ''}>${icone(r)}<span>${e(T.routes[r])}</span>${pastilles[r] ? `<span class="count">${Number(pastilles[r])}</span>` : ''}</a>`).join('');
+  $('#nav').innerHTML = ROUTES.filter((r) => administre() || !ROUTES_ADMINISTRATION.includes(r)).map((r) => `<a href="#${r}"${r === ici ? ' aria-current="page"' : ''}>${icone(r)}<span>${e(T.routes[r])}</span>${pastilles[r] ? `<span class="count">${Number(pastilles[r])}</span>` : ''}</a>`).join('');
 }
 function montrerCoque(avecNav) {
   $('#coque').classList.toggle('seule', !avecNav);
@@ -174,6 +186,7 @@ function afficherEntree(avertissement) {
   etat.fiches = null; etat.r = null; etat.csv = null;
   etat.porteurs = null; etat.o = null; etat.points = null; etat.compteurs = null; etat.q = { confirmation: null, enCours: null, filtre: '', rech: '' };
   etat.equipe = null; etat.eq = equipeNeuve(); etat.courriels = null; etat.co = courrielsNeufs();
+  etat.reglages = null; etat.rg = reglagesNeufs(); etat.copies = null; etat.sv = { enCours: null };
   dessinerBandeau(); montrerCoque(false); dessinerFenetre();
   $('#main').innerHTML = `<div class="card entree">
     <h1>${e(T.titre)}</h1>
@@ -212,6 +225,14 @@ function texteActivite(a) {
   if (a.sorte === 'avis') return T.activite.avis(a.sens, objet);
   return (T.activite[a.sorte] || T.activite.recue)(objet);
 }
+// La dernière copie de sauvegarde complète : le serveur ne la donne qu'à l'Administration, quand les sauvegardes sont activées.
+function ligneSauvegarde(s) {
+  if (!s) return '';
+  const E = T.envois;
+  const detail = !s.lue ? E.sauvegardeIllisible : s.derniere ? `${jourEtHeure(s.derniere)}${s.alerte ? `. ${E.sauvegardeAncienne}` : ''}` : E.sauvegardeAucune;
+  const pastille = !s.lue ? `<span class="pill p-mute">${e(E.sauvegardeInconnue)}</span>` : s.alerte ? `<span class="pill p-warn">${e(E.sauvegardeAVerifier)}</span>` : `<span class="pill p-ok">${e(E.sauvegardeAJour)}</span>`;
+  return `<div><div class="grow">${e(E.sauvegarde)}<br><span class="muted small">${e(detail)} <a href="#sauvegardes">${e(E.sauvegardeVoir)}</a></span></div>${pastille}</div>`;
+}
 function ecranAccueil() {
   const a = etat.accueil;
   const prenom = etat.moi && etat.moi.nom ? etat.moi.nom.trim().split(/\s+/)[0] : '';
@@ -229,6 +250,7 @@ function ecranAccueil() {
       <section class="card"><h3>${e(T.envois.titre)}</h3><div class="list">
         <div><div class="grow">${e(T.envois.resume)}<br><span class="muted small">${e(T.envois.resumeDetail(v.resume.jour, v.resume.destinataires))}</span></div></div>
         <div><div class="grow">${e(T.envois.contributions)}</div>${v.contributions ? `<span class="pill p-ok">${e(T.envois.ouvertes)}</span>` : `<span class="pill p-warn">${e(T.envois.fermees)}</span>`}</div>
+        ${ligneSauvegarde(a.sauvegardes)}
         <div><div class="grow">${e(T.envois.essai)}${v.essaiCourriels ? `<br><span class="muted small">${e(T.envois.essaiDetail)}</span>` : ''}</div>${v.essaiCourriels ? `<span class="pill p-warn">${e(T.envois.actif)}</span>` : `<span class="pill p-mute">${e(T.envois.arrete)}</span>`}</div>
       </div></section>
     </div>`;
@@ -317,23 +339,27 @@ let demande = 0; // numéro de la dernière lecture d'écran : une réponse plus
 
 function rendre() {
   dessinerBandeau(); montrerCoque(true); dessinerNav();
-  $('#main').innerHTML = { accueil: ecranAccueil, propositions: ecranPropositions, ressources: ecranRessources, porteurs: ecranPorteurs, qualite: ecranQualite, equipe: ecranEquipe, courriels: ecranCourriels }[route()]();
+  $('#main').innerHTML = { accueil: ecranAccueil, propositions: ecranPropositions, ressources: ecranRessources, porteurs: ecranPorteurs, qualite: ecranQualite, equipe: ecranEquipe, courriels: ecranCourriels, reglages: ecranReglages, sauvegardes: ecranSauvegardes }[route()]();
 }
 // Redessine ce qui dépend des données sans toucher à la recherche en cours de frappe.
 function rafraichir() {
   const ici = route();
   if (ici === 'equipe' && $('#ebody')) { redessinerEquipe(); return dessinerNav(); }
   if (ici === 'courriels' && $('#cbody')) { redessinerCourriels(); return dessinerNav(); }
+  if (ici === 'reglages' && $('#gbody')) { redessinerReglages(); return dessinerNav(); }
+  if (ici === 'sauvegardes' && $('#sbody')) { redessinerSauvegardes(); return dessinerNav(); }
   const corps = { propositions: $('#mbody'), ressources: $('#rbody'), porteurs: $('#pbody'), qualite: $('#qbody') }[ici];
   if (!corps) return rendre();
   corps.innerHTML = { propositions: corpsPropositions, ressources: corpsRessources, porteurs: corpsPorteurs, qualite: corpsQualite }[ici]();
   if (ici === 'ressources') $('#rintro').textContent = introRessources();
   dessinerNav();
 }
-const ACTION_DE_ROUTE = { accueil: 'accueil', propositions: 'file', ressources: 'ressources', porteurs: 'porteurs', qualite: 'qualite', equipe: 'equipe', courriels: 'courriels' };
+const ACTION_DE_ROUTE = { accueil: 'accueil', propositions: 'file', ressources: 'ressources', porteurs: 'porteurs', qualite: 'qualite', equipe: 'equipe', courriels: 'courriels', reglages: 'reglages', sauvegardes: 'sauvegardes' };
 async function charger() {
   const moi = ++demande;
   const ici = route();
+  // Les sauvegardes ne se lisent qu'en Administration : pour les autres, l'écran le dit sans rien demander.
+  if (ROUTES_ADMINISTRATION.includes(ici) && !administre()) return;
   const r = await appel(ACTION_DE_ROUTE[ici]);
   if (moi !== demande) return;
   if (r.code === 401) {
@@ -343,10 +369,12 @@ async function charger() {
     if (saisieEquipe()) { message(EQ.sessionExpiree); return; }
     // Un texte de courriel en cours d'écriture aussi.
     if (saisieCourriels()) { message(CO.sessionExpiree); return; }
+    // Un réglage en cours d'écriture aussi.
+    if (saisieReglages()) { message(RG.sessionExpiree); return; }
     return afficherEntree(null);
   }
   if (!r.ok) {
-    if ({ accueil: etat.accueil, propositions: etat.liste, ressources: etat.fiches, porteurs: etat.porteurs, qualite: etat.points, equipe: etat.equipe, courriels: etat.courriels }[ici]) message(T.indisponible); else afficherPanne();
+    if ({ accueil: etat.accueil, propositions: etat.liste, ressources: etat.fiches, porteurs: etat.porteurs, qualite: etat.points, equipe: etat.equipe, courriels: etat.courriels, reglages: etat.reglages, sauvegardes: etat.copies }[ici]) message(T.indisponible); else afficherPanne();
     return;
   }
   if (ici === 'accueil') { etat.accueil = r.donnees; etat.nouvelles = r.donnees.compteurs.nouvelles; }
@@ -356,6 +384,12 @@ async function charger() {
     // Un brouillon redevenu identique au texte en vigueur n'en est plus un.
     for (const c of etat.courriels.courriels) if (!brouillonDiffere(c)) delete etat.co.brouillons[c.id];
   }
+  else if (ici === 'reglages') {
+    etat.reglages = r.donnees;
+    // Une saisie redevenue identique à ce qui est enregistré n'en est plus une.
+    if (!saisieReglages()) etat.rg.brouillon = null;
+  }
+  else if (ici === 'sauvegardes') etat.copies = { ...r.donnees, copies: r.donnees.copies || [] };
   else if (ici === 'ressources') { etat.fiches = r.donnees.ressources || []; etat.historique = r.donnees.historique !== false; }
   else if (ici === 'porteurs') {
     etat.porteurs = r.donnees.porteurs || [];
@@ -1931,6 +1965,7 @@ const TEINTES_GESTE = {
   'Refus': 'bad', 'Fiche écartée': 'bad', 'Personne retirée': 'bad',
   'Second regard': 'warn', 'Fiche à revoir': 'warn', 'Modification proposée': 'warn', 'Rôle changé': 'warn',
   'Mode d\'essai changé': 'warn',
+  'Contributions ouvertes': 'ok', 'Contributions fermées': 'bad', 'Réglages modifiés': 'warn', 'Sauvegarde faite': 'ok', 'Sauvegarde téléchargée': 'warn',
 };
 const pointGeste = (geste) => `<span class="pt pt-${TEINTES_GESTE[geste] || 'info'}" aria-hidden="true"></span>`;
 function journalDeLEquipe() {
@@ -2270,6 +2305,259 @@ function reglerEssai(cible) {
   return undefined;
 }
 
+// ─── Réglages : contributions ouvertes ou fermées, texte des conditions, et ce qui est fixé à l'installation ───
+const RG = T.reglages;
+// Modifier demande le rôle Administration et la base « Réglages ».
+const reglable = () => administre() && !!etat.reglages && etat.reglages.reglages.actifs;
+// Ce que le formulaire montre au départ, d'après le serveur. Le message vide veut dire « le message d'origine ».
+const departReglages = (d) => ({ ouvertes: d.contributions.choix, messageFerme: d.messageFerme.modifie ? d.messageFerme.texte : '', conditions: d.conditions.texte });
+const saisieDesReglages = () => etat.rg.brouillon || departReglages(etat.reglages);
+// Vrai si un réglage est en cours d'écriture, sans être enregistré.
+function saisieReglages() {
+  if (!etat.reglages || !etat.rg.brouillon) return false;
+  const a = etat.rg.brouillon; const b = departReglages(etat.reglages);
+  return a.ouvertes !== b.ouvertes || a.messageFerme !== b.messageFerme || a.conditions !== b.conditions;
+}
+const pastilleOuiNon = (ok, oui, non) => `<span class="pill ${ok ? 'p-ok' : 'p-warn'}">${e(ok ? oui : non)}</span>`;
+// Une ligne du bloc « Fixé à l'installation ». « valeur » est du HTML déjà échappé.
+const cadenas = (titre, valeur, aide) => `<div class="lock">${icone('cadenas')}<div><b>${e(titre)}</b>${valeur}${aide ? `<br><span>${e(aide)}</span>` : ''}</div></div>`;
+function blocInstallation() {
+  const i = etat.reglages.installation; const I = RG.installation;
+  const code = (texte) => `<code>${e(texte)}</code>`;
+  const defini = (ok) => pastilleOuiNon(ok, I.defini, I.nonDefini);
+  const bases = i.bases.map((b) => `<span class="pill ${b.definie ? 'p-ok' : 'p-warn'}">${e(b.nom)}</span>`).join(' ');
+  return `<section class="card"><h2>${e(I.titre)}</h2><p class="muted small">${e(I.intro)}</p>
+    ${cadenas(I.site, ` ${i.site ? code(i.site.replace(/^https?:\/\//, '')) : e(I.siteInconnu)}`, I.siteAide)}
+    ${cadenas(I.expedition, ` ${code(i.expedition)}`, I.expeditionAide)}
+    ${cadenas(I.reponse, ` ${code(i.reponse)}`, I.reponseAide)}
+    ${cadenas(I.bases, ` <span class="row" style="margin:.25rem 0">${bases}</span>${e(I.cle)} : ${defini(i.cleNotion)}`, I.basesAide)}
+    ${cadenas(I.service, ` ${pastilleOuiNon(i.serviceEnvoi, I.connecte, I.nonConnecte)}`, I.serviceAide)}
+    ${cadenas(I.adresseEssai, ` ${defini(i.adresseEssai)}`, I.adresseEssaiAide)}
+    ${cadenas(I.compteur, ` ${pastilleOuiNon(i.compteur, I.actif, I.enMemoire)}`, I.compteurAide)}
+    ${cadenas(I.secrets, ` ${e(I.secretLiens)} : ${defini(i.secretLiens)} ${e(I.secretTaches)} : ${defini(i.secretTaches)}`, I.secretsAide)}
+    ${cadenas(I.taches, '', I.tachesDetail(i.taches.resume, i.taches.liens))}
+    ${cadenas(I.indexation, '', i.indexation ? I.indexationOuverte : I.indexationFermee)}
+    ${cadenas(I.durees, '', I.dureesDetail(...['proposer', 'panneau', 'session'].map((cle) => (i.durees[cle] ? I.duree(Number(i.durees[cle].n), i.durees[cle].unite) : '?'))))}
+    ${cadenas(I.limites, '', I.limitesDetail(Number(i.plafonds.parCourriel), Number(i.plafonds.parIp), Number(i.plafonds.parJour)))}
+  </section>`;
+}
+function corpsReglages() {
+  const d = etat.reglages;
+  const tete = (bouton) => `<div class="head"><div><h1>${e(T.routes.reglages)}</h1><p>${e(RG.intro)}</p></div>${bouton}</div>`;
+  if (!d) return `${tete('')}<p class="muted" role="status">${e(T.chargement)}</p>`;
+  const rg = etat.rg; const s = saisieDesReglages(); const m = reglable(); const C = RG.contributions; const K = RG.conditions;
+  const fige = rg.enCours ? ' disabled' : ''; const lecture = m ? '' : ' readonly';
+  const erreur = (cle) => (rg.erreurs[cle] ? `<span class="err" role="alert">${e(rg.erreurs[cle])}</span>` : '');
+  const boutons = m ? `<span class="row"><button type="button" class="btn" id="gAbandon" data-act="g-abandonner"${fige}${saisieReglages() ? '' : ' hidden'}>${e(RG.abandonner)}</button><button type="button" class="btn primary" data-act="g-enregistrer"${fige}>${e(rg.enCours ? T.enCours : RG.enregistrer)}</button></span>` : '';
+  const avis = !d.reglages.actifs ? `<div class="note warn">${e(RG.sansBase)}</div>`
+    : !d.reglages.lus ? `<div class="note warn">${e(RG.illisible)}</div>`
+      : d.reglages.perime ? `<div class="note warn">${e(RG.perime)}</div>`
+        : !administre() ? `<div class="note info">${e(RG.lectureSeule)}</div>` : '';
+  const c = d.contributions;
+  const source = c.source === 'panneau' ? C.duPanneau(c.modifiePar, jour(c.modifieLe)) : c.source === 'precaution' ? C.parPrecaution : C.parDefaut;
+  const trace = d.conditions.modifie ? RG.modifieLe(jour(d.conditions.modifieLe), d.conditions.modifiePar) : K.estOrigine;
+  return `${tete(boutons)}${avis}
+    <div class="sets"><div class="grid" style="gap:1rem">
+      <section class="card"><h2>${e(C.titre)}</h2>
+        <div class="switch"><div><b>${e(C.interrupteur)}</b><span class="muted small">${e(C.aide)}</span></div><input type="checkbox" role="switch" id="rgOuvertes" aria-label="${e(C.interrupteur)}"${s.ouvertes ? ' checked' : ''}${m && !rg.enCours ? '' : ' disabled'}></div>${erreur('ouvertes')}
+        <p class="small">${e(C.enVigueur)} ${c.ouvertes ? `<span class="pill p-ok">${e(C.ouvertes)}</span>` : `<span class="pill p-warn">${e(C.fermees)}</span>`} ${e(source)} <span class="muted">${e(C.delai)}</span></p>
+        <label class="f" for="rgMessage">${e(C.message)}<input type="text" id="rgMessage" maxlength="${Number(d.limites.messageFerme)}" value="${e(s.messageFerme)}" placeholder="${e(d.messageFerme.origine)}" autocomplete="off"${rg.erreurs.messageFerme ? ' aria-invalid="true"' : ''}${lecture}></label>${erreur('messageFerme')}
+        <p class="muted small">${e(C.messageAide)} « ${e(d.messageFerme.origine)} »</p>
+      </section>
+      <section class="card"><div class="row" style="justify-content:space-between"><h2>${e(K.titre)}</h2><span class="pill p-warn">${e(K.provisoire)}</span></div>
+        ${d.conditions.ecarte ? `<div class="note warn">${e(K.ecarte)}</div>` : ''}
+        <label class="f" for="rgConditions">${e(K.libelle)}<textarea class="notes" style="min-height:130px" id="rgConditions" maxlength="${Number(d.limites.conditions)}"${rg.erreurs.conditions ? ' aria-invalid="true"' : ''}${lecture}>${e(s.conditions)}</textarea></label>${erreur('conditions')}
+        <p class="muted small">${e(trace)}</p>
+        ${m ? `<div class="row"><button type="button" class="btn sm" id="gOrigine" data-act="g-origine"${fige}${s.conditions === d.conditions.origine ? ' hidden' : ''}>${e(K.origine)}</button></div>` : ''}
+      </section>
+    </div><div class="grid" style="gap:1rem">${blocInstallation()}</div></div>`;
+}
+function ecranReglages() { return `<div id="gbody">${corpsReglages()}</div>`; }
+// Redessine l'écran en gardant le focus et le curseur là où ils étaient : ce qui est écrit est dans l'état.
+function redessinerReglages() {
+  const zone = $('#gbody');
+  if (!zone) return;
+  const actif = zone.contains(document.activeElement) ? document.activeElement : null;
+  const repere = actif ? { id: actif.id, act: actif.dataset.act } : null;
+  let curseur = null;
+  try { if (actif && (actif.id === 'rgMessage' || actif.id === 'rgConditions')) curseur = [actif.selectionStart, actif.selectionEnd]; } catch (err) { /* sans position */ }
+  zone.innerHTML = corpsReglages();
+  if (!repere) return;
+  const retrouve = [...zone.querySelectorAll('button, input, textarea')].find((x) => !x.disabled && !x.hidden && (repere.id ? x.id === repere.id : x.dataset.act === repere.act));
+  if (!retrouve) return;
+  retrouve.focus({ preventScroll: true });
+  try { if (curseur) retrouve.setSelectionRange(curseur[0], curseur[1]); } catch (err) { /* sans position */ }
+}
+// Chaque frappe est gardée dans l'état, sans redessiner : seuls les boutons suivent.
+function saisirReglage(cible) {
+  if (!reglable() || etat.rg.enCours) return;
+  const champ = cible.id === 'rgMessage' ? 'messageFerme' : 'conditions';
+  etat.rg.brouillon = { ...saisieDesReglages(), [champ]: cible.value };
+  // Le message d'erreur d'un champ s'efface dès qu'on le corrige.
+  if (etat.rg.erreurs[champ]) {
+    delete etat.rg.erreurs[champ]; cible.removeAttribute('aria-invalid');
+    const etiquette = cible.closest('label'); const suivant = etiquette && etiquette.nextElementSibling;
+    if (suivant && suivant.classList.contains('err')) suivant.remove();
+  }
+  if (!saisieReglages()) etat.rg.brouillon = null;
+  const abandon = $('#gAbandon'); if (abandon) abandon.hidden = !saisieReglages();
+  const origine = $('#gOrigine'); if (origine) origine.hidden = saisieDesReglages().conditions === etat.reglages.conditions.origine;
+}
+// L'interrupteur des contributions : il ne part qu'avec « Enregistrer les réglages ».
+function basculerContributions(cible) {
+  if (!reglable() || etat.rg.enCours) return redessinerReglages();
+  etat.rg.brouillon = { ...saisieDesReglages(), ouvertes: cible.checked };
+  delete etat.rg.erreurs.ouvertes;
+  if (!saisieReglages()) etat.rg.brouillon = null;
+  return redessinerReglages();
+}
+// Ce que la personne a changé par rapport à ce que l'écran avait chargé : seul cela part au serveur.
+// Un écran resté ouvert n'écrase donc pas ce qu'une autre personne a réglé entre-temps.
+const CHAMPS_REGLAGES = ['ouvertes', 'messageFerme', 'conditions'];
+function reglagesChanges() {
+  const s = saisieDesReglages(); const depart = departReglages(etat.reglages);
+  const changes = {};
+  for (const cle of CHAMPS_REGLAGES) if (s[cle] !== depart[cle]) changes[cle] = s[cle];
+  // Tenues fermées par précaution (réglage illisible) : le choix affiché part toujours, pour remettre le réglage d'aplomb.
+  if (etat.reglages.contributions.source === 'precaution') changes.ouvertes = s.ouvertes;
+  return changes;
+}
+// Une autre personne a changé un réglage depuis le chargement de l'écran : il est rechargé avec sa
+// version, et ce que la personne avait changé ailleurs reste à l'écran.
+async function conflitReglages(changes, champs) {
+  const enConflit = (Array.isArray(champs) ? champs : []).filter((cle) => CHAMPS_REGLAGES.includes(cle));
+  const lu = await appel('reglages');
+  if (lu.ok) {
+    etat.reglages = lu.donnees;
+    const gardes = Object.fromEntries(Object.entries(changes).filter(([cle]) => !enConflit.includes(cle)));
+    etat.rg.brouillon = { ...departReglages(lu.donnees), ...gardes };
+    if (!saisieReglages()) etat.rg.brouillon = null;
+  }
+  message(RG.conflit(enConflit.map((cle) => RG.noms[cle])));
+  return redessinerReglages();
+}
+// Enregistre ce qui a changé, avec la date que l'écran avait lue pour chaque réglage ; le serveur vérifie tout.
+async function enregistrerReglages() {
+  const rg = etat.rg;
+  if (rg.enCours || !reglable()) return undefined;
+  const changes = reglagesChanges();
+  if (!Object.keys(changes).length) { rg.erreurs = {}; message(RG.inchange); return redessinerReglages(); }
+  const vues = etat.reglages.vu || {};
+  const vu = Object.fromEntries(Object.keys(changes).map((cle) => [cle, vues[cle] || null]));
+  rg.enCours = true; rg.erreurs = {}; redessinerReglages();
+  const r = await appel('enregistrer-reglages', { corps: { ...changes, vu } });
+  rg.enCours = false;
+  if (r.ok) {
+    etat.reglages = { ...etat.reglages, ...r.donnees.reglages }; rg.brouillon = null;
+    // L'accueil sera relu : son bloc « Envois » ne garde pas l'ancien état.
+    etat.accueil = null;
+    message(r.donnees.inchange ? RG.inchange : RG.enregistre);
+    return redessinerReglages();
+  }
+  if (r.code === 401) {
+    // Session échue : ce qui est écrit reste à l'écran.
+    if (!saisieReglages()) return afficherEntree(null);
+    message(RG.sessionExpiree);
+    return redessinerReglages();
+  }
+  if (r.code === 403) { message(T.reserveAdministration); redessinerReglages(); await relireMoi(); return charger(); }
+  const code = r.donnees.code;
+  if (r.code === 409 && code === 'conflit') return conflitReglages(changes, r.donnees.champs);
+  if (code === 'invalide' && r.donnees.erreurs) {
+    rg.erreurs = { ...r.donnees.erreurs }; message(RG.aCorriger); redessinerReglages();
+    const fautif = $(rg.erreurs.messageFerme ? '#rgMessage' : rg.erreurs.conditions ? '#rgConditions' : '#rgOuvertes'); if (fautif) fautif.focus();
+    return undefined;
+  }
+  message(code === 'reglages-absents' ? RG.sansBaseCourt : T.indisponible);
+  redessinerReglages();
+  // L'écran reprend ce que le serveur dit vraiment.
+  return code === 'reglages-absents' ? charger() : undefined;
+}
+function gesteEcranReglages(act) {
+  const rg = etat.rg;
+  if (rg.enCours || !etat.reglages || !reglable()) return undefined;
+  if (act === 'g-enregistrer') return enregistrerReglages();
+  if (act === 'g-abandonner') { rg.brouillon = null; rg.erreurs = {}; return redessinerReglages(); }
+  // Le texte d'origine revient dans la zone de saisie : il n'est enregistré qu'avec « Enregistrer les réglages ».
+  if (act === 'g-origine') {
+    rg.brouillon = { ...saisieDesReglages(), conditions: etat.reglages.conditions.origine }; delete rg.erreurs.conditions;
+    if (!saisieReglages()) rg.brouillon = null;
+    return redessinerReglages();
+  }
+  return undefined;
+}
+
+// ─── Sauvegardes : les copies gardées dans Notion, à faire et à télécharger (Administration) ───
+const SV = T.sauvegardes;
+function ligneCopie(c) {
+  const sv = etat.sv; const fige = sv.enCours ? ' disabled' : '';
+  const origine = c.origine === 'automatique' ? SV.automatique : SV.demande(c.par);
+  const bouton = c.fichier
+    ? `<button type="button" class="btn sm" data-act="s-telecharger" data-id="${e(c.id)}"${fige}>${e(sv.enCours === `telecharger:${c.id}` ? SV.telechargement : SV.telecharger)}</button>`
+    : `<span class="muted small">${e(SV.sansFichier)}</span>`;
+  return `<div><div class="grow"><b>${e(jourEtHeure(c.faiteLe) || T.vide)}</b>${c.incomplete ? ` <span class="pill p-warn" title="${e(SV.incompleteAide)}">${e(SV.incomplete)}</span>` : ''}<br><span class="muted small">${e(origine)}</span></div><span class="muted small num">${typeof c.taille === 'number' ? e(SV.taille(c.taille)) : ''}</span>${bouton}</div>`;
+}
+function corpsSauvegardes() {
+  const tete = (intro, bouton) => `<div class="head"><div><h1>${e(T.routes.sauvegardes)}</h1>${intro ? `<p>${e(intro)}</p>` : ''}</div>${bouton}</div>`;
+  if (!administre()) return `${tete('', '')}<div class="note info">${e(SV.reserve)}</div>`;
+  const d = etat.copies; const sv = etat.sv;
+  if (!d) return `${tete('', '')}<p class="muted" role="status">${e(T.chargement)}</p>`;
+  const intro = SV.intro(d.jour, Number(d.semaines));
+  if (!d.actives) return `${tete(intro, '')}<div class="note warn">${e(SV.inactives)}</div>`;
+  const bouton = `<button type="button" class="btn primary" data-act="s-faire"${sv.enCours ? ' disabled' : ''}>${e(sv.enCours === 'faire' ? SV.enCours : SV.faire)}</button>`;
+  const liste = d.copies.length ? `<div class="list">${d.copies.map(ligneCopie).join('')}</div>` : `<p class="muted">${e(SV.aucune)}</p>`;
+  return `${tete(intro, bouton)}<div class="note info">${e(SV.horsNotion)}</div><section class="card">${liste}</section>`;
+}
+function ecranSauvegardes() { return `<div id="sbody">${corpsSauvegardes()}</div>`; }
+function redessinerSauvegardes() { const zone = $('#sbody'); if (zone) zone.innerHTML = corpsSauvegardes(); }
+// Ce que le serveur a refusé : la session, le rôle, ou la base qui n'est pas branchée.
+async function refusSauvegarde(statut, code, sinon) {
+  if (statut === 401) return afficherEntree(null);
+  if (statut === 403) { message(T.reserveAdministration); redessinerSauvegardes(); await relireMoi(); return charger(); }
+  message(code === 'occupee' ? SV.occupee : statut === 404 ? SV.introuvable : sinon);
+  redessinerSauvegardes();
+  // La liste reprend ce que le serveur dit vraiment.
+  return statut === 404 || code === 'sauvegardes-absentes' ? charger() : undefined;
+}
+// « Faire une copie maintenant » : la copie se fait sur le serveur, qui la dépose dans Notion.
+async function faireCopie() {
+  const sv = etat.sv;
+  if (sv.enCours || !administre() || !etat.copies || !etat.copies.actives) return undefined;
+  sv.enCours = 'faire'; redessinerSauvegardes();
+  const r = await appel('sauvegarder', { corps: {} });
+  sv.enCours = null;
+  if (!r.ok) return refusSauvegarde(r.code, r.donnees.code, SV.echec);
+  if (r.donnees.copie) etat.copies.copies = [r.donnees.copie, ...etat.copies.copies];
+  message(r.donnees.copie && r.donnees.copie.incomplete ? SV.faiteIncomplete : SV.faite);
+  return redessinerSauvegardes();
+}
+// Le fichier vient du serveur du site, session et rôle vérifiés : jamais d'une adresse donnée par les données.
+async function telechargerCopie(id) {
+  const sv = etat.sv;
+  const c = ((etat.copies && etat.copies.copies) || []).find((x) => x.id === id);
+  if (sv.enCours || !administre() || !c || !c.fichier) return undefined;
+  sv.enCours = `telecharger:${c.id}`; redessinerSauvegardes();
+  let reponse = null; let fichier = null; let code = null;
+  try {
+    reponse = await fetch(`/api/admin?${new URLSearchParams({ action: 'sauvegarde', id: c.id })}`, { credentials: 'same-origin' });
+    if (reponse.ok) fichier = await reponse.blob(); else code = ((await reponse.json().catch(() => ({}))) || {}).code || null;
+  } catch (err) { reponse = null; fichier = null; }
+  sv.enCours = null;
+  if (!fichier) return refusSauvegarde(reponse ? reponse.status : 0, code, SV.echecTelechargement);
+  const jourDeLaCopie = /^\d{4}-\d{2}-\d{2}/.test(String(c.faiteLe || '')) ? c.faiteLe.slice(0, 10) : 'copie';
+  const lien = document.createElement('a');
+  lien.href = URL.createObjectURL(fichier);
+  lien.download = SV.fichier(jourDeLaCopie);
+  document.body.appendChild(lien); lien.click(); lien.remove();
+  setTimeout(() => URL.revokeObjectURL(lien.href), 1000);
+  return redessinerSauvegardes();
+}
+function gesteEcranSauvegardes(act, cible) {
+  if (act === 's-faire') return faireCopie();
+  if (act === 's-telecharger') return telechargerCopie(cible.dataset.id);
+  return undefined;
+}
+
 // ─── Export en CSV, à partir des fiches lues par le tableau ───
 function lignesCsv(liste) {
   // Une cellule qui commencerait par un signe de formule est neutralisée pour les tableurs.
@@ -2350,6 +2638,8 @@ document.addEventListener('click', async (evenement) => {
   if (act && act.startsWith('q-')) return gesteEcranQualite(act, cible);
   if (act && act.startsWith('e-')) return gesteEcranEquipe(act, cible);
   if (act && act.startsWith('c-')) return gesteEcranCourriels(act, cible);
+  if (act && act.startsWith('g-')) return gesteEcranReglages(act);
+  if (act && act.startsWith('s-')) return gesteEcranSauvegardes(act, cible);
   if (etat.csv) return gesteCsv(act, v);
   if (etat.r) return gesteFenetreFiche(act, cible);
   if (etat.o) return gesteVolet(act);
@@ -2418,6 +2708,8 @@ document.addEventListener('input', (evenement) => {
   if (cible.id === 'invNom') { etat.eq.invitation.nom = cible.value; return; }
   // Écran Courriels : chaque frappe de l'objet ou du texte est gardée, et l'aperçu suit.
   if (cible.id === 'mSubj' || cible.id === 'mBody') return saisirCourriel(cible);
+  // Écran Réglages : chaque frappe du message ou des conditions est gardée.
+  if (cible.id === 'rgMessage' || cible.id === 'rgConditions') return saisirReglage(cible);
   // Volet d'un porteur : chaque frappe est gardée, et le repère suit les coordonnées écrites.
   const o = etat.o;
   if (o && o.d) {
@@ -2447,6 +2739,7 @@ document.addEventListener('change', (evenement) => {
   if (cible.id === 'rType') { etat.filtresR.type = cible.value; return rafraichir(); }
   if (cible.id === 'rStatut') { etat.filtresR.statut = cible.value; return rafraichir(); }
   if (cible.id === 'essaiMode') return void reglerEssai(cible);
+  if (cible.id === 'rgOuvertes') return void basculerContributions(cible);
   if (cible.id === 'invRole') { if (T.roles[cible.value]) etat.eq.invitation.role = cible.value; return; }
   if (cible.dataset.role !== undefined || cible.dataset.resume !== undefined) return void reglageEquipe(cible);
   if (cible.id === 'fusionVers' && etat.o && etat.o.d && !etat.o.enCours) { etat.o.fusionVers = cible.value; etat.o.confirmation = false; return dessinerFenetre(); }
@@ -2506,7 +2799,7 @@ document.addEventListener('drop', (evenement) => {
 });
 
 // Fermer l'onglet ou recharger la page avec une saisie en cours : le navigateur demande confirmation.
-window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours() || saisieEquipe() || saisieCourriels()) { evenement.preventDefault(); evenement.returnValue = ''; } });
+window.addEventListener('beforeunload', (evenement) => { if (saisieEnCours() || saisieEquipe() || saisieCourriels() || saisieReglages()) { evenement.preventDefault(); evenement.returnValue = ''; } });
 
 // Changer d'écran. Une fenêtre avec une saisie en cours reste ouverte.
 window.addEventListener('hashchange', () => {
