@@ -1,14 +1,19 @@
 /**
  * Le formulaire de proposition, ouvert par un lien reçu par courriel.
  *   GET  /api/proposition?jeton=…  → ce qu'il faut pour afficher le formulaire
+ *   GET  /api/proposition?etat=1   → sans lien : les contributions sont-elles ouvertes, le message
+ *                                    de fermeture et le texte des conditions
  *   POST /api/proposition          → enregistre la proposition dans la file
+ * Quand l'équipe a fermé les contributions dans le panneau, le formulaire reçoit le message de
+ * fermeture (403), à la lecture comme à l'envoi ; le lien n'est pas consommé.
  * Seuls les champs du catalogue ouverts aux proposants entrent et sortent.
  */
 const { verifier } = require('../lib/jetons');
 const { valeursDepuisFiche } = require('../lib/notion');
 const { CHAMPS, LIENS_AVEC_RESSOURCE, nettoyer, calculerChangements } = require('../public/js/champs.js');
 const { verifierImage } = require('../lib/images');
-const { ouvertes, origineSure, memeOrigine, corpsDe, dependances } = require('../lib/contributions');
+const { ouvertes, origineSure, memeOrigine, corpsDe, dependances, refusPour } = require('../lib/contributions');
+const { lireEtatPublic } = require('../lib/reglages-site');
 
 const STATUT_ECARTEE = 'Écartée';
 const GENRES = ['nouvelle', 'modification', 'rsn'];
@@ -53,9 +58,16 @@ function creerGestionnaire(donnees) {
     const d = dependances(donnees);
 
     try {
+      // L'état public, réglé dans le panneau : rien d'autre que ce que le formulaire montre.
+      const public_ = await lireEtatPublic(d.reglages, env);
+      if (req.method === 'GET' && req.query && req.query.etat && !req.query.jeton) {
+        return res.status(200).json({ ouvertes: public_.ouvertes, message: public_.message, conditions: public_.conditions });
+      }
+      const refus = refusPour(public_);
       if (req.method === 'GET') {
         const charge = lireJeton(req.query && req.query.jeton, env);
         if (!charge) return expire(res);
+        if (refus) return res.status(refus.statut).json(refus.corps);
         const [options, publiques] = await Promise.all([d.notion.lireOptions(), d.source()]);
         let fiche = null; let dejaEnAttente = false;
         if (charge.sorte === 'modifier') {
@@ -73,6 +85,8 @@ function creerGestionnaire(donnees) {
           options: Object.fromEntries(fermes.map((c) => [c.cle, options[c.cle] || []])),
           existantes: { ...Object.fromEntries(ouvertesListes.map((c) => [c.cle, options[c.cle] || []])), porteurs: (publiques.porteurs || []).map((p) => p.nom) },
           dejaEnAttente,
+          // Le texte de la case à cocher : celui du panneau, sinon celui du code.
+          conditions: public_.conditions,
         });
       }
 
@@ -81,6 +95,7 @@ function creerGestionnaire(donnees) {
       if (!corps) return res.status(400).json({ erreur: 'Demande illisible.' });
       const charge = lireJeton(corps.jeton, env);
       if (!charge) return expire(res);
+      if (refus) return res.status(refus.statut).json(refus.corps);
       const { genre } = corps;
       const modification = charge.sorte === 'modifier';
       if (!GENRES.includes(genre) || modification !== (genre === 'modification')) return res.status(400).json({ erreur: 'Demande illisible.' });

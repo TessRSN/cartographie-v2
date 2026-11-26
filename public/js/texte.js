@@ -171,6 +171,10 @@ const TEXTES = {
     lienQuestion: 'Quel est votre lien avec cette ressource ?',
     liens: { responsable: "J'en suis responsable", 'jy-travaille': "J'y travaille", aucun: 'Aucun' },
     conditions: "Je confirme que ces renseignements sont publics et exacts à ma connaissance, et j'accepte qu'ils soient publiés dans la cartographie du RSN après examen.",
+    // Le message montré au public quand l'équipe a fermé les contributions sans écrire le sien.
+    fermees: 'Les contributions sont fermées pour le moment. Merci de votre intérêt : revenez un peu plus tard.',
+    // Quand l'état des contributions ne peut pas être lu : rien n'est ouvert dans le doute.
+    indisponibles: 'Les contributions sont momentanément indisponibles. Réessayez dans quelques minutes.',
     precedent: 'Retour', suivant: 'Continuer', envoyer: 'Envoyer la proposition', envoiEnCours: 'Envoi en cours…',
     erreursEnHaut: 'Certains champs sont à corriger avant de continuer.',
     aucunChangement: "Vous n'avez rien modifié pour l'instant.",

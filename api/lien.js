@@ -3,9 +3,11 @@
  * une fiche, ou pour entrer dans le panneau.
  * Corps : { courriel, but: 'proposer' | 'modifier' | 'panneau', adresse, site }
  * La réponse est la même que le lien parte ou non : elle ne dit pas si une adresse est connue.
+ * Quand l'équipe a fermé les contributions dans le panneau, aucun lien pour proposer ou modifier ne
+ * part, et la réponse le dit avec le message de fermeture. Le lien du panneau part toujours.
  */
 const { signer, normaliserCourriel } = require('../lib/jetons');
-const { ouvertes, origineSure, memeOrigine, ipDe, corpsDe, dependances } = require('../lib/contributions');
+const { ouvertes, origineSure, memeOrigine, ipDe, corpsDe, dependances, refusSiFermees } = require('../lib/contributions');
 
 const BUTS = ['proposer', 'modifier', 'panneau'];
 
@@ -35,6 +37,11 @@ function creerGestionnaire(donnees) {
     if (!BUTS.includes(corps.but)) return res.status(400).json({ erreur: 'Demande illisible.' });
 
     const d = dependances(donnees);
+    // Fermé depuis le panneau : refusé avant de compter la demande dans les limites d'envoi.
+    if (corps.but !== 'panneau') {
+      const refus = await refusSiFermees(d, env);
+      if (refus) return res.status(refus.statut).json(refus.corps);
+    }
     try {
       const origine = origineSure(req, env);
       const permis = origine && await d.limites.autoriserLien({ courriel, ip: ipDe(req), plafondDuJour: corps.but !== 'panneau' });
