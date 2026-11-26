@@ -87,7 +87,7 @@ function construireIndex() {
     includeScore: true, threshold: 0.25, ignoreLocation: true, minMatchCharLength: 2,
     keys: [
       { name: 'nom', weight: 3 }, { name: 'autresNoms', weight: 2 }, { name: 'motsCles', weight: 2 }, { name: 'normes', weight: 2 },
-      { name: 'porteurs', weight: 1.5 }, { name: 'phrase', weight: 1 }, { name: 'canon', weight: 1 }, { name: 'description', weight: 0.5 },
+      { name: 'porteurs', weight: 1.5 }, { name: 'phrase', weight: 1 }, { name: 'description', weight: 0.5 },
     ],
   });
 }

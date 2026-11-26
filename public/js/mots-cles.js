@@ -238,7 +238,7 @@ const DICTIONNAIRE_FR_EN = {
   // Info / data
   'information': 'information', 'informations': 'information',
   'renseignement': 'information', 'renseignements': 'information',
-  'primary': 'primary', 'primaire': 'primary',
+  'primary': 'primary', 'primaire': 'primary', 'primaires': 'primary',
   'intelligence': 'intelligence',
   // Population / famille
   'family': 'family', 'famille': 'family', 'familles': 'family',
@@ -332,16 +332,19 @@ Object.assign(DICTIONNAIRE_FR_EN, {
   'adversite': 'adversity', 'aimantation': 'magnetization',
   'alimentaire': 'dietary', 'alimentaires': 'dietary', 'anonymisation': 'anonymization',
   'antimicrobien': 'antimicrobial', 'antimicrobiens': 'antimicrobial', 'antimicrobienne': 'antimicrobial',
-  'apprenant': 'learning', 'apprenants': 'learning', 'approvisionnement': 'procurement', 'arn': 'rna', 'adn': 'dna',
+  'apprenant': 'learner', 'apprenants': 'learner', 'apprenante': 'learner', 'apprenantes': 'learner', 'learners': 'learner',
+  'approvisionnement': 'procurement', 'arn': 'rna', 'adn': 'dna',
   'augmentee': 'augmented', 'autonomisation': 'empowerment', 'avancee': 'advanced', 'avancees': 'advanced',
   'axone': 'axon', 'axones': 'axon', 'bioinformatique': 'bioinformatics',
   'biomedical': 'biomedical', 'biomedicale': 'biomedical', 'biomedicales': 'biomedical', 'biomedicaux': 'biomedical',
   'biopharmaceutique': 'biopharmaceutical', 'brulure': 'burn', 'brulures': 'burn',
-  'cadre': 'framework', 'cahier': 'notebook', 'cahiers': 'notebook', 'calcul': 'computing',
+  'cadre': 'framework', 'cahier': 'notebook', 'cahiers': 'notebook',
+  // « calcul » n'est pas « informatique » : les expressions donnent « high performance computing ».
+  'calcul': 'computation', 'calculs': 'computation', 'computations': 'computation',
   'cardiometabolique': 'cardiometabolic', 'catalogue': 'catalog', 'catalogues': 'catalog',
   'cerveau': 'brain', 'champ': 'field', 'chimie': 'chemistry',
   'citoyen': 'citizen', 'citoyens': 'citizen', 'citoyenne': 'citizen', 'citoyennes': 'citizen',
-  'clinico': 'clinical', 'codeveloppement': 'codevelopment', 'collecte': 'collection',
+  'clinico': 'clinical', 'codeveloppement': 'codevelopment',
   'commercialisation': 'commercialization', 'complexite': 'complexity',
   'computationnelle': 'computational', 'computationnel': 'computational', 'conformite': 'compliance',
   'connecte': 'connected', 'connectee': 'connected', 'connectes': 'connected', 'connectees': 'connected',
@@ -360,15 +363,15 @@ Object.assign(DICTIONNAIRE_FR_EN, {
   'entrepreneuriat': 'entrepreneurship',
   'environnement': 'environment', 'environnements': 'environment',
   'environnemental': 'environmental', 'environnementale': 'environmental', 'environnementales': 'environmental',
-  'epigenetique': 'epigenetics', 'epigenomique': 'epigenomics', 'etat': 'status',
+  'epigenetique': 'epigenetics', 'epigenomique': 'epigenomics',
   'etude': 'study', 'etudes': 'study', 'exposition': 'exposure', 'expositions': 'exposure',
   'facteur': 'factor', 'facteurs': 'factor',
   'federe': 'federated', 'federee': 'federated', 'federes': 'federated', 'federees': 'federated',
   'fiabilite': 'reliability', 'financement': 'funding',
   'fonctionnel': 'functional', 'fonctionnelle': 'functional', 'fonctionnels': 'functional', 'fonctionnelles': 'functional',
   'fondateur': 'founder', 'fondation': 'foundation', 'genealogie': 'genealogy',
-  'genique': 'gene', 'gene': 'gene', 'grossesse': 'pregnancy', 'grossesses': 'pregnancy',
-  'guidee': 'guided', 'guide': 'guided', 'habitude': 'habit', 'habitudes': 'habit',
+  'genique': 'gene', 'geniques': 'gene', 'grossesse': 'pregnancy', 'grossesses': 'pregnancy',
+  'guidee': 'guided', 'guidees': 'guided', 'guides': 'guided', 'habitude': 'habit', 'habitudes': 'habit',
   'harmonisation': 'harmonization', 'haute': 'high', 'haut': 'high',
   'heterogene': 'heterogeneous', 'heterogenes': 'heterogeneous', 'hippocampe': 'hippocampus',
   'histoire': 'history', 'histologie': 'histology', 'historique': 'historical',
@@ -377,9 +380,10 @@ Object.assign(DICTIONNAIRE_FR_EN, {
   'hopital': 'hospital', 'hopitaux': 'hospital', 'hospitalisation': 'hospitalization',
   'immunite': 'immunity', 'immunologie': 'immunology', 'incertitude': 'uncertainty',
   'indicateur': 'indicator', 'indicateurs': 'indicator',
-  'infectieuse': 'infectious', 'infectieuses': 'infectious', 'infectiologie': 'infectiology',
+  'infectieux': 'infectious', 'infectieuse': 'infectious', 'infectieuses': 'infectious', 'infectiologie': 'infectiology',
   'informatise': 'computerized', 'informatises': 'computerized', 'infrarouge': 'infrared',
-  'intellectuelle': 'intellectual', 'intelligent': 'smart', 'intelligents': 'smart',
+  'intellectuel': 'intellectual', 'intellectuelle': 'intellectual', 'intellectuels': 'intellectual', 'intellectuelles': 'intellectual',
+  'intelligent': 'smart', 'intelligents': 'smart', 'intelligente': 'smart', 'intelligentes': 'smart',
   'interdisciplinarite': 'interdisciplinarity',
   'intersectoriel': 'intersectoral', 'intersectorielle': 'intersectoral', 'intersectorielles': 'intersectoral',
   'isolement': 'isolation', 'jeunes': 'youth', 'jumelage': 'linkage',
@@ -402,16 +406,18 @@ Object.assign(DICTIONNAIRE_FR_EN, {
   'organisation': 'organization', 'organisations': 'organization',
   'partage': 'sharing', 'pathogene': 'pathogen', 'pathogenes': 'pathogen', 'pathologie': 'pathology',
   'perinatale': 'perinatal', 'peroperatoire': 'intraoperative',
-  'personnalisee': 'personalized', 'personnalise': 'personalized', 'personnel': 'personal', 'personnels': 'personal',
+  'personnalisee': 'personalized', 'personnalise': 'personalized', 'personnalises': 'personalized', 'personnalisees': 'personalized',
+  // Pas « personnel » au singulier : en anglais, le même mot désigne le personnel.
+  'personnels': 'personal', 'personnelle': 'personal', 'personnelles': 'personal',
   'pharmacoepidemiologie': 'pharmacoepidemiology', 'pharmacotherapie': 'pharmacotherapy',
   'pneumologie': 'respirology', 'polypharmacie': 'polypharmacy', 'polysomnographie': 'polysomnography',
   'portail': 'portal', 'portails': 'portal', 'poumon': 'lung', 'poumons': 'lung',
   'preclinique': 'preclinical', 'precoce': 'early', 'precoces': 'early',
   'prepublication': 'preprint', 'prepublications': 'preprint', 'pretraitement': 'preprocessing',
-  'principe': 'principle', 'principes': 'principle', 'proche': 'near', 'propriete': 'property',
+  'principe': 'principle', 'principes': 'principle', 'propriete': 'property',
   'radiographie': 'radiography', 'radiomique': 'radiomics', 'radiopharmaceutique': 'radiopharmaceutical',
   'rapportee': 'reported', 'rapportees': 'reported', 'rares': 'rare',
-  'recalage': 'registration', 'reglementaire': 'regulatory', 'reglementaires': 'regulatory',
+  'reglementaire': 'regulatory', 'reglementaires': 'regulatory',
   'relaxometrie': 'relaxometry', 'reproductibilite': 'reproducibility',
   'responsable': 'responsible', 'responsables': 'responsible', 'retinienne': 'retinal',
   'retroaction': 'feedback', 'reutilisation': 'reuse', 'risque': 'risk', 'risques': 'risk',
@@ -427,11 +433,36 @@ Object.assign(DICTIONNAIRE_FR_EN, {
   'tumoral': 'tumor', 'tumorale': 'tumor', 'tumeur': 'tumor', 'tumeurs': 'tumor',
   'urologie': 'urology', 'valeur': 'value', 'valorisation': 'valorization', 'vie': 'life',
   'virtuels': 'virtual', 'virtuelles': 'virtual', 'visualisation': 'visualization',
+  // Féminins et pluriels des mots ci-dessus.
+  'agents': 'agent', 'antimicrobiennes': 'antimicrobial',
+  'augmente': 'augmented', 'augmentes': 'augmented', 'augmentees': 'augmented',
+  'avance': 'advanced', 'avances': 'advanced',
+  'biopharmaceutiques': 'biopharmaceutical', 'cardiometaboliques': 'cardiometabolic',
+  'computationnels': 'computational', 'computationnelles': 'computational',
+  'contextuels': 'contextual', 'contextuelles': 'contextual',
+  'corporel': 'body', 'corporels': 'body', 'corporelles': 'body', 'corticales': 'cortical',
+  'emergents': 'emerging', 'environnementaux': 'environmental',
+  'fondateurs': 'founder', 'fondations': 'foundation', 'historiques': 'historical',
+  'informatisee': 'computerized', 'informatisees': 'computerized', 'intersectoriels': 'intersectoral',
+  'jeune': 'youth', 'jeunesse': 'youth', 'longues': 'long',
+  'maternels': 'maternal', 'maternelles': 'maternal',
+  'microbiens': 'microbial', 'microbiennes': 'microbial',
+  'multimodales': 'multimodal', 'multimodaux': 'multimodal', 'multiomiques': 'multiomics',
+  'multiprovincial': 'multiprovincial', 'multiprovinciales': 'multiprovincial', 'multiprovinciaux': 'multiprovincial',
+  'neurodegeneratifs': 'neurodegenerative',
+  'perinatales': 'perinatal', 'perinataux': 'perinatal', 'peroperatoires': 'intraoperative',
+  'precliniques': 'preclinical', 'radiopharmaceutiques': 'radiopharmaceutical',
+  'rapporte': 'reported', 'rapportes': 'reported',
+  'retinien': 'retinal', 'retiniens': 'retinal', 'retiniennes': 'retinal',
+  'rurales': 'rural', 'ruraux': 'rural', 'spatiales': 'spatial', 'spatiaux': 'spatial',
+  'translationnel': 'translational', 'translationnels': 'translational', 'translationnelles': 'translational',
+  'tumorales': 'tumor', 'tumoraux': 'tumor', 'valeurs': 'value',
+  'ville': 'city', 'villes': 'city', 'cities': 'city',
   // Variantes anglaises ramenées à la forme retenue (pluriels, orthographe britannique).
   'activities': 'activity', 'adolescents': 'adolescent', 'adults': 'adult', 'ageing': 'aging',
   'algorithms': 'algorithm', 'applications': 'application', 'assessment': 'evaluation',
   'axons': 'axon', 'biobanks': 'biobank', 'burns': 'burn', 'cells': 'cell', 'children': 'child',
-  'clinics': 'clinic', 'communities': 'community', 'containers': 'container',
+  'clinics': 'clinic', 'datasets': 'dataset', 'communities': 'community', 'containers': 'container',
   'devices': 'device', 'disorders': 'disorder', 'drugs': 'drug',
   'effects': 'effect', 'factors': 'factor', 'formats': 'format', 'genes': 'gene', 'gpus': 'gpu',
   'habits': 'habit', 'hospitals': 'hospital', 'indicators': 'indicator', 'inequalities': 'inequality',
@@ -462,28 +493,35 @@ const EXPRESSIONS = {
   'traitement d\'image': 'image processing', 'traitement d\'images': 'image processing',
   'traitement du signal': 'signal processing', 'traitement de signaux': 'signal processing',
   'traitement de données': 'data processing', 'traitement du langage naturel': 'natural language processing',
-  'chaîne de traitement': 'processing pipeline', 'pré-traitement': 'preprocessing', 'pre-processing': 'preprocessing',
+  'chaîne de traitement': 'processing pipeline',
+  'traitement automatique du langage naturel': 'natural language processing', 'traitement automatique des langues': 'natural language processing',
+  'traitement des langues naturelles': 'natural language processing', 'taln': 'natural language processing',
+  'calcul de haute performance': 'high performance computing', 'calcul haute performance': 'high performance computing',
+  'calcul intensif': 'high performance computing', 'hpc': 'high performance computing',
+  'calcul scientifique': 'scientific computing', 'calcul distribué': 'distributed computing',
+  'calcul informatique de pointe': 'advanced research computing',
+  'jeu de données': 'dataset', 'jeux de données': 'dataset', 'data set': 'dataset', 'data sets': 'dataset',
+  'collecte de données': 'data collection',
+  // « time » et « first » sont des mots vides en anglais : un mot inventé garde le sujet entier.
+  'temps réel': 'realtime', 'real time': 'realtime',
+  'premières nations': 'firstnations', 'première nation': 'firstnations', 'first nations': 'firstnations', 'first nation': 'firstnations',
   'flux de travail': 'workflow',
   'processeur graphique': 'gpu', 'processeurs graphiques': 'gpu',
   'graphics processing unit': 'gpu', 'graphics processing units': 'gpu',
   'données massives': 'big data', 'donnée massive': 'big data', 'mégadonnées': 'big data',
   'forage de données': 'data mining', 'fouille de données': 'data mining',
   'infonuagique': 'cloud computing', 'informatique en nuage': 'cloud computing',
-  'bio-informatique': 'bioinformatics', 'bio-informatics': 'bioinformatics',
-  'neuro-informatique': 'neuroinformatics', 'neuro-informatics': 'neuroinformatics',
   'informatique de la santé': 'health informatics', 'informatique médicale': 'medical informatics',
   'informatique biomédicale': 'biomedical informatics',
-  'multi-omique': 'multiomics', 'multi-omics': 'multiomics',
-  'co-design': 'codesign', 'co-conception': 'codesign',
-  'co-développement': 'codevelopment', 'co-development': 'codevelopment',
-  'définition de cas': 'case definition',
+  'co-conception': 'codesign',
+  // « case » et « support » sont des mots vides en anglais : même procédé.
+  'définition de cas': 'casedefinition', 'case definition': 'casedefinition',
   // « built » est un mot vide en anglais : un mot inventé garde le sujet distinct de « environnement ».
   'environnement bâti': 'builtenvironment', 'built environment': 'builtenvironment',
   'vie privée': 'privacy',
-  // « IA » et « AI » sont trop courts pour compter comme mots : sans cela, « IA responsable » se réduirait à « responsable ».
-  'ia responsable': 'responsible artificial intelligence', 'responsible ai': 'responsible artificial intelligence',
   // Imagerie et neurosciences
-  'neuro-imagerie': 'neuroimaging', 'neuro-imaging': 'neuroimaging',
+  'proche infrarouge': 'near infrared',
+  'recalage d\'image': 'image registration', 'recalage d\'images': 'image registration',
   'imagerie par résonance magnétique': 'mri', 'magnetic resonance imaging': 'mri',
   'irmf': 'functional mri', 'fmri': 'functional mri',
   'eeg': 'electroencephalography', 'meg': 'magnetoencephalography',
@@ -494,12 +532,18 @@ const EXPRESSIONS = {
   'chest radiograph': 'chest x ray', 'chest radiography': 'chest x ray',
   // Soins et santé
   'dossier clinique informatisé': 'electronic medical records', 'dossier médical informatisé': 'electronic medical records',
+  'dossiers cliniques informatisés': 'electronic medical records', 'dossiers médicaux informatisés': 'electronic medical records',
+  'état de santé': 'health status',
+  'système de santé apprenant': 'learning health system', 'systèmes de santé apprenants': 'learning health system',
+  'activité physique': 'physical activity', 'activités physiques': 'physical activity', 'santé physique': 'physical health',
+  'maladie génétique': 'genetic disease', 'test génétique': 'genetic test', 'analyse génétique': 'genetic analysis',
+  'traitement de la douleur': 'pain management',
   'soins de première ligne': 'primary care', 'première ligne': 'primary care',
   'soutien à domicile': 'home care', 'hospital at home': 'home hospitalization',
   'réanimation': 'intensive care', 'icu': 'intensive care', 'intensive care unit': 'intensive care',
   'unité de soins intensifs': 'intensive care',
   'amélioration continue': 'continuous improvement',
-  'aide à la décision': 'decision support',
+  'aide à la décision': 'decisionsupport', 'decision support': 'decisionsupport', 'prise de décision': 'decision making',
   'soins fondés sur la valeur': 'value based care',
   'recherche axée sur les pratiques': 'practice based research',
   'mesure rapportée par le patient': 'patient reported outcome measures',
@@ -512,7 +556,8 @@ const EXPRESSIONS = {
   'santé mère-enfant': 'maternal child health',
   'périnatalité': 'perinatal health',
   'sclérose en plaques': 'multiple sclerosis',
-  'cognitive impairment': 'cognitive disorder',
+  'trouble cognitif': 'cognitive impairment', 'troubles cognitifs': 'cognitive impairment',
+  'cognitive disorder': 'cognitive impairment', 'cognitive disorders': 'cognitive impairment',
   'variant génétique': 'genetic variant',
   'télésurveillance': 'telemonitoring', 'remote patient monitoring': 'telemonitoring', 'remote monitoring': 'telemonitoring',
   'mhealth': 'mobile health',
@@ -535,16 +580,37 @@ const EXPRESSIONS = {
   // et le nom français d'une classification rejoint son nom anglais.
   'cim-10': 'icd10', 'icd-10': 'icd10', 'cim-o-3': 'icdo3', 'icd-o-3': 'icdo3',
   'cim-9': 'icd9', 'icd-9': 'icd9', 'cim-11': 'icd11', 'icd-11': 'icd11',
-  'hl7 fhir': 'fhir', 'hl7 v2': 'hl7v2',
+  'cim10': 'icd10', 'cim9': 'icd9', 'cim11': 'icd11', 'cimo3': 'icdo3',
+  // « HL7 FHIR » est une norme à part ; « HL7 v2 » et « HL7 » restent ensemble.
+  'hl7 fhir': 'fhir',
   'norme bids': 'bids', 'format bids': 'bids', 'bids standard': 'bids', 'bids format': 'bids',
 };
 
 // Mots-clés entiers ramenés à un autre : l'écriture anglaise consacrée d'un sujet dont la
-// traduction mot à mot serait trop courte (« urgences » se dit « emergency care »).
+// traduction mot à mot donnerait autre chose (« urgences » se dit « emergency department »).
 const SUJETS_ENTIERS = {
-  'emergency care': 'emergency', 'emergency department': 'emergency', 'emergency departments': 'emergency',
-  'service des urgences': 'emergency',
+  'emergency department': 'emergency', 'emergency departments': 'emergency', 'service des urgences': 'emergency',
+  'trauma care': 'traumatology',
 };
+
+// Préfixes détachés et chiffres, soudés avant tout le reste : « pré-traitement d'image » doit
+// devenir « prétraitement d'image » avant que l'expression « traitement d'image » ne soit cherchée.
+const SOUDURES = {
+  'pré-traitement': 'pretraitement', 'pre-processing': 'preprocessing',
+  'neuro-imagerie': 'neuroimaging', 'neuro-imaging': 'neuroimaging',
+  'neuro-informatique': 'neuroinformatics', 'neuro-informatics': 'neuroinformatics',
+  'bio-informatique': 'bioinformatics', 'bio-informatics': 'bioinformatics',
+  'multi-omique': 'multiomics', 'multi-omiques': 'multiomics', 'multi-omics': 'multiomics',
+  'co-design': 'codesign', 'co-développement': 'codevelopment', 'co-development': 'codevelopment',
+  'e-santé': 'ehealth', 'esanté': 'ehealth', 'e-health': 'ehealth',
+  'm-santé': 'mhealth', 'msanté': 'mhealth', 'm-health': 'mhealth',
+  'type 1': 'type1', 'type 2': 'type2',
+};
+
+// Sigles de deux lettres, trop courts pour compter comme mots : dans un mot-clé de plusieurs
+// mots, ils valent l'expression qu'ils abrègent (« IA en santé » n'est pas « santé »).
+// Seul, le sigle garde sa propre clé.
+const SIGLES_DANS_UN_SUJET = { ia: 'artificial intelligence', ai: 'artificial intelligence' };
 
 // Mots de liaison retirés avant de reconnaître une expression : « traitement de l'image »
 // et « traitement d'image » sont la même expression.
@@ -557,17 +623,22 @@ function aplatir(texte) {
 }
 
 // Les deux tables, aplaties une fois ; les expressions les plus longues passent d'abord.
-const EXPRESSIONS_APLATIES = Object.entries(EXPRESSIONS)
+const aplatirTable = (table) => Object.entries(table)
   .map(([expression, remplacement]) => [` ${aplatir(expression)} `, ` ${remplacement} `])
   .sort((x, y) => y[0].length - x[0].length);
+const SOUDURES_APLATIES = aplatirTable(SOUDURES);
+const EXPRESSIONS_APLATIES = aplatirTable(EXPRESSIONS);
 const SUJETS_ENTIERS_APLATIS = new Map(Object.entries(SUJETS_ENTIERS).map(([sujet, autre]) => [aplatir(sujet), autre]));
 
 function remplacerExpressions(texte) {
   const plat = aplatir(texte);
   if (SUJETS_ENTIERS_APLATIS.has(plat)) return SUJETS_ENTIERS_APLATIS.get(plat);
-  let t = ` ${plat} `;
-  for (const [expression, remplacement] of EXPRESSIONS_APLATIES) {
-    if (t.includes(expression)) t = t.split(expression).join(remplacement);
+  const morceaux = plat.split(' ');
+  let t = ` ${morceaux.length > 1 ? morceaux.map((m) => SIGLES_DANS_UN_SUJET[m] || m).join(' ') : plat} `;
+  for (const table of [SOUDURES_APLATIES, EXPRESSIONS_APLATIES]) {
+    for (const [expression, remplacement] of table) {
+      if (t.includes(expression)) t = t.split(expression).join(remplacement);
+    }
   }
   return t.trim();
 }
@@ -588,6 +659,9 @@ function motsCanoniques(texte) {
 // remplacées. « Intelligence artificielle » et « artificial intelligence » donnent la
 // même clé, « apprentissage automatique » et « machine learning » aussi.
 // Les sigles courts (« IA », « ATC ») sont gardés tels quels.
+// Les clés déjà calculées sont gardées (le graphe et les suggestions redemandent les mêmes à chaque
+// geste), sans dépasser CLES_GARDEES : la recherche y fait passer chaque saisie.
+const CLES_GARDEES = 5000;
 const clesConnues = new Map();
 function cleMotCle(motCle) {
   const texte = String(motCle || '');
@@ -600,11 +674,12 @@ function cleMotCle(motCle) {
   } else {
     cle = [...new Set(mots)].sort().join('+');
   }
+  if (clesConnues.size >= CLES_GARDEES) clesConnues.clear();
   clesConnues.set(texte, cle);
   return cle;
 }
 
-const api = { MOTS_VIDES, DICTIONNAIRE_FR_EN, EXPRESSIONS, SUJETS_ENTIERS, plier, canoniser, motsCanoniques, cleMotCle };
+const api = { MOTS_VIDES, DICTIONNAIRE_FR_EN, EXPRESSIONS, SUJETS_ENTIERS, SOUDURES, CLES_GARDEES, clesConnues, plier, canoniser, motsCanoniques, cleMotCle };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 else Object.assign(racine, api);
 })(typeof window !== 'undefined' ? window : globalThis);

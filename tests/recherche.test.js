@@ -192,14 +192,143 @@ test('la valeur d\'un sujet proposé, une fois cherchée, trouve les fiches des 
       const attendues = requete === 'neuro' ? ['Alpha', 'Beta'] : ['Alpha', 'Beta', 'Gamma'];
       assert.deepEqual(noms(chercher(docs, sujet.valeur)).sort(), attendues, `${langue} : « ${sujet.valeur} »`);
     }
-    // Chaque sujet du portrait, une fois cliqué, ramène exactement les fiches qu'il compte.
-    for (const { sujet, nombre } of statistiquesBandeau(bilingue, 6, langue).sujets) {
-      assert.equal(chercher(docs, sujet).length, nombre, `${langue} : « ${sujet} »`);
-    }
   }
   // Une norme cherchée sous son nom anglais trouve la fiche qui l'écrit en français.
   assert.deepEqual(noms(chercher(docs, 'ICD-10')), ['Alpha']);
   // Les fiches qui portent le sujet entier passent devant celles qui n'en contiennent que les mots.
   const melange = documents([fiche('Texte', { description: 'On y parle de machine learning.' }), fiche('Sujet', { motsCles: ['apprentissage automatique'] })]);
   assert.deepEqual(noms(chercher(melange, 'machine learning')), ['Sujet', 'Texte']);
+});
+
+test('un sujet du portrait, une fois cliqué : ses fiches sont toutes là, avant celles qui ne le portent pas', () => {
+  const liste = bilingue.concat([
+    fiche('Epsilon', { description: 'Un outil de machine learning pour la neuro-imagerie et l apprentissage automatique.' }),
+    fiche('Oncologie pour tous', { motsCles: ['nutrition'] }),
+  ]);
+  const docs = documents(liste);
+  for (const langue of ['fr', 'en']) {
+    for (const { sujet, cle, nombre } of denombrer(liste, langue).sujets) {
+      const trouvees = chercher(docs, sujet);
+      const porte = (r) => documentDeRecherche(r).clesSujets.has(cle);
+      const parNom = (r) => r.nom.toLowerCase().includes(sujet.toLowerCase());
+      assert.equal(trouvees.filter(porte).length, nombre, `${langue} : toutes les fiches de « ${sujet} » sont trouvées`);
+      const rangs = trouvees.map((r) => (parNom(r) ? 0 : porte(r) ? 1 : 2));
+      assert.deepEqual(rangs, [...rangs].sort(), `${langue} : « ${sujet} », le nom, puis le sujet, puis le reste`);
+    }
+  }
+  // Le clic peut ramener plus de fiches que le sujet n'en compte : celles qui en parlent sans le porter.
+  assert.deepEqual(noms(chercher(docs, 'apprentissage automatique')), ['Alpha', 'Beta', 'Gamma', 'Epsilon']);
+  assert.deepEqual(noms(chercher(docs, 'oncologie')), ['Oncologie pour tous', 'Delta']);
+});
+
+// ─── Relecture : pas de bruit par la forme canonique, classement, suggestions ───
+
+const fige = [
+  fiche('Souches', { motsCles: ['cellule souche'] }),
+  fiche('Stem', { motsCles: ['stem cells'] }),
+  fiche('Systeme', { description: 'A health information system for hospitals.' }),
+  fiche('Rares', { motsCles: ['maladie rare'] }),
+  fiche('Infrarouge', { motsCles: ['spectroscopie proche infrarouge fonctionnelle'] }),
+  fiche('Aidants', { description: 'Pour les proches des patients.' }),
+  fiche('Lineaire', { motsCles: ['modèle linéaire'] }),
+  fiche('Longue', { motsCles: ['covid longue'] }),
+  fiche('Longitudinale', { motsCles: ['étude longitudinale'] }),
+  fiche('Apprenant', { motsCles: ['système de santé apprenant'] }),
+  fiche('Profond', { motsCles: ['apprentissage profond'] }),
+  fiche('Calcul', { motsCles: ['calcul de haute performance'] }),
+  fiche('Informatique', { motsCles: ['informatique de la santé'] }),
+  fiche('Automatique', { motsCles: ['apprentissage automatique'] }),
+  fiche('Neuro', { motsCles: ['neuro-imagerie'], normes: ['CIM-10'] }),
+  fiche('Partage', { motsCles: ['partage de données'] }),
+  fiche('Fonctionnelle', { motsCles: ['irm fonctionnelle'] }),
+  fiche('Graphique', { motsCles: ['processeur graphique'] }),
+];
+
+test('un mot cherché ne ramène pas les fiches où sa traduction n\'est qu\'un morceau d\'un autre mot', () => {
+  const docs = documents(fige);
+  const trouve = (requete) => noms(chercher(docs, requete)).sort();
+  assert.deepEqual(trouve('souche'), ['Souches', 'Stem'], '« stem » ne trouve pas « system »');
+  assert.deepEqual(trouve('rare'), ['Rares'], '« rare » ne trouve pas « infrared »');
+  assert.deepEqual(trouve('rares'), ['Rares']);
+  assert.deepEqual(trouve('proche'), ['Aidants', 'Infrarouge'], '« near » ne trouve pas « linear »');
+  assert.deepEqual(trouve('longue'), ['Longue'], '« long » ne trouve pas « longitudinal »');
+  assert.deepEqual(trouve('apprenant'), ['Apprenant'], '« apprenant » n\'est pas « apprentissage »');
+  assert.deepEqual(trouve('calcul'), ['Calcul'], '« calcul » n\'est pas « informatique »');
+  assert.deepEqual(trouve('informatique'), ['Informatique']);
+});
+
+test('les rapprochements voulus entre les deux langues restent trouvés', () => {
+  const docs = documents(fige);
+  const trouve = (requete) => noms(chercher(docs, requete)).sort();
+  assert.deepEqual(trouve('machine learning'), ['Automatique']);
+  assert.deepEqual(trouve('neuroimaging'), ['Neuro']);
+  assert.deepEqual(trouve('ICD-10'), ['Neuro']);
+  assert.deepEqual(trouve('high performance computing'), ['Calcul']);
+  assert.deepEqual(trouve('data sharing'), ['Partage']);
+  assert.deepEqual(trouve('fmri'), ['Fonctionnelle']);
+  assert.deepEqual(trouve('gpu'), ['Graphique']);
+  assert.deepEqual(trouve('learning'), ['Automatique', 'Profond'], 'un mot anglais trouve sa traduction en mot entier');
+  assert.deepEqual(trouve('stem cells'), ['Souches', 'Stem']);
+});
+
+test('la forme canonique d\'un mot n\'est jamais passée à la recherche floue', () => {
+  const docs = documents(fige);
+  const appels = [];
+  const floue = (forme) => { appels.push(forme); return []; };
+  assert.deepEqual(noms(chercher(docs, 'souche', floue)).sort(), ['Souches', 'Stem']);
+  assert.deepEqual(appels, ['souche']);
+});
+
+test('classement : le nom d\'abord, puis les fiches qui portent le sujet, puis le reste', () => {
+  const liste = [
+    fiche('Registre A', { motsCles: ['biobanque'] }),
+    fiche('Texte', { description: 'Une biobanque y est décrite, avec sa cohorte.' }),
+    fiche('Registre B', { motsCles: ['Biobank', 'étude de cohorte'] }),
+    fiche('Biobanque de l\'Institut', { motsCles: ['neurologie'] }),
+    fiche('Autre', { autresNoms: 'Quebec Biobank', motsCles: ['cohorte'] }),
+    fiche('CARTaGENE', { autresNoms: 'cohorte populationnelle', motsCles: ['génomique'] }),
+  ];
+  const docs = documents(liste);
+  assert.deepEqual(noms(chercher(docs, 'biobanque')), ['Biobanque de l\'Institut', 'Registre A', 'Registre B', 'Texte', 'Autre']);
+  assert.deepEqual(noms(chercher(docs, 'biobank')), ['Autre', 'Registre B', 'Registre A', 'Texte', 'Biobanque de l\'Institut']);
+  assert.deepEqual(noms(chercher(docs, 'cohorte')), ['CARTaGENE', 'Autre', 'Texte', 'Registre B']);
+  // Avec la recherche floue : son ordre est gardé dans chaque groupe.
+  const floue = (forme) => (forme === 'biobanque' ? [{ item: docs[1], score: 0.01 }, { item: docs[3], score: 0.2 }, { item: docs[0], score: 0.3 }] : []);
+  assert.deepEqual(noms(chercher(docs, 'biobanque', floue)), ['Biobanque de l\'Institut', 'Registre A', 'Registre B', 'Texte', 'Autre']);
+});
+
+const pourSuggestions = [
+  fiche('S1', { motsCles: ['traitement du signal', 'vieillissement', 'neuro-imagerie'], normes: ['BIDS'] }),
+  fiche('S2', { motsCles: ['traitement du signal', 'neuro-imagerie', 'imagerie médicale'], normes: ['BIDS'] }),
+  fiche('S3', { motsCles: ['traitement du signal', 'neuro-imagerie', 'imagerie médicale', 'norme bids'] }),
+  fiche('S4', { motsCles: ['traitement d\'image', 'aide à la décision clinique', 'mesures rapportées par le patient'] }),
+  fiche('S5', { motsCles: ['traitement d\'image', 'aide à la décision clinique', 'mesures rapportées par le patient'] }),
+  fiche('S6', { motsCles: ['processeur graphique', 'portail patient', 'moelle épinière'] }),
+];
+
+test('suggestions : la langue du site d\'abord, l\'autre langue seulement en début de mot', () => {
+  const sujets = (requete, langue) => suggestions(pourSuggestions, requete, langue).filter((x) => x.genre === 'sujet').map((x) => x.libelle);
+  // « processeur graphique » n'est pas évincé par « signal processing » et « image processing ».
+  assert.equal(sujets('proc')[0], 'processeur graphique');
+  // « support », « cord », « ring » : des morceaux de mots anglais ne proposent rien en français.
+  assert.deepEqual(sujets('port'), ['portail patient', 'mesures rapportées par le patient']);
+  assert.deepEqual(sujets('pinal'), []);
+  assert.deepEqual(sujets('ring'), []);
+  assert.deepEqual(sujets('ning'), []);
+  assert.deepEqual(sujets('ment'), ['traitement du signal', 'traitement d\'image', 'vieillissement']);
+  // Le début d'un mot de l'autre langue propose toujours le sujet.
+  assert.deepEqual(sujets('cord'), ['moelle épinière']);
+  assert.deepEqual(sujets('spin'), ['moelle épinière']);
+  assert.deepEqual(sujets('moel', 'en'), ['spinal cord']);
+  // Un sujet dont un mot commence par la saisie passe avant ceux qui la contiennent seulement.
+  assert.deepEqual(sujets('aging', 'en'), ['aging', 'neuroimaging', 'medical imaging']);
+});
+
+test('suggestions : le nombre d\'un sujet compte les fiches qui le portent en mot-clé ou en norme', () => {
+  const [bids] = suggestions(pourSuggestions, 'bids').filter((x) => x.genre === 'sujet');
+  assert.equal(bids.libelle, 'BIDS');
+  assert.equal(bids.nombre, 3);
+  assert.equal(chercher(documents(pourSuggestions), bids.valeur).length, 3);
+  // Le portrait, lui, ne compte que les mots-clés : les normes y ont leur propre ligne.
+  assert.ok(!statistiquesBandeau(pourSuggestions, 20).sujets.some((s) => s.sujet === 'BIDS' && s.nombre !== 1));
 });

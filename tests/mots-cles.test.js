@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { MOTS_VIDES, DICTIONNAIRE_FR_EN, EXPRESSIONS, SUJETS_ENTIERS, canoniser, cleMotCle } = require('../public/js/mots-cles.js');
+const { MOTS_VIDES, DICTIONNAIRE_FR_EN, EXPRESSIONS, SUJETS_ENTIERS, SOUDURES, canoniser, cleMotCle } = require('../public/js/mots-cles.js');
 const { LIBELLES_SUJETS, libelleSujet, langueDuSite } = require('../public/js/libelles-sujets.js');
 
 // Mots-clés et normes réels de la cartographie, avec l'écriture anglaise naturelle du même sujet.
@@ -88,7 +88,7 @@ const MEMES_SUJETS = [
   ['analyse fédérée', 'federated analysis'],
   ['plan de gestion des données', 'data management plan'],
   ['données sensibles', 'sensitive data'],
-  ['urgences', 'emergency care'],
+  ['urgences', 'emergency department'],
   ['développement de l\'enfant', 'child development'],
   ['entrepôt de données', 'data warehouse'],
   ['séquençage', 'sequencing'],
@@ -166,6 +166,7 @@ const MEMES_SUJETS_EN_FRANCAIS = [
   ['données sensibles', 'donnée sensible'],
   ['norme bids', 'BIDS'],
   ['fhir', 'HL7 FHIR'],
+  ['HL7 v2', 'HL7'],
 ];
 
 // Mots-clés et normes réels qui se ressemblent sans être le même sujet.
@@ -174,7 +175,6 @@ const SUJETS_DIFFERENTS = [
   ['télésanté', 'télémédecine'],
   ['télésurveillance', 'surveillance'],
   ['CIM-10', 'CIM-O-3'],
-  ['HL7', 'HL7 v2'],
   ['HL7', 'HL7 FHIR'],
   ['HL7 v2', 'HL7 FHIR'],
   ['vie privée', 'confidentialité'],
@@ -270,7 +270,7 @@ test('dictionnaire : chaque mot est atteignable et chaque traduction est une for
 });
 
 test('expressions : chaque expression et ce qui la remplace donnent la même clé', () => {
-  for (const [expression, remplacement] of Object.entries(EXPRESSIONS).concat(Object.entries(SUJETS_ENTIERS))) {
+  for (const [expression, remplacement] of Object.entries(EXPRESSIONS).concat(Object.entries(SUJETS_ENTIERS), Object.entries(SOUDURES))) {
     assert.ok(cleMotCle(expression), `« ${expression} » a une clé`);
     assert.equal(cleMotCle(expression), cleMotCle(remplacement), `« ${expression} » et « ${remplacement} »`);
   }
@@ -346,4 +346,202 @@ test('le gabarit charge la table des libellés avant les scripts qui s\'en serve
   const rang = (nom) => gabarit.indexOf(`<script src="/js/${nom}.js" defer></script>`);
   assert.ok(rang('mots-cles') > 0 && rang('mots-cles') < rang('libelles-sujets'));
   for (const nom of ['recherche', 'connexions', 'app', 'graphe']) assert.ok(rang('libelles-sujets') < rang(nom), nom);
+});
+
+// ─── Relecture : fusions rétablies, fusions manquées, clés dégénérées, chevauchements ───
+
+test('fusions de main rétablies : déficience cognitive, soins d\'urgence, HL7', () => {
+  assert.equal(cleMotCle('déficience cognitive'), cleMotCle('cognitive impairment'));
+  assert.equal(cleMotCle('trouble cognitif'), cleMotCle('cognitive impairment'));
+  assert.equal(cleMotCle('soins d\'urgence'), cleMotCle('emergency care'));
+  assert.notEqual(cleMotCle('soins d\'urgence'), cleMotCle('urgences'));
+  assert.equal(cleMotCle('HL7'), cleMotCle('HL7 v2'));
+  assert.notEqual(cleMotCle('HL7'), cleMotCle('HL7 FHIR'));
+  assert.equal(cleMotCle('fhir'), cleMotCle('HL7 FHIR'));
+});
+
+test('autres paires français/anglais relevées à la relecture', () => {
+  const groupes = [
+    ['dossier clinique informatisé', 'dossiers cliniques informatisés', 'electronic medical records'],
+    ['données personnelles', 'personal data'],
+    ['villes intelligentes', 'ville intelligente', 'smart cities', 'smart city'],
+    ['soins personnalisés', 'personalized care'],
+    ['agent infectieux', 'agents infectieux', 'infectious agent'],
+    ['soins primaires', 'primary care', 'soins de première ligne'],
+    ['activité physique', 'physical activity'],
+    ['maladie génétique', 'maladies génétiques', 'genetic disease'],
+    ['jeu de données', 'jeux de données', 'dataset', 'data set', 'datasets'],
+    ['temps réel', 'real-time', 'real time'],
+    ['Premières Nations', 'First Nations'],
+    ['traitement automatique du langage naturel', 'traitement automatique des langues', 'traitement du langage naturel', 'natural language processing'],
+    ['traitement de la douleur', 'pain management', 'gestion de la douleur'],
+    ['CIM10', 'CIM-10', 'ICD10', 'ICD-10', 'cim 10'],
+    ['IA en santé', 'AI in health', 'intelligence artificielle en santé'],
+    ['IA générative', 'generative AI', 'intelligence artificielle générative'],
+    ['ia responsable', 'responsible AI'],
+    ['calcul de haute performance', 'high performance computing', 'HPC'],
+    ['calcul scientifique', 'scientific computing'],
+    ['calcul distribué', 'distributed computing'],
+    ['système de santé apprenant', 'systèmes de santé apprenants', 'learning health system'],
+    ['surveillance de l\'état de santé', 'health status surveillance'],
+    ['recalage d\'image', 'image registration'],
+    ['collecte de données', 'data collection'],
+    ['cadre légal', 'legal framework'],
+    ['spectroscopie proche infrarouge fonctionnelle', 'functional near-infrared spectroscopy', 'fNIRS'],
+    ['imagerie par résonance magnétique fonctionnelle', 'functional magnetic resonance imaging', 'IRMf', 'fMRI', 'IRM fonctionnelle'],
+    ['unité de soins intensifs pédiatriques', 'pediatric intensive care unit', 'pediatric ICU'],
+    ['traumatologie', 'trauma care'],
+  ];
+  for (const [premier, ...autres] of groupes) {
+    assert.ok(cleMotCle(premier), `« ${premier} » a une clé`);
+    for (const autre of autres) assert.equal(cleMotCle(autre), cleMotCle(premier), `« ${autre} » et « ${premier} »`);
+  }
+});
+
+test('un sigle seul garde sa clé ; dans un mot-clé, « IA » et « AI » valent « intelligence artificielle »', () => {
+  assert.equal(cleMotCle('IA'), 'ia');
+  assert.equal(cleMotCle('AI'), 'ai');
+  assert.equal(canoniser('ia'), null, 'canoniser ne change pas');
+  assert.notEqual(cleMotCle('IA en santé'), cleMotCle('santé'));
+  assert.notEqual(cleMotCle('IA générative'), cleMotCle('IA responsable'));
+});
+
+test('un mot-clé de plusieurs mots ne se réduit pas à un mot générique', () => {
+  const differents = [
+    ['e-santé', 'santé'], ['m-santé', 'santé'], ['eHealth', 'health'], ['mHealth', 'health'], ['e-santé', 'm-santé'],
+    ['aide à la décision', 'prise de décision'], ['aide à la décision', 'décision'], ['decision support', 'decision making'],
+    ['définition de cas', 'définition'], ['case definition', 'definition'],
+    ['diabète de type 1', 'diabète de type 2'], ['type 1 diabetes', 'type 2 diabetes'], ['diabète de type 2', 'diabète'],
+    ['temps réel', 'milieu réel'], ['Premières Nations', 'nations'],
+    ['environnement bâti', 'environnement'], ['calcul', 'informatique'], ['apprenant', 'apprentissage'],
+  ];
+  for (const [a, b] of differents) {
+    assert.ok(cleMotCle(a) && cleMotCle(b), `« ${a} » et « ${b} » ont une clé`);
+    assert.notEqual(cleMotCle(a), cleMotCle(b), `« ${a} » et « ${b} »`);
+  }
+  const memes = [
+    ['e-santé', 'eHealth', 'e-health', 'esanté'], ['m-santé', 'mHealth', 'm-health', 'santé mobile', 'mobile health'],
+    ['aide à la décision', 'decision support'], ['aide à la décision clinique', 'clinical decision support'],
+    ['prise de décision', 'decision making', 'decision-making'],
+    ['définition de cas', 'case definition'], ['algorithme de définition de cas', 'case definition algorithm'],
+    ['diabète de type 1', 'type 1 diabetes'], ['diabète de type 2', 'type 2 diabetes'],
+  ];
+  for (const [premier, ...autres] of memes) for (const autre of autres) assert.equal(cleMotCle(autre), cleMotCle(premier), `« ${autre} » et « ${premier} »`);
+});
+
+test('chevauchement d\'expressions : un préfixe détaché est soudé avant le reste', () => {
+  // « pré-traitement d'image » contient « traitement d'image » : si cette expression passait la
+  // première, il resterait « pré » + « image processing ». Les soudures passent donc d'abord.
+  const groupes = [
+    ['pré-traitement d\'image', 'prétraitement d\'image', 'image pre-processing', 'image preprocessing'],
+    ['pré-traitement de données', 'prétraitement de données', 'data pre-processing', 'data preprocessing'],
+    ['neuro-imagerie fonctionnelle', 'neuroimagerie fonctionnelle', 'functional neuro-imaging'],
+    ['bio-informatique', 'bioinformatique', 'bio-informatics', 'bioinformatics'],
+  ];
+  for (const [premier, ...autres] of groupes) for (const autre of autres) assert.equal(cleMotCle(autre), cleMotCle(premier), `« ${autre} » et « ${premier} »`);
+  assert.notEqual(cleMotCle('pré-traitement d\'image'), cleMotCle('traitement d\'image'));
+  assert.notEqual(cleMotCle('pré-traitement de données'), cleMotCle('traitement de données'));
+});
+
+test('dictionnaire : les féminins et les pluriels des mots ajoutés donnent la même forme', () => {
+  const familles = [
+    ['intelligent', 'intelligente', 'intelligents', 'intelligentes'],
+    ['personnalisé', 'personnalisée', 'personnalisés', 'personnalisées'],
+    ['personnelle', 'personnels', 'personnelles'],
+    ['infectieux', 'infectieuse', 'infectieuses'],
+    ['primaire', 'primaires'],
+    ['fédéré', 'fédérée', 'fédérés', 'fédérées'],
+    ['distribué', 'distribuée', 'distribués', 'distribuées'],
+    ['informatisé', 'informatisée', 'informatisés', 'informatisées'],
+    ['connecté', 'connectée', 'connectés', 'connectées'],
+    ['augmenté', 'augmentée', 'augmentés', 'augmentées'],
+    ['périnatal', 'périnatale', 'périnatales', 'périnataux'],
+    ['rural', 'rurale', 'rurales', 'ruraux'],
+    ['spatial', 'spatiale', 'spatiales', 'spatiaux'],
+    ['multimodal', 'multimodale', 'multimodales', 'multimodaux'],
+    ['tumoral', 'tumorale', 'tumorales', 'tumoraux'],
+    ['cortical', 'corticale', 'corticales', 'corticaux'],
+    ['rétinien', 'rétinienne', 'rétiniens', 'rétiniennes'],
+    ['microbien', 'microbienne', 'microbiens', 'microbiennes'],
+    ['émergent', 'émergente', 'émergents', 'émergentes'],
+    ['maternel', 'maternelle', 'maternels', 'maternelles'],
+    ['translationnel', 'translationnelle', 'translationnels', 'translationnelles'],
+    ['hospitalier', 'hospitalière', 'hospitaliers', 'hospitalières'],
+    ['ville', 'villes'], ['agent', 'agents'], ['mesure', 'mesures'], ['trajectoire', 'trajectoires'], ['échantillon', 'échantillons'],
+  ];
+  for (const [premier, ...autres] of familles) for (const autre of autres) assert.equal(canoniser(autre), canoniser(premier), `« ${autre} » et « ${premier} »`);
+  // Homographes anglais laissés tels quels : « personnel » (le personnel), « guide », « issue ».
+  for (const mot of ['personnel', 'guide', 'issue', 'mere', 'forage']) assert.equal(canoniser(mot), mot, mot);
+});
+
+// Tous les mots-clés et toutes les normes de la base (liste figée), et les seuls groupes
+// d'écritures différentes qui ont le droit de partager une clé.
+const REELS = require('./fixtures/mots-cles-reels.json');
+const FUSIONS_VOULUES = [
+  ['neuro-imagerie', 'neuroimagerie'],
+  ['imagerie par résonance magnétique', 'irm'],
+  ['gestion de données de recherche', 'gestion des données de recherche'],
+  ['harmonisation de données', 'harmonisation des données'],
+  ['mesures rapportées par le patient', 'mesure rapportée par le patient'],
+  ['découverte du médicament', 'découverte de médicaments'],
+  ['urgence', 'urgences'],
+  ['données cliniques', 'donnée clinique'],
+  ['données massives', 'donnée massive'],
+  ['données hospitalières', 'donnée hospitalière'],
+  ['donnée administrative', 'données administratives'],
+  ['donnée d\'enquête', 'données d\'enquête'],
+  ['donnée distribuée', 'données distribuées'],
+  ['donnée omique', 'données omiques'],
+  ['donnée sensible', 'données sensibles'],
+  ['norme bids', 'BIDS'],
+  ['fhir', 'HL7 FHIR'],
+  ['HL7 v2', 'HL7'],
+];
+
+test('mots-clés réels : aucune clé vide, et seules les fusions voulues partagent une clé', () => {
+  const tous = REELS.motsCles.concat(REELS.normes);
+  assert.equal(REELS.motsCles.length, 437);
+  assert.equal(REELS.normes.length, 28);
+  const parCle = new Map();
+  for (const ecriture of tous) {
+    const cle = cleMotCle(ecriture);
+    assert.ok(cle, `« ${ecriture} » a une clé`);
+    if (!parCle.has(cle)) parCle.set(cle, []);
+    parCle.get(cle).push(ecriture);
+  }
+  const voulues = new Set(FUSIONS_VOULUES.map((groupe) => [...groupe].sort().join(' | ')));
+  const trouvees = [...parCle.values()].filter((groupe) => groupe.length > 1).map((groupe) => [...groupe].sort().join(' | '));
+  assert.deepEqual(trouvees.filter((g) => !voulues.has(g)), [], 'fusions qui ne sont pas dans la liste');
+  assert.deepEqual([...voulues].filter((g) => !trouvees.includes(g)), [], 'fusions de la liste qui ne se font plus');
+});
+
+test('mots-clés réels : un mot-clé de plusieurs mots ne tombe pas sur la clé d\'un mot-clé d\'un seul mot', () => {
+  const unMot = (ecriture) => !/[^a-z0-9]/.test(require('../public/js/mots-cles.js').plier(ecriture).trim());
+  const tous = REELS.motsCles.concat(REELS.normes);
+  const clesSimples = new Map(tous.filter(unMot).map((e) => [cleMotCle(e), e]));
+  const permis = new Set(['imagerie par résonance magnétique', 'neuro-imagerie', 'norme bids', 'HL7 FHIR', 'HL7 v2']);
+  for (const ecriture of tous.filter((e) => !unMot(e) && !permis.has(e))) {
+    assert.ok(!clesSimples.has(cleMotCle(ecriture)), `« ${ecriture} » se réduit à « ${clesSimples.get(cleMotCle(ecriture))} »`);
+  }
+});
+
+test('libellés revus : « trauma care », « biomarker » au singulier', () => {
+  assert.equal(LIBELLES_SUJETS[cleMotCle('traumatologie')].en, 'trauma care');
+  assert.equal(LIBELLES_SUJETS[cleMotCle('biomarqueur')].en, 'biomarker');
+  assert.deepEqual(LIBELLES_SUJETS[cleMotCle('HL7')], { fr: 'HL7', en: 'HL7' });
+  assert.equal(LIBELLES_SUJETS[cleMotCle('urgences')].en, 'emergency department');
+});
+
+test('la recherche floue du site ne porte pas sur le texte canonisé', () => {
+  // Fuse chercherait « rare » dans « infrared » : le texte canonisé n'est comparé que par mots (recherche.js).
+  const source = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
+  assert.ok(!/name: 'canon'/.test(source));
+});
+
+test('le cache des clés est borné : chaque saisie de la recherche y passe', () => {
+  const { clesConnues, CLES_GARDEES } = require('../public/js/mots-cles.js');
+  assert.ok(CLES_GARDEES >= 1000);
+  for (let i = 0; i < CLES_GARDEES * 2 + 10; i++) cleMotCle(`saisie numéro ${i}`);
+  assert.ok(clesConnues.size <= CLES_GARDEES, `${clesConnues.size} clés gardées`);
+  assert.equal(cleMotCle('apprentissage automatique'), cleMotCle('machine learning'), 'les clés restent justes une fois le cache vidé');
 });
