@@ -241,6 +241,11 @@ const TEXTES = {
       resume: 'Résumé hebdomadaire à l’équipe',
       resumeDetail: (jour, n) => `Chaque ${jour}, à ${n} ${n > 1 ? 'personnes' : 'personne'}. Rien ne part s’il n’y a aucune proposition en attente.`,
       contributions: 'Contributions du public', ouvertes: 'Ouvertes', fermees: 'Fermées',
+      sauvegarde: 'Dernière copie de sauvegarde complète', sauvegardeVoir: 'Voir les sauvegardes',
+      sauvegardeAJour: 'À jour', sauvegardeAVerifier: 'À vérifier', sauvegardeInconnue: 'Inconnue',
+      sauvegardeAncienne: 'Elle a plus de huit jours : la copie de la semaine n’a pas été faite, ou elle est incomplète.',
+      sauvegardeAucune: 'Aucune copie complète pour le moment.',
+      sauvegardeIllisible: 'La liste des copies n’a pas pu être lue pour le moment.',
       essai: 'Mode d’essai des courriels', essaiDetail: 'Tous les courriels vont à une adresse d’essai, pas aux personnes.', actif: 'Actif', arrete: 'Arrêté',
     },
 
@@ -710,6 +715,9 @@ const TEXTES = {
       sansBase: 'La base « Réglages » n’est pas encore branchée (réglage NOTION_DB_REGLAGES) : cet écran est en lecture seule. Les contributions suivent le réglage de l’hébergeur, et le formulaire garde son texte d’origine.',
       sansBaseCourt: 'La base « Réglages » n’est pas branchée : rien n’a été enregistré.',
       illisible: 'Les réglages n’ont pas pu être lus pour le moment. Par précaution, les contributions du public sont tenues fermées tant qu’ils ne sont pas relus. Réessayez dans un instant.',
+      perime: 'La base « Réglages » ne répond pas pour le moment : les valeurs montrées ici sont les dernières lues, elles ne sont peut-être plus à jour. Rien ne peut être enregistré tant qu’elle ne répond pas. Réessayez dans un instant.',
+      noms: { ouvertes: 'l’ouverture des contributions', messageFerme: 'le message de fermeture', conditions: 'le texte des conditions' },
+      conflit: (noms) => `Une autre personne vient de changer ${[].concat(noms || []).join(' et ') || 'ces réglages'} : rien n’a été enregistré. L’écran montre maintenant sa version ; le reste de votre saisie est gardé. Vérifiez, puis enregistrez de nouveau.`,
       contributions: {
         titre: 'Contributions du public',
         interrupteur: 'Contributions ouvertes',
@@ -763,7 +771,7 @@ const TEXTES = {
     },
     // Sauvegardes : les copies gardées dans Notion, à faire et à télécharger.
     sauvegardes: {
-      intro: (jour, semaines) => `Une copie complète des données (ressources, porteurs, propositions, équipe, versions, journal et réglages) part chaque ${jour}. Les copies automatiques sont gardées ${semaines} semaines. Vous pouvez en faire une avant une opération délicate.`,
+      intro: (jour, semaines) => `Une copie des textes et des réglages (ressources, porteurs, propositions, équipe, versions, journal et réglages) part chaque ${jour}. Les images des logos ne sont pas copiées : seul leur nom l’est. Les copies automatiques sont gardées ${semaines} semaines. Vous pouvez en faire une avant une opération délicate.`,
       reserve: 'Les sauvegardes sont réservées au rôle Administration : une copie contient les courriels des personnes qui ont proposé une ressource.',
       inactives: 'Les sauvegardes ne sont pas encore activées : la base « Sauvegardes » n’est pas branchée (réglage NOTION_DB_SAUVEGARDES). Aucune copie n’est faite pour le moment.',
       horsNotion: 'Les copies sont gardées dans Notion : elles protègent d’une erreur de manipulation, pas de la perte de l’espace Notion. Téléchargez-en une de temps en temps pour la garder ailleurs, en lieu sûr : elle contient des courriels.',

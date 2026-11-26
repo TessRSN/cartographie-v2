@@ -68,13 +68,31 @@ test('le résumé part d\'abord, la copie ensuite : une copie lente ne retarde p
   assert.equal((await enCours).corps.sauvegarde, 'faite');
 });
 
-test('sans le secret du déclencheur, ou avec le verrou d\'installation fermé : aucune copie', async () => {
-  const b = banc();
-  assert.equal((await b.appeler(requete({ authorization: 'Bearer autre' }))).code, 401);
-  assert.equal((await b.appeler(requete({}))).code, 401);
-  const ferme = banc({ env: { ...ENV, CONTRIBUTIONS: 'non' } });
-  assert.equal((await ferme.appeler()).code, 404);
-  assert.equal(b.copies.length + ferme.copies.length, 0);
+test('sans le secret du déclencheur : aucune copie, que les contributions soient ouvertes ou non', async () => {
+  for (const env of [ENV, { ...ENV, CONTRIBUTIONS: 'non' }]) {
+    const b = banc({ env });
+    assert.equal((await b.appeler(requete({ authorization: 'Bearer autre' }))).code, env.CONTRIBUTIONS === 'oui' ? 401 : 404);
+    assert.equal((await b.appeler(requete({}))).code, env.CONTRIBUTIONS === 'oui' ? 401 : 404);
+    assert.equal(b.copies.length, 0);
+  }
+});
+
+test('CONTRIBUTIONS fermé à l\'installation : pas de résumé, mais la copie de la semaine se fait quand même', async () => {
+  for (const env of [{ ...ENV, CONTRIBUTIONS: 'non' }, { CRON_SECRET: 'secret-du-cron' }]) {
+    const b = banc({ env });
+    const res = await b.appeler();
+    assert.deepEqual([res.code, res.corps], [200, { ok: true, resume: 'ferme', sauvegarde: 'faite' }]);
+    assert.deepEqual([b.envois.length, b.copies.length], [0, 1]);
+    assert.equal(res.entetes['Cache-Control'], 'no-store');
+  }
+  // Sans module de sauvegarde, la route reste introuvable, comme avant.
+  assert.equal((await banc({ env: { ...ENV, CONTRIBUTIONS: 'non' }, sansModule: true }).appeler()).code, 404);
+  // Une autre méthode aussi.
+  const b = banc({ env: { ...ENV, CONTRIBUTIONS: 'non' } });
+  const res = { code: null, entetes: {}, setHeader(k, v) { this.entetes[k] = v; }, status(c) { this.code = c; return this; }, json() { return this; } };
+  await require('../api/resume').creerGestionnaire({ env: { ...ENV, CONTRIBUTIONS: 'non' }, limites: {}, journal() {}, sauvegardes: { async hebdomadaire() { b.copies.push(1); return { etat: 'faite' }; } } })({ method: 'POST', query: {}, headers: { authorization: 'Bearer secret-du-cron' } }, res);
+  assert.equal(res.code, 404);
+  assert.equal(b.copies.length, 0);
 });
 
 test('sans module de sauvegarde, la réponse du résumé ne change pas', async () => {

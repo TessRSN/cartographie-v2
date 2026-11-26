@@ -225,6 +225,14 @@ function texteActivite(a) {
   if (a.sorte === 'avis') return T.activite.avis(a.sens, objet);
   return (T.activite[a.sorte] || T.activite.recue)(objet);
 }
+// La dernière copie de sauvegarde complète : le serveur ne la donne qu'à l'Administration, quand les sauvegardes sont activées.
+function ligneSauvegarde(s) {
+  if (!s) return '';
+  const E = T.envois;
+  const detail = !s.lue ? E.sauvegardeIllisible : s.derniere ? `${jourEtHeure(s.derniere)}${s.alerte ? `. ${E.sauvegardeAncienne}` : ''}` : E.sauvegardeAucune;
+  const pastille = !s.lue ? `<span class="pill p-mute">${e(E.sauvegardeInconnue)}</span>` : s.alerte ? `<span class="pill p-warn">${e(E.sauvegardeAVerifier)}</span>` : `<span class="pill p-ok">${e(E.sauvegardeAJour)}</span>`;
+  return `<div><div class="grow">${e(E.sauvegarde)}<br><span class="muted small">${e(detail)} <a href="#sauvegardes">${e(E.sauvegardeVoir)}</a></span></div>${pastille}</div>`;
+}
 function ecranAccueil() {
   const a = etat.accueil;
   const prenom = etat.moi && etat.moi.nom ? etat.moi.nom.trim().split(/\s+/)[0] : '';
@@ -242,6 +250,7 @@ function ecranAccueil() {
       <section class="card"><h3>${e(T.envois.titre)}</h3><div class="list">
         <div><div class="grow">${e(T.envois.resume)}<br><span class="muted small">${e(T.envois.resumeDetail(v.resume.jour, v.resume.destinataires))}</span></div></div>
         <div><div class="grow">${e(T.envois.contributions)}</div>${v.contributions ? `<span class="pill p-ok">${e(T.envois.ouvertes)}</span>` : `<span class="pill p-warn">${e(T.envois.fermees)}</span>`}</div>
+        ${ligneSauvegarde(a.sauvegardes)}
         <div><div class="grow">${e(T.envois.essai)}${v.essaiCourriels ? `<br><span class="muted small">${e(T.envois.essaiDetail)}</span>` : ''}</div>${v.essaiCourriels ? `<span class="pill p-warn">${e(T.envois.actif)}</span>` : `<span class="pill p-mute">${e(T.envois.arrete)}</span>`}</div>
       </div></section>
     </div>`;
@@ -2342,7 +2351,8 @@ function corpsReglages() {
   const boutons = m ? `<span class="row"><button type="button" class="btn" id="gAbandon" data-act="g-abandonner"${fige}${saisieReglages() ? '' : ' hidden'}>${e(RG.abandonner)}</button><button type="button" class="btn primary" data-act="g-enregistrer"${fige}>${e(rg.enCours ? T.enCours : RG.enregistrer)}</button></span>` : '';
   const avis = !d.reglages.actifs ? `<div class="note warn">${e(RG.sansBase)}</div>`
     : !d.reglages.lus ? `<div class="note warn">${e(RG.illisible)}</div>`
-      : !administre() ? `<div class="note info">${e(RG.lectureSeule)}</div>` : '';
+      : d.reglages.perime ? `<div class="note warn">${e(RG.perime)}</div>`
+        : !administre() ? `<div class="note info">${e(RG.lectureSeule)}</div>` : '';
   const c = d.contributions;
   const source = c.source === 'panneau' ? C.duPanneau(c.modifiePar, jour(c.modifieLe)) : c.source === 'precaution' ? C.parPrecaution : C.parDefaut;
   const trace = d.conditions.modifie ? RG.modifieLe(jour(d.conditions.modifieLe), d.conditions.modifiePar) : K.estOrigine;
@@ -2401,13 +2411,41 @@ function basculerContributions(cible) {
   if (!saisieReglages()) etat.rg.brouillon = null;
   return redessinerReglages();
 }
-// Enregistre les trois réglages d'un coup ; le serveur n'écrit que ceux qui ont changé, et vérifie tout.
+// Ce que la personne a changé par rapport à ce que l'écran avait chargé : seul cela part au serveur.
+// Un écran resté ouvert n'écrase donc pas ce qu'une autre personne a réglé entre-temps.
+const CHAMPS_REGLAGES = ['ouvertes', 'messageFerme', 'conditions'];
+function reglagesChanges() {
+  const s = saisieDesReglages(); const depart = departReglages(etat.reglages);
+  const changes = {};
+  for (const cle of CHAMPS_REGLAGES) if (s[cle] !== depart[cle]) changes[cle] = s[cle];
+  // Tenues fermées par précaution (réglage illisible) : le choix affiché part toujours, pour remettre le réglage d'aplomb.
+  if (etat.reglages.contributions.source === 'precaution') changes.ouvertes = s.ouvertes;
+  return changes;
+}
+// Une autre personne a changé un réglage depuis le chargement de l'écran : il est rechargé avec sa
+// version, et ce que la personne avait changé ailleurs reste à l'écran.
+async function conflitReglages(changes, champs) {
+  const enConflit = (Array.isArray(champs) ? champs : []).filter((cle) => CHAMPS_REGLAGES.includes(cle));
+  const lu = await appel('reglages');
+  if (lu.ok) {
+    etat.reglages = lu.donnees;
+    const gardes = Object.fromEntries(Object.entries(changes).filter(([cle]) => !enConflit.includes(cle)));
+    etat.rg.brouillon = { ...departReglages(lu.donnees), ...gardes };
+    if (!saisieReglages()) etat.rg.brouillon = null;
+  }
+  message(RG.conflit(enConflit.map((cle) => RG.noms[cle])));
+  return redessinerReglages();
+}
+// Enregistre ce qui a changé, avec la date que l'écran avait lue pour chaque réglage ; le serveur vérifie tout.
 async function enregistrerReglages() {
   const rg = etat.rg;
   if (rg.enCours || !reglable()) return undefined;
-  const s = saisieDesReglages();
+  const changes = reglagesChanges();
+  if (!Object.keys(changes).length) { rg.erreurs = {}; message(RG.inchange); return redessinerReglages(); }
+  const vues = etat.reglages.vu || {};
+  const vu = Object.fromEntries(Object.keys(changes).map((cle) => [cle, vues[cle] || null]));
   rg.enCours = true; rg.erreurs = {}; redessinerReglages();
-  const r = await appel('enregistrer-reglages', { corps: { ouvertes: s.ouvertes, messageFerme: s.messageFerme, conditions: s.conditions } });
+  const r = await appel('enregistrer-reglages', { corps: { ...changes, vu } });
   rg.enCours = false;
   if (r.ok) {
     etat.reglages = { ...etat.reglages, ...r.donnees.reglages }; rg.brouillon = null;
@@ -2424,6 +2462,7 @@ async function enregistrerReglages() {
   }
   if (r.code === 403) { message(T.reserveAdministration); redessinerReglages(); await relireMoi(); return charger(); }
   const code = r.donnees.code;
+  if (r.code === 409 && code === 'conflit') return conflitReglages(changes, r.donnees.champs);
   if (code === 'invalide' && r.donnees.erreurs) {
     rg.erreurs = { ...r.donnees.erreurs }; message(RG.aCorriger); redessinerReglages();
     const fautif = $(rg.erreurs.messageFerme ? '#rgMessage' : rg.erreurs.conditions ? '#rgConditions' : '#rgOuvertes'); if (fautif) fautif.focus();

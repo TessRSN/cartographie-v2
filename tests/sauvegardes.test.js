@@ -253,3 +253,87 @@ test('le dépôt d\'un fichier JSON suit les deux appels de l\'API de dépôt de
   await assert.rejects(fichiers.telecharger('https://x.exemple/a'), /trop gros/);
   assert.equal((await fichiers.telecharger('https://x.exemple/a', { max: TAILLE_MAX })).length, 3 * 1024 * 1024);
 });
+
+// ─── Corrections après relecture ───
+const trop = () => { const e = new Error('trop de demandes'); e.status = 429; e.code = 'rate_limited'; return e; };
+const delai = () => { const e = new Error('Request to Notion API has timed out'); e.code = 'notionhq_client_request_timeout'; return e; };
+
+test('une reprise, une seule, après une courte attente, sur « trop de demandes » ou un délai dépassé : pour les listes comme pour les contenus', async () => {
+  for (const erreur of [trop, delai]) {
+    const vus = new Set(); const attentes = [];
+    const unefois = (cle) => { if (vus.has(cle)) return false; vus.add(cle); throw erreur(); };
+    const b = banc({ attendreSauvegarde: async () => { attentes.push(1); }, pannesNotion: { 'databases.query': (a) => a.database_id === 'base-ressources' && unefois('liste'), 'blocks.children.list': (id) => id === 'prop-1' && unefois('contenu') } });
+    const r = await b.sauvegardes.faire({ par: TESS });
+    assert.deepEqual([r.ok, r.incomplete, attentes.length], [true, false, 2]);
+    assert.deepEqual(b.copies()[0].contenu.bases.propositions.pages[0].contenu, { propose: { nom: { apres: 'Outil X' } }, applique: null });
+  }
+  // Deux fois de suite : la liste fait échouer la copie, le contenu la rend incomplète.
+  const b = banc({ attendreSauvegarde: async () => {}, pannesNotion: { 'blocks.children.list': (id) => { if (id === 'prop-1') throw trop(); return false; } } });
+  assert.equal((await b.sauvegardes.faire({ par: TESS })).incomplete, true);
+  assert.equal(b.faux.de('blocks.children.list').filter((id) => id === 'prop-1').length, 2);
+  const c = banc({ attendreSauvegarde: async () => {}, pannesNotion: { 'databases.query': (a) => { if (a.database_id === 'base-porteurs') throw trop(); return false; } } });
+  await assert.rejects(c.sauvegardes.faire({ par: TESS }));
+  // Une autre panne n'est pas reprise.
+  const d = banc({ attendreSauvegarde: async () => { throw new Error('ne doit pas attendre'); }, pannesNotion: { 'databases.query': (a) => a.database_id === 'base-porteurs' } });
+  await assert.rejects(d.sauvegardes.faire({ par: TESS }), /en panne/);
+  assert.equal(d.faux.de('databases.query').filter((a) => a.database_id === 'base-porteurs').length, 1);
+});
+
+test('un contenu en plusieurs pages est lu en entier ; s\'il ne peut pas l\'être, la copie est incomplète', async () => {
+  const b = banc();
+  const vraie = b.faux.client.blocks.children.list;
+  const bloc = (t) => ({ id: `b-${t}`, type: 'code', code: { rich_text: [{ plain_text: t }] } });
+  b.faux.client.blocks.children.list = async (a) => {
+    if (a.block_id !== 'version-1') return vraie(a);
+    return a.start_cursor === 'suite' ? { results: [bloc('"CARTaGENE"}')], has_more: false } : { results: [bloc('{"nom":')], has_more: true, next_cursor: 'suite' };
+  };
+  assert.equal((await b.sauvegardes.faire({ par: TESS })).incomplete, false);
+  assert.deepEqual(b.copies()[0].contenu.bases.versions.pages[0].contenu, { nom: 'CARTaGENE' });
+  // Une suite annoncée sans curseur : le contenu n'est pas gardé à moitié.
+  b.faux.client.blocks.children.list = async (a) => (a.block_id === 'version-1' ? { results: [bloc('{"nom":')], has_more: true, next_cursor: null } : vraie(a));
+  const r = await b.sauvegardes.faire({ par: TESS });
+  assert.equal(r.incomplete, true);
+  const page = b.copies().find((x) => x.id === r.id).contenu.bases.versions.pages[0];
+  assert.deepEqual([page.contenuNonLu, Object.hasOwn(page, 'contenu'), Object.hasOwn(page, 'contenuBrut')], [true, false, false]);
+});
+
+test('hebdomadaire : pas de ménage après une copie incomplète, et la dernière copie complète est toujours gardée', async () => {
+  const b = banc({ pannesNotion: { 'blocks.children.list': (id) => id === 'prop-1' } });
+  const vieille = b.poserCopie({ faiteLe: ilYA(200) });
+  const plusVieille = b.poserCopie({ faiteLe: ilYA(210) });
+  const retour = await b.sauvegardes.hebdomadaire();
+  assert.deepEqual([retour.etat, retour.incomplete, retour.retirees], ['faite', true, 0]);
+  assert.ok(b.copies().some((c) => c.id === vieille) && b.copies().some((c) => c.id === plusVieille), 'aucune vieille copie ne part après une copie incomplète');
+  assert.equal(b.faux.de('pages.update').length, 0);
+  // Après une copie complète, les vieilles copies automatiques partent : la neuve est la dernière complète.
+  const d = banc();
+  const garde = d.poserCopie({ faiteLe: ilYA(150) });
+  const retiree = d.poserCopie({ faiteLe: ilYA(160) });
+  const r = await d.sauvegardes.hebdomadaire();
+  assert.deepEqual([r.etat, r.retirees], ['faite', 2], 'la copie neuve est complète : les deux vieilles partent');
+  assert.ok(!d.copies().some((x) => x.id === garde || x.id === retiree));
+});
+
+test('menage : même si la copie la plus récente et complète est vieille, elle n\'est jamais retirée', async () => {
+  const b = banc();
+  const complete = b.poserCopie({ faiteLe: ilYA(150) });
+  const plusVieille = b.poserCopie({ faiteLe: ilYA(160) });
+  const incomplete = b.poserCopie({ faiteLe: ilYA(100) });
+  b.faux.pages.get(incomplete).properties.Titre.title[0].text.content += ' (incomplète)';
+  b.poserCopie({ faiteLe: ilYA(95), fichier: [] });
+  assert.equal(await b.sauvegardes.menage(), 3);
+  assert.deepEqual(b.copies().map((x) => x.id), [complete]);
+  assert.equal(b.faux.pages.get(plusVieille).archived, true);
+});
+
+test('derniereComplete : la date de la dernière copie complète, et si elle a plus de huit jours', async () => {
+  const b = banc();
+  assert.deepEqual(await b.sauvegardes.derniereComplete(), { faiteLe: null, ancienne: true });
+  b.poserCopie({ faiteLe: ilYA(9) });
+  assert.deepEqual(await b.sauvegardes.derniereComplete(), { faiteLe: ilYA(9), ancienne: true });
+  const inc = b.poserCopie({ faiteLe: ilYA(1) });
+  b.faux.pages.get(inc).properties.Titre.title[0].text.content += ' (incomplète)';
+  assert.equal((await b.sauvegardes.derniereComplete()).faiteLe, ilYA(9));
+  b.poserCopie({ faiteLe: ilYA(7), origine: 'À la demande', par: TESS });
+  assert.deepEqual(await b.sauvegardes.derniereComplete(), { faiteLe: ilYA(7), ancienne: false });
+});

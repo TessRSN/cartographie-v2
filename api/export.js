@@ -3,8 +3,9 @@
  * La lecture de Notion est gardée quelques minutes en mémoire par instance ;
  * si Notion ne répond plus, la dernière lecture réussie est servie.
  * La réponse dit aussi si les contributions du public sont ouvertes : le verrou d'installation
- * (CONTRIBUTIONS), puis le réglage du panneau (lib/reglages-site.js), avec le message à montrer
- * quand elles sont fermées. Ce réglage ne fait jamais tomber la page : dans le doute, il dit « fermé ».
+ * (CONTRIBUTIONS), puis le réglage du panneau (lib/reglages-site.js). Le message de fermeture
+ * n'est pas ici : il vient des routes qui refusent (/api/lien, /api/proposition).
+ * Ce réglage ne fait jamais tomber la page : dans le doute, il dit « fermé ».
  */
 const { lireRessources, lirePorteurs } = require('../lib/notion');
 const { assembler } = require('../lib/fiches');
@@ -133,8 +134,6 @@ function creerGestionnaire({ source, journal = console.error, reglages = null, e
         carte: { cle: process.env.CARTO_BASEMAP_KEY || '' },
         // Les boutons « Proposer » n'existent dans la page que si les contributions sont ouvertes.
         contributions: etat.ouvertes,
-        // Ce qu'il faut dire au public quand l'équipe les a fermées ; null sinon.
-        messageFerme: etat.message,
       });
     } catch (err) {
       // Le détail reste dans les journaux du serveur, jamais dans la réponse.

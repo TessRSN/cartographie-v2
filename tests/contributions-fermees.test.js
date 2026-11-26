@@ -73,7 +73,7 @@ const FERME = { contributionsOuvertes: false, messageFerme: 'De retour en janvie
 test('sans base « Réglages », sans socle ou sans réglage : tout marche comme avant, avec le texte des conditions d\'origine', async () => {
   for (const b of [banc({ env: { ...ENV, NOTION_DB_REGLAGES: undefined } }), banc({ sansSocle: true }), banc()]) {
     const e = await b.exporter();
-    assert.deepEqual([e.code, e.corps.contributions, e.corps.messageFerme], [200, true, null]);
+    assert.deepEqual([e.code, e.corps.contributions], [200, true]);
     assert.equal(e.entetes['Cache-Control'], 'public, max-age=0, s-maxage=300, stale-while-revalidate=3600');
     assert.equal((await b.lien({ courriel: 'pat@exemple.org', but: 'proposer' })).code, 200);
     assert.equal(b.de('lienProposer').length, 1);
@@ -93,17 +93,16 @@ test('/api/export : le verrou d\'installation gagne, même si le panneau dit « 
   const b = banc({ reglages: { contributionsOuvertes: true } });
   for (const env of [{ ...ENV, CONTRIBUTIONS: 'non' }, { ...ENV, CONTRIBUTIONS: undefined }]) {
     const e = await b.exporter(env);
-    assert.deepEqual([e.code, e.corps.contributions, e.corps.messageFerme], [200, false, null]);
+    assert.deepEqual([e.code, e.corps.contributions], [200, false]);
   }
 });
 
 // ─── Fermé depuis le panneau ───
-test('/api/export : fermé par le panneau, l\'indicateur est faux et le message suit', async () => {
+test('/api/export : fermé par le panneau, l\'indicateur est faux ; le message, lui, vient des routes qui refusent', async () => {
   const e = await banc({ reglages: FERME }).exporter();
-  assert.deepEqual([e.code, e.corps.contributions, e.corps.messageFerme], [200, false, 'De retour en janvier.']);
+  assert.deepEqual([e.code, e.corps.contributions], [200, false]);
   assert.deepEqual(e.corps.ressources, [{ nom: 'A' }]);
-  const sansMessage = await banc({ reglages: { contributionsOuvertes: false } }).exporter();
-  assert.equal(sansMessage.corps.messageFerme, TEXTES.contribuer.fermees);
+  assert.deepEqual(Object.keys(e.corps).sort(), ['carte', 'contributions', 'genereLe', 'porteurs', 'ressources'], 'aucun champ que la page ne lit pas');
 });
 
 test('/api/lien : fermé, plus de lien pour proposer ni pour modifier, avec le message ; le lien du panneau part toujours', async () => {
@@ -156,7 +155,7 @@ test('l\'état public ne dit rien d\'autre : ni qui a réglé, ni quand', async 
 test('réglage illisible, ou base en panne sans rien de connu : rien ne s\'ouvre, et aucune page ne tombe', async () => {
   for (const b of [banc({ brut: { contributionsOuvertes: 'pas du json' } }), banc({ reglages: { contributionsOuvertes: 'oui' } }), banc({ reglages: { contributionsOuvertes: true }, pannes: { 'databases.query': true } }), banc({ pannes: { 'blocks.children.list': true }, reglages: { contributionsOuvertes: true } })]) {
     const e = await b.exporter();
-    assert.deepEqual([e.code, e.corps.contributions, e.corps.messageFerme], [200, false, TEXTES.contribuer.indisponibles]);
+    assert.deepEqual([e.code, e.corps.contributions], [200, false]);
     assert.deepEqual(e.corps.ressources, [{ nom: 'A' }], 'les fiches sont servies quand même');
     assert.equal(e.entetes['Cache-Control'], 'no-store', 'une réponse de précaution n\'est gardée nulle part');
     const l = await b.lien({ courriel: 'pat@exemple.org', but: 'proposer' });

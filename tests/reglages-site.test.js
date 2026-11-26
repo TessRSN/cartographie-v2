@@ -159,7 +159,7 @@ function module_({ reglages = {}, env = OUI, pannes = {} } = {}) {
 test('lire : ce que l\'écran montre, avec qui a changé quoi et quand', async () => {
   const m = module_({ reglages: { contributionsOuvertes: false, conditions: 'Mes conditions.' } });
   const vue = await m.site.lire();
-  assert.deepEqual(vue.reglages, { actifs: true, lus: true });
+  assert.deepEqual(vue.reglages, { actifs: true, lus: true, perime: false });
   assert.deepEqual(vue.contributions, { ouvertes: false, choix: false, source: 'panneau', modifieLe: '2026-11-20T10:00:00.000Z', modifiePar: 'tess@exemple.ca' });
   assert.deepEqual(vue.messageFerme, { texte: ORIGINE.messageFerme, origine: ORIGINE.messageFerme, modifie: false, ecarte: false, modifieLe: null, modifiePar: null });
   assert.deepEqual(vue.conditions, { texte: 'Mes conditions.', origine: ORIGINE.conditions, modifie: true, ecarte: false, modifieLe: '2026-11-20T10:00:00.000Z', modifiePar: 'tess@exemple.ca' });
@@ -168,9 +168,9 @@ test('lire : ce que l\'écran montre, avec qui a changé quoi et quand', async (
 
 test('lire : sans base, ou base illisible, l\'écran le sait et montre les textes d\'origine', async () => {
   const sans = await module_({ env: { CONTRIBUTIONS: 'oui' } }).site.lire();
-  assert.deepEqual([sans.reglages, sans.contributions.ouvertes, sans.contributions.choix, sans.contributions.source], [{ actifs: false, lus: true }, true, true, 'defaut']);
+  assert.deepEqual([sans.reglages, sans.contributions.ouvertes, sans.contributions.choix, sans.contributions.source], [{ actifs: false, lus: true, perime: false }, true, true, 'defaut']);
   const panne = await module_({ pannes: { 'databases.query': true } }).site.lire();
-  assert.deepEqual([panne.reglages, panne.contributions.ouvertes, panne.contributions.choix, panne.contributions.source, panne.conditions.texte], [{ actifs: true, lus: false }, false, false, 'precaution', ORIGINE.conditions]);
+  assert.deepEqual([panne.reglages, panne.contributions.ouvertes, panne.contributions.choix, panne.contributions.source, panne.conditions.texte], [{ actifs: true, lus: false, perime: false }, false, false, 'precaution', ORIGINE.conditions]);
   // Un texte enregistré qui ne vaut plus rien est montré comme écarté.
   const ecarte = await module_({ reglages: { conditions: 42 } }).site.lire();
   assert.deepEqual([ecarte.conditions.texte, ecarte.conditions.modifie, ecarte.conditions.ecarte], [ORIGINE.conditions, false, true]);
@@ -258,4 +258,73 @@ test('installation : des états et des valeurs publiques, jamais un secret ni l\
   assert.ok(vide.bases.every((b) => !b.definie));
   // Une adresse d'expédition réglée à l'installation est montrée : elle est dans chaque courriel.
   assert.equal(creerReglagesSite({ reglages: null, env: { RESEND_FROM_EMAIL: 'envoi@exemple.org' }, roleDe: async () => null }).installation({ origine: '' }).expedition, 'envoi@exemple.org');
+});
+
+// ─── Corrections après relecture ───
+test('lire : l\'écran reçoit, pour chaque réglage, la date de la ligne qu\'il a vue (ou rien)', async () => {
+  const m = module_({ reglages: { contributionsOuvertes: false } });
+  assert.deepEqual((await m.site.lire()).vu, { ouvertes: '2026-11-20T10:00:00.000Z', messageFerme: null, conditions: null });
+});
+
+test('enregistrer : si la base a changé depuis ce que l\'écran a vu, rien n\'est écrit et le conflit nomme les réglages', async () => {
+  const m = module_();
+  const vu = (await m.site.lire()).vu;
+  // Une autre personne ferme avec un message pendant que l'écran reste ouvert.
+  poser(m.faux, 'contributionsOuvertes', 'false', '2026-11-26T11:00:00.000Z');
+  poser(m.faux, 'messageFerme', '"Pause."', '2026-11-26T11:00:00.000Z');
+  const avant = m.ecritures();
+  assert.deepEqual(await m.site.enregistrer({ ouvertes: true, messageFerme: '', conditions: 'Mes conditions.', vu, par: 'tess@exemple.ca' }), { ok: false, code: 'conflit', champs: ['ouvertes', 'messageFerme'] });
+  assert.equal(m.ecritures(), avant);
+  // Ce qui n'est pas en conflit, envoyé seul, passe : les réglages de l'autre personne restent.
+  assert.deepEqual(await m.site.enregistrer({ conditions: 'Mes conditions.', vu: { conditions: vu.conditions }, par: 'tess@exemple.ca' }), { ok: true, change: { contributions: null, messageFerme: false, conditions: true } });
+  assert.deepEqual(m.ecrits(), { contributionsOuvertes: false, messageFerme: 'Pause.', conditions: 'Mes conditions.' });
+  // Une ligne retirée entre-temps est un changement aussi.
+  const n = module_({ reglages: { conditions: 'Anciennes.' } });
+  const vuN = (await n.site.lire()).vu;
+  n.faux.pages.get('ligne-conditions').archived = true;
+  assert.deepEqual(await n.site.enregistrer({ conditions: 'Nouvelles.', vu: vuN, par: 'tess@exemple.ca' }), { ok: false, code: 'conflit', champs: ['conditions'] });
+});
+
+test('enregistrer : une écriture qui échoue après une autre réussie remonte en erreur, avec ce qui a déjà été écrit', async () => {
+  const m = module_({ pannes: { 'pages.create': (a) => a.properties[COLONNES.cle].title[0].text.content === 'contributionsOuvertes' } });
+  await assert.rejects(m.site.enregistrer({ ouvertes: false, messageFerme: 'Pause.', par: 'tess@exemple.ca' }), (err) => {
+    assert.deepEqual(err.partiel, { contributions: null, messageFerme: true, conditions: false });
+    return true;
+  });
+  assert.deepEqual(m.ecrits(), { messageFerme: 'Pause.' });
+  // Rien d'écrit avant la panne : pas de « partiel ».
+  const rien = module_({ pannes: { 'pages.create': true } });
+  await assert.rejects(rien.site.enregistrer({ ouvertes: false, par: 'tess@exemple.ca' }), (err) => err.partiel === undefined);
+});
+
+test('lire : après une lecture réussie puis une panne, la vue dit que ses valeurs datent', async () => {
+  let panne = false;
+  const m = module_({ reglages: { contributionsOuvertes: false }, pannes: { 'databases.query': () => panne } });
+  assert.deepEqual((await m.site.lire()).reglages, { actifs: true, lus: true, perime: false });
+  panne = true;
+  const vue = await m.site.lire();
+  assert.deepEqual([vue.reglages, vue.contributions.ouvertes], [{ actifs: true, lus: true, perime: true }, false]);
+});
+
+test('deux lignes pour « contributionsOuvertes » qui se contredisent, ou dont une est illisible : fermé, la plus sûre gagne', async () => {
+  const double = (json, le) => (faux) => {
+    faux.pages.set('double', { id: 'double', parent: { database_id: 'base-reglages' }, properties: { [COLONNES.cle]: { title: [{ type: 'text', text: { content: 'contributionsOuvertes' } }] }, [COLONNES.modifieLe]: { date: { start: le } } } });
+    faux.blocs.set('double', [{ id: 'double-bloc', type: 'code', code: { rich_text: [{ type: 'text', text: { content: json } }], language: 'json' } }]);
+  };
+  for (const [premiere, seconde, le] of [[true, 'false', '2026-11-01T10:00:00.000Z'], [true, 'false', '2026-11-25T10:00:00.000Z'], [true, 'pas du json', '2026-11-01T10:00:00.000Z']]) {
+    const s = socle({ reglages: { contributionsOuvertes: premiere } });
+    double(seconde, le)(s.faux);
+    const e = await lireEtatPublic(s.socle, OUI);
+    assert.deepEqual([e.ouvertes, e.source], [false, 'precaution'], `${premiere} / ${seconde}`);
+  }
+  // Deux lignes qui disent la même chose : pas de doute.
+  const pareil = socle({ reglages: { contributionsOuvertes: true } });
+  double('true', '2026-11-01T10:00:00.000Z')(pareil.faux);
+  assert.deepEqual([(await lireEtatPublic(pareil.socle, OUI)).ouvertes, (await lireEtatPublic(pareil.socle, OUI)).source], [true, 'panneau']);
+  // L'Administration tranche : une seule ligne reste.
+  const m = module_({ reglages: { contributionsOuvertes: true } });
+  double('false', '2026-11-25T10:00:00.000Z')(m.faux);
+  assert.equal((await m.site.lire()).contributions.source, 'precaution');
+  assert.equal((await m.site.enregistrer({ ouvertes: true, par: 'tess@exemple.ca' })).change.contributions, 'ouvertes');
+  assert.deepEqual(await lireEtatPublic(m.socle, OUI), { ouvertes: true, source: 'panneau', message: null, conditions: ORIGINE.conditions });
 });

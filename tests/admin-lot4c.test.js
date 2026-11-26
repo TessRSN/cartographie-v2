@@ -26,8 +26,8 @@ test('reglages : toute l\'équipe lit l\'écran ; un nom, jamais un courriel ; r
     const res = await b.lire('reglages', {}, qui);
     assert.equal(res.code, 200, qui);
     assert.equal(res.entetes['Cache-Control'], 'no-store');
-    assert.deepEqual(Object.keys(res.corps).sort(), ['conditions', 'contributions', 'installation', 'limites', 'messageFerme', 'reglages', 'sauvegardes']);
-    assert.deepEqual(res.corps.reglages, { actifs: true, lus: true });
+    assert.deepEqual(Object.keys(res.corps).sort(), ['conditions', 'contributions', 'installation', 'limites', 'messageFerme', 'reglages', 'sauvegardes', 'vu']);
+    assert.deepEqual(res.corps.reglages, { actifs: true, lus: true, perime: false });
     assert.deepEqual(res.corps.contributions, { ouvertes: false, choix: false, source: 'panneau', modifieLe: '2026-11-20T10:00:00.000Z', modifiePar: 'Tess Berthier' });
     assert.deepEqual(res.corps.conditions, { texte: 'Mes conditions.', origine: ORIGINE.conditions, modifie: true, ecarte: false, modifieLe: '2026-11-20T10:00:00.000Z', modifiePar: 'Tess Berthier' });
     assert.deepEqual(res.corps.messageFerme, { texte: ORIGINE.messageFerme, origine: ORIGINE.messageFerme, modifie: false, ecarte: false, modifieLe: null, modifiePar: null });
@@ -60,10 +60,10 @@ test('reglages : l\'écran relit la base à chaque ouverture ; sans base ou base
   b.poser('contributionsOuvertes', 'false', MAX);
   assert.deepEqual([(await b.lire('reglages')).corps.contributions.choix, (await b.lire('reglages')).corps.contributions.modifiePar], [false, 'Maxime Lafrenière']);
   const sans = (await banc({ sans: ['NOTION_DB_REGLAGES'] }).lire('reglages')).corps;
-  assert.deepEqual([sans.reglages, sans.contributions.ouvertes, sans.contributions.source, sans.conditions.texte], [{ actifs: false, lus: true }, true, 'defaut', ORIGINE.conditions]);
+  assert.deepEqual([sans.reglages, sans.contributions.ouvertes, sans.contributions.source, sans.conditions.texte], [{ actifs: false, lus: true, perime: false }, true, 'defaut', ORIGINE.conditions]);
   const panne = (await banc({ pannesNotion: { 'databases.query': (a) => a.database_id === 'base-reglages' } }).lire('reglages'));
   assert.equal(panne.code, 200);
-  assert.deepEqual([panne.corps.reglages, panne.corps.contributions.ouvertes, panne.corps.contributions.source], [{ actifs: true, lus: false }, false, 'precaution']);
+  assert.deepEqual([panne.corps.reglages, panne.corps.contributions.ouvertes, panne.corps.contributions.source], [{ actifs: true, lus: false, perime: false }, false, 'precaution']);
 });
 
 // ─── Enregistrer ───
@@ -299,4 +299,67 @@ test('la route documente ses actions, et les deux rôles sont dits dans sa table
   for (const action of ['reglages', 'enregistrer-reglages', 'sauvegardes', 'sauvegarder', 'sauvegarde']) assert.match(route, new RegExp(`\\* +(GET|POST) +${action}\\b`), action);
   assert.match(route, /reglages: \{ methode: 'GET', role: 'lecture' \}/);
   for (const action of ["'enregistrer-reglages': { methode: 'POST'", "sauvegardes: { methode: 'GET'", "sauvegarder: { methode: 'POST'", "sauvegarde: { methode: 'GET'"]) assert.ok(route.includes(`${action}, role: 'administration' }`), action);
+});
+
+// ─── Corrections après relecture ───
+test('écran resté ouvert : A n\'enregistre que ce qu\'il a changé, les réglages de B restent, et le journal ne lui attribue que les siens', async () => {
+  const b = banc();
+  const ecranDeA = (await b.lire('reglages', {}, TESS)).corps;
+  assert.deepEqual(ecranDeA.vu, { ouvertes: null, messageFerme: null, conditions: null });
+  // B (ici Tess aussi, seule en Administration) ferme avec un message, sur un autre écran.
+  assert.equal((await b.envoyer('enregistrer-reglages', { ouvertes: false, messageFerme: 'Pause.', vu: { ouvertes: null, messageFerme: null } })).code, 200);
+  // A, sans recharger, ne change que les conditions.
+  const res = await b.envoyer('enregistrer-reglages', { conditions: 'Mes conditions.', vu: { conditions: ecranDeA.vu.conditions } });
+  assert.deepEqual([res.code, res.corps.change], [200, { contributions: null, messageFerme: false, conditions: true }]);
+  assert.deepEqual(b.reglagesEcrits(), { contributionsOuvertes: false, messageFerme: 'Pause.', conditions: 'Mes conditions.' });
+  assert.deepEqual(b.journalEcrit().map((l) => [l.geste, l.phrase]), [
+    ['Contributions fermées', 'a fermé les contributions du public, et a modifié le message de fermeture'],
+    ['Réglages modifiés', 'a modifié le texte des conditions'],
+  ]);
+  // La réponse porte les nouvelles dates, pour l'enregistrement suivant.
+  assert.ok(res.corps.reglages.vu.conditions && res.corps.reglages.vu.ouvertes);
+});
+
+test('enregistrer-reglages : 409 si la base a changé depuis ce que l\'écran a vu ; rien n\'est écrit ni noté', async () => {
+  const b = banc({ reglages: { contributionsOuvertes: false, messageFerme: 'Pause.' } });
+  const res = await b.envoyer('enregistrer-reglages', { ouvertes: true, messageFerme: '', conditions: 'Mes conditions.', vu: { ouvertes: null, messageFerme: null, conditions: null } });
+  assert.deepEqual([res.code, res.corps], [409, { code: 'conflit', champs: ['ouvertes', 'messageFerme'] }]);
+  assert.equal(b.ecritures(), 0);
+  assert.deepEqual(b.journalEcrit(), []);
+  // « vu » mal formé : la demande n'est pas lue.
+  for (const vu of ['hier', ['a'], { ouvertes: 12 }, { conditions: 'x'.repeat(41) }, { autre: null }]) {
+    assert.equal((await b.envoyer('enregistrer-reglages', { ouvertes: true, vu })).code, 400, JSON.stringify(vu));
+  }
+});
+
+test('enregistrer-reglages : une écriture qui échoue après une autre réussie : 502, mais ce qui a été écrit est noté au journal', async () => {
+  const b = banc({ pannesNotion: { 'pages.create': (a) => a.parent.database_id === 'base-reglages' && a.properties['Clé'].title[0].text.content === 'contributionsOuvertes' } });
+  const res = await b.envoyer('enregistrer-reglages', { ouvertes: false, messageFerme: 'Pause.' });
+  assert.deepEqual([res.code, res.corps.code], [502, 'notion']);
+  assert.deepEqual(b.reglagesEcrits(), { messageFerme: 'Pause.' });
+  assert.deepEqual(b.journalEcrit().map((l) => [l.geste, l.par, l.phrase]), [['Réglages modifiés', TESS, 'a modifié le message de fermeture']]);
+});
+
+test('reglages : après une lecture réussie puis une panne de la base, la vue dit que ses valeurs datent', async () => {
+  let panne = false;
+  const b = banc({ reglages: { contributionsOuvertes: false }, pannesNotion: { 'databases.query': (a) => panne && a.database_id === 'base-reglages' } });
+  assert.deepEqual((await b.lire('reglages')).corps.reglages, { actifs: true, lus: true, perime: false });
+  panne = true;
+  const res = await b.lire('reglages');
+  assert.deepEqual([res.code, res.corps.reglages, res.corps.contributions.ouvertes], [200, { actifs: true, lus: true, perime: true }, false]);
+});
+
+test('accueil : pour l\'Administration, la date de la dernière copie complète et un avertissement si elle date ou manque', async () => {
+  const b = banc();
+  assert.deepEqual((await b.lire('accueil')).corps.sauvegardes, { lue: true, derniere: null, alerte: true });
+  b.poserCopie({ faiteLe: ilYA(9) });
+  assert.deepEqual((await b.lire('accueil')).corps.sauvegardes, { lue: true, derniere: ilYA(9), alerte: true });
+  b.poserCopie({ faiteLe: ilYA(2), origine: 'À la demande', par: TESS });
+  assert.deepEqual((await b.lire('accueil')).corps.sauvegardes, { lue: true, derniere: ilYA(2), alerte: false });
+  // Les autres rôles n'en voient rien ; sans la base « Sauvegardes », rien non plus.
+  for (const qui of [MAX, LEA]) assert.ok(!Object.hasOwn((await b.lire('accueil', {}, qui)).corps, 'sauvegardes'));
+  assert.ok(!Object.hasOwn((await banc({ sans: ['NOTION_DB_SAUVEGARDES'] }).lire('accueil')).corps, 'sauvegardes'));
+  // La base « Sauvegardes » illisible ne fait pas tomber l'accueil.
+  const panne = await banc({ pannesNotion: { 'databases.query': (a) => a.database_id === 'base-sauvegardes' } }).lire('accueil');
+  assert.deepEqual([panne.code, panne.corps.sauvegardes], [200, { lue: false, derniere: null, alerte: false }]);
 });

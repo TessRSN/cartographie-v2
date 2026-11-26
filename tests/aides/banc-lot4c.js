@@ -104,7 +104,7 @@ function peupler(faux) {
 }
 
 // env : les réglages de Vercel ; sans : les variables à retirer ; reglages : { clé: valeur } déjà enregistrés.
-function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFichiers = {}, sansJournal = false, budgetMs } = {}) {
+function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFichiers = {}, sansJournal = false, budgetMs, attendreSauvegarde = async () => {} } = {}) {
   const complet = { ...ENV, ...env };
   for (const variable of sans) delete complet[variable];
   const faux = commeNotion(fauxNotion({ pannes: pannesNotion, uuid: true }));
@@ -135,7 +135,7 @@ function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFic
   const roleDe = async (courriel) => ((await propositions.equipe()).find((x) => x.courriel === courriel) || {}).role || null;
   const reglagesSite = creerReglagesSite({ reglages: socle, env: complet, roleDe });
   const fichiers = fauxFichiers({ pannes: pannesFichiers });
-  const sauvegardes = creerSauvegardes({ client: faux.client, env: complet, fichiers, roleDe, verrous, maintenant, journal, ...(budgetMs === undefined ? {} : { budgetMs }) });
+  const sauvegardes = creerSauvegardes({ client: faux.client, env: complet, fichiers, roleDe, verrous, maintenant, journal, attendre: attendreSauvegarde, ...(budgetMs === undefined ? {} : { budgetMs }) });
   const deps = {
     env: complet, journal, limites, propositions, courriels, reglages: socle, equipe, reglagesSite, sauvegardes, fichiers,
     source: async () => ({ ressources: [], porteurs: [], idParAdresse: {} }),

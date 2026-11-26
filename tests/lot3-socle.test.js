@@ -19,7 +19,7 @@ test('« Lien en panne depuis » se lit dans une fiche, mais ne sort jamais dans
   assert.equal(res.code, 200);
   const sortie = JSON.stringify(res.corps);
   for (const interdit of ['lienEnPanneDepuis', 'Lien en panne', '2026-11-20', 'id-notion', 'statutFiche', 'porteurIds', 'logoFichier', 'modifieeLe']) assert.ok(!sortie.includes(interdit), interdit);
-  assert.deepEqual(Object.keys(res.corps).sort(), ['carte', 'contributions', 'genereLe', 'messageFerme', 'porteurs', 'ressources']);
+  assert.deepEqual(Object.keys(res.corps).sort(), ['carte', 'contributions', 'genereLe', 'porteurs', 'ressources']);
 });
 
 test('la source « Qualité » existe pour les versions et s\'écrit dans Notion', async () => {

@@ -44,7 +44,8 @@
  *                                                 le couper exige « confirme: true »
  *   GET  reglages                               → l'écran « Réglages » : contributions ouvertes ou fermées, message de
  *                                                 fermeture, texte des conditions, et ce qui est fixé à l'installation
- *   POST enregistrer-reglages { ouvertes, messageFerme, conditions } → enregistre ceux qui sont donnés (Administration)
+ *   POST enregistrer-reglages { ouvertes, messageFerme, conditions, vu } → enregistre ceux qui sont donnés (Administration) ;
+ *                                                 vu : la date que l'écran avait lue pour chacun ; 409 « conflit » si la base a changé depuis
  *   GET  sauvegardes                            → les copies de sauvegarde (Administration)
  *   POST sauvegarder                            → fait une copie maintenant (Administration)
  *   GET  sauvegarde     ?id=                    → le fichier d'une copie, servi par le serveur lui-même (Administration) ;
@@ -144,7 +145,9 @@ const REGLAGES_SITE = ['ouvertes', 'messageFerme', 'conditions'];
 const reglagesLisibles = (c) => REGLAGES_SITE.some((cle) => c[cle] !== undefined)
   && (c.ouvertes === undefined || typeof c.ouvertes === 'boolean')
   && (c.messageFerme === undefined || texteCourt(c.messageFerme, 2000))
-  && (c.conditions === undefined || texteCourt(c.conditions, TEXTE_BRUT_MAX));
+  && (c.conditions === undefined || texteCourt(c.conditions, TEXTE_BRUT_MAX))
+  // vu : pour chaque réglage, la date que l'écran avait lue, ou null.
+  && (c.vu === undefined || (estObjet(c.vu) && Object.entries(c.vu).every(([cle, le]) => REGLAGES_SITE.includes(cle) && (le === null || texteCourt(le, 40)))));
 // Au-delà de cette taille, le fichier d'une copie part comprimé : la réponse d'une fonction est limitée par l'hébergeur.
 const COPIE_A_COMPRIMER = 3 * 1024 * 1024;
 // Les jours des tâches planifiées (« crons » dans vercel.json), vérifiés par un essai.
@@ -449,7 +452,20 @@ function creerGestionnaire(donnees) {
         const r = reperes(publiques);
         const resumes = propositions.map((p) => resume(p, contenus.get(p.id), r, annuaire, approbateur));
         if (action === 'file') return res.status(200).json({ courriel: approbateur, propositions: resumes });
+        // Pour l'Administration, quand les sauvegardes sont activées : la dernière copie complète, et
+        // une alerte si elle a plus de huit jours ou s'il n'y en a aucune. Illisible : l'accueil s'affiche quand même.
+        let sauvegardes = null;
+        if (administre && d.sauvegardes && d.sauvegardes.active()) {
+          try {
+            const derniere = await d.sauvegardes.derniereComplete();
+            sauvegardes = { lue: true, derniere: derniere.faiteLe, alerte: derniere.ancienne };
+          } catch (err) {
+            d.journal('[admin] sauvegardes illisibles :', err.message);
+            sauvegardes = { lue: false, derniere: null, alerte: false };
+          }
+        }
         return res.status(200).json({
+          ...(sauvegardes ? { sauvegardes } : {}),
           compteurs: { nouvelles: resumes.filter((x) => x.statut === 'attente').length, verification: resumes.filter((x) => x.statut === 'verification').length },
           activite: activiteDe(resumes, propositions),
           // L'état des envois : ce qui est vrai, sans l'adresse d'essai ni aucune valeur secrète.
@@ -592,7 +608,14 @@ function creerGestionnaire(donnees) {
       }
       if (action === 'enregistrer-reglages') {
         if (!reglagesLisibles(corps)) return illisible();
-        const retour = await d.reglagesSite.enregistrer({ ouvertes: corps.ouvertes, messageFerme: corps.messageFerme, conditions: corps.conditions, par: approbateur });
+        let retour;
+        try {
+          retour = await d.reglagesSite.enregistrer({ ouvertes: corps.ouvertes, messageFerme: corps.messageFerme, conditions: corps.conditions, vu: corps.vu, par: approbateur });
+        } catch (err) {
+          // Une écriture a réussi avant la panne : elle est notée au journal, puis l'erreur remonte.
+          if (err && err.partiel) await consigner(d, action, approbateur, { ok: true, change: err.partiel }, corps);
+          throw err;
+        }
         if (!retour.ok) {
           if (retour.code === 'role') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
           const { ok, code, ...detail } = retour;

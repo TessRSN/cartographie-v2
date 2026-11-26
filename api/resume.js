@@ -2,7 +2,8 @@
  * GET /api/resume : le résumé hebdomadaire des propositions en attente, envoyé aux approbateurs.
  * Déclenché par le planificateur de Vercel (voir « crons » dans vercel.json), qui joint
  * l'en-tête « Authorization: Bearer <CRON_SECRET> ». Sans ce secret, la route refuse.
- * Rien ne part s'il n'y a aucune proposition en attente, ni quand les contributions sont fermées.
+ * Rien ne part s'il n'y a aucune proposition en attente, ni quand les contributions sont fermées à
+ * l'installation (CONTRIBUTIONS) ; la copie de sauvegarde, elle, se fait quand même.
  * Une « Modification de l'équipe » n'est annoncée qu'aux personnes en Administration, les seules à
  * pouvoir la trancher ; les autres ne reçoivent que les propositions du public, et rien s'il n'y en a pas.
  * La même tâche fait la copie de sauvegarde de la semaine (lib/sauvegardes.js), pour ne pas ajouter
@@ -22,13 +23,34 @@ function memeSecret(recu, attendu) {
 function creerGestionnaire(donnees) {
   return async function gestionnaire(req, res) {
     const env = (donnees && donnees.env) || process.env;
-    if (!ouvertes(env)) return res.status(404).json({ erreur: 'Introuvable.' });
+    const entete = String((req.headers && req.headers.authorization) || '');
+    const autorise = !!env.CRON_SECRET && entete.startsWith('Bearer ') && memeSecret(entete.slice(7), env.CRON_SECRET);
+    // La copie de la semaine : son état seulement, sans jamais lever. null sans module de sauvegarde.
+    const copie = async (d) => {
+      if (!d.sauvegardes) return null;
+      try {
+        const retour = await d.sauvegardes.hebdomadaire();
+        return retour && ['faite', 'inactive'].includes(retour.etat) ? retour.etat : 'echec';
+      } catch (err) {
+        d.journal('[résumé] copie de sauvegarde impossible :', err.message);
+        return 'echec';
+      }
+    };
+    if (!ouvertes(env)) {
+      // Contributions fermées à l'installation : pas de résumé, et la route reste introuvable pour
+      // qui n'a pas le secret. Le planificateur, lui, fait quand même la copie de la semaine.
+      const introuvable = () => res.status(404).json({ erreur: 'Introuvable.' });
+      if (req.method !== 'GET' || !autorise) return introuvable();
+      let d;
+      try { d = dependances(donnees); } catch (err) { return introuvable(); }
+      const sauvegarde = await copie(d);
+      if (!sauvegarde) return introuvable();
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({ ok: true, resume: 'ferme', sauvegarde });
+    }
     if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).json({ erreur: 'Méthode non permise.' }); }
     res.setHeader('Cache-Control', 'no-store');
-    const entete = String((req.headers && req.headers.authorization) || '');
-    if (!env.CRON_SECRET || !entete.startsWith('Bearer ') || !memeSecret(entete.slice(7), env.CRON_SECRET)) {
-      return res.status(401).json({ erreur: 'Accès refusé.' });
-    }
+    if (!autorise) return res.status(401).json({ erreur: 'Accès refusé.' });
 
     const d = dependances(donnees);
     // Le résumé : ce qu'il faut répondre, sans jamais lever.
@@ -59,21 +81,10 @@ function creerGestionnaire(donnees) {
         return { statut: 502, corps: { erreur: 'Le service est indisponible pour le moment.' } };
       }
     };
-    // La copie de la semaine : son état seulement, sans jamais lever. null sans module de sauvegarde.
-    const copie = async () => {
-      if (!d.sauvegardes) return null;
-      try {
-        const retour = await d.sauvegardes.hebdomadaire();
-        return retour && ['faite', 'inactive'].includes(retour.etat) ? retour.etat : 'echec';
-      } catch (err) {
-        d.journal('[résumé] copie de sauvegarde impossible :', err.message);
-        return 'echec';
-      }
-    };
     // Le résumé d'abord, puis la copie : les courriels sont partis avant que la copie, plus longue,
     // ne commence, et les deux ne se disputent pas Notion.
     const { statut, corps } = await resume();
-    const sauvegarde = await copie();
+    const sauvegarde = await copie(d);
     return res.status(statut).json(sauvegarde ? { ...corps, sauvegarde } : corps);
   };
 }
