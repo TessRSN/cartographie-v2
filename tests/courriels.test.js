@@ -236,7 +236,7 @@ test('mode d\'essai : une base illisible ne le lève pas', async () => {
   const d = bancReglages({ pannes: panne });
   assert.deepEqual(await LES_SIX.approuvee(d.courriels, 'p@exemple.org'), { envoye: false });
   assert.equal(d.envois.length, 0);
-  assert.ok(d.lignes.some((l) => l.includes("mode d'essai sans EMAIL_TEST_RECIPIENT")));
+  assert.ok(d.lignes.some((l) => l.includes("mode d'essai sans adresse d'essai")));
   // Vercel dit « arrêté », mais la base existe et ne se lit pas : le panneau a pu dire « actif », rien ne part au public.
   const f = bancReglages({ env: { EMAIL_TEST_MODE: 'false', EMAIL_TEST_RECIPIENT: 'essai@rsn.quebec' }, pannes: panne });
   await LES_SIX.approuvee(f.courriels, 'p@exemple.org');
@@ -328,7 +328,7 @@ test('le nom de la personne remplit {nom} quand il est connu, et ne laisse pas d
 test('« M\'envoyer un essai » : valeurs d\'exemple, « [ESSAI] » dans l\'objet, à l\'adresse donnée par le serveur', async () => {
   const b = bancReglages({ reglages: { 'courriel.approuvee': { objet: 'En ligne : {ressource}', texte: '{lien}' } } });
   for (const { id } of G.COURRIELS) {
-    assert.deepEqual(await b.courriels.essai({ id, a: 'tess@exemple.ca', site: 'https://carto.exemple' }), { ok: true, envoye: true, simule: false, essai: false }, id);
+    assert.deepEqual(await b.courriels.essai({ id, a: 'tess@exemple.ca', site: 'https://carto.exemple' }), { ok: true, envoye: true, simule: false }, id);
     const m = b.envois.at(-1);
     assert.deepEqual(m.to, ['tess@exemple.ca']);
     assert.ok(m.subject.startsWith('[ESSAI] '), id);
@@ -349,19 +349,21 @@ test('« M\'envoyer un essai » : valeurs d\'exemple, « [ESSAI] » dans l\'obje
   assert.equal(b.envois.length, avant);
 });
 
-test('« M\'envoyer un essai » suit le mode d\'essai, et dit ce qui s\'est passé', async () => {
+test('« M\'envoyer un essai » ne suit pas le mode d\'essai : il part à la personne qui essaie, et dit ce qui s\'est passé', async () => {
   const essai = bancReglages({ env: { EMAIL_TEST_RECIPIENT: 'essai@rsn.quebec' }, reglages: { [CLES.modeEssai]: true } });
-  assert.deepEqual(await essai.courriels.essai({ id: 'recue', a: 'tess@exemple.ca' }), { ok: true, envoye: true, simule: false, essai: true });
-  assert.deepEqual(essai.envois[0].to, ['essai@rsn.quebec']);
-  assert.equal(essai.envois[0].subject, '[TEST → tess@exemple.ca] [ESSAI] Proposition reçue');
+  assert.deepEqual(await essai.courriels.essai({ id: 'recue', a: 'tess@exemple.ca' }), { ok: true, envoye: true, simule: false });
+  assert.deepEqual(essai.envois[0].to, ['tess@exemple.ca']);
+  assert.equal(essai.envois[0].subject, '[ESSAI] Proposition reçue');
+  // Sans adresse d'essai non plus, l'essai n'est pas retenu : il ne passe pas par elle.
   const sansAdresse = bancReglages({ reglages: { [CLES.modeEssai]: true } });
-  assert.deepEqual(await sansAdresse.courriels.essai({ id: 'recue', a: 'tess@exemple.ca' }), { ok: false, code: 'sans-adresse' });
+  assert.deepEqual(await sansAdresse.courriels.essai({ id: 'recue', a: 'tess@exemple.ca' }), { ok: true, envoye: true, simule: false });
+  assert.deepEqual(sansAdresse.envois[0].to, ['tess@exemple.ca']);
   const panne = bancReglages({ echec: true });
   assert.deepEqual(await panne.courriels.essai({ id: 'recue', a: 'tess@exemple.ca' }), { ok: false, code: 'envoi' });
   // Sans service d'envoi : simulé, comme tous les courriels.
   const lignes = [];
   const local = creerCourriels({ env: {}, journal: (...a) => lignes.push(a.join(' ')) });
-  assert.deepEqual(await local.essai({ id: 'recue', a: 'tess@exemple.ca' }), { ok: true, envoye: false, simule: true, essai: false });
+  assert.deepEqual(await local.essai({ id: 'recue', a: 'tess@exemple.ca' }), { ok: true, envoye: false, simule: true });
   assert.ok(lignes.some((l) => l.includes('[courriel simulé]') && l.includes('[ESSAI]')));
 });
 

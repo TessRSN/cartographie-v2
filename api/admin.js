@@ -35,13 +35,17 @@
  *   POST changer-role   { personne, role }      → (Administration) ; jamais le sien
  *   POST retirer        { personne }            → coupe l'accès sans rien supprimer (Administration) ; jamais soi-même
  *   POST regler-resume  { personne, actif }     → le résumé hebdomadaire : le sien, ou celui de tous en Administration
- *   GET  courriels                              → les six courriels (texte en vigueur, texte d'origine, repères), et le mode d'essai en vigueur
+ *   GET  courriels                              → les six courriels (texte en vigueur, texte d'origine, repères), et le mode d'essai en vigueur ;
+ *                                                 pour l'Administration seulement, « adresseEssai » : l'adresse d'essai en vigueur et d'où elle vient
  *   POST enregistrer-courriel { id, objet, texte } → enregistre le texte d'un courriel, après vérification (Administration)
  *   POST retablir-courriel    { id }            → le texte d'origine revient (Administration)
  *   POST essai-courriel { id, objet, texte }    → envoie le courriel, rempli de valeurs d'exemple, à la personne connectée
- *                                                 et à elle seule (Administration) ; objet et texte : un brouillon à essayer
+ *                                                 et à elle seule, mode d'essai actif ou non (Administration) ; objet et texte : un brouillon à essayer
  *   POST mode-essai     { actif, confirme }     → active ou coupe le mode d'essai des courriels (Administration) ;
  *                                                 le couper exige « confirme: true »
+ *   POST adresse-essai  { adresse, vu }         → règle l'adresse qui reçoit les courriels en mode d'essai (Administration) ; vide : le
+ *                                                 réglage est retiré, celle de l'hébergeur reprend ; vu : la date que l'écran avait lue ;
+ *                                                 409 « conflit » si la base a changé depuis
  *   GET  reglages                               → l'écran « Réglages » : contributions ouvertes ou fermées, message de
  *                                                 fermeture, texte des conditions, et ce qui est fixé à l'installation
  *   POST enregistrer-reglages { ouvertes, messageFerme, conditions, vu } → enregistre ceux qui sont donnés (Administration) ;
@@ -53,7 +57,8 @@
  * Une fiche est désignée par son adresse publique, ou par un repère opaque si elle est écartée ;
  * un porteur ou une personne, toujours par un repère opaque : jamais par un identifiant Notion.
  * Les courriels de l'équipe ne sortent que par « equipe » ; partout ailleurs, une personne est un nom.
- * Ni l'adresse d'essai des courriels ni aucune valeur secrète ne sort : seulement si elle est définie.
+ * Aucune valeur secrète ne sort : seulement si elle est définie. L'adresse d'essai des courriels ne sort
+ * que pour l'Administration, par « courriels » et « adresse-essai » ; pour les autres rôles, seulement si elle est définie.
  * Chaque geste réussi qui change quelque chose est noté dans le journal de l'équipe, comme une fusion
  * interrompue qui a déjà changé des fiches. Le journal ne fait jamais échouer un geste et ne le retarde
  * jamais de plus de trois secondes.
@@ -102,6 +107,8 @@ const ACTIONS = {
   courriels: { methode: 'GET', role: 'lecture' },
   'enregistrer-courriel': { methode: 'POST', role: 'administration' }, 'retablir-courriel': { methode: 'POST', role: 'administration' },
   'essai-courriel': { methode: 'POST', role: 'administration' }, 'mode-essai': { methode: 'POST', role: 'administration' },
+  // L'adresse d'essai : le module des courriels relit le rôle de son côté.
+  'adresse-essai': { methode: 'POST', role: 'administration' },
   // Les réglages du site : tout le monde les lit, l'Administration seule les change. Les modules le vérifient aussi.
   reglages: { methode: 'GET', role: 'lecture' }, 'enregistrer-reglages': { methode: 'POST', role: 'administration' },
   // Les copies de sauvegarde portent les courriels des proposants : tout y est réservé à l'Administration.
@@ -128,6 +135,7 @@ const GESTES_EQUIPE = {
 // Les gestes sur les courriels. Le texte est vérifié dans lib/courriels.js ; ici, seulement sa forme
 // et une taille au-delà de laquelle la demande n'est pas lue. L'essai part toujours à la personne
 // en session : rien de ce que dit le corps ne désigne un destinataire.
+const ADRESSE_BRUTE_MAX = 400;
 const OBJET_BRUT_MAX = 1000;
 const TEXTE_BRUT_MAX = 20000;
 const brouillonLisible = (c) => texteCourt(c.objet, OBJET_BRUT_MAX) && texteCourt(c.texte, TEXTE_BRUT_MAX);
@@ -169,7 +177,7 @@ const MESSAGES_ROLE = {
   approbation: 'Votre rôle ne permet pas ce geste : il demande le rôle Approbation ou Administration.',
   administration: 'Votre rôle ne permet pas ce geste : il est réservé au rôle Administration.',
 };
-const CODES = { 'sauvegardes-absentes': 409, 'reglages-absents': 409, 'sans-adresse': 409, envoi: 502, limite: 429, confirmation: 400, role: 403, 'soi-meme': 409, 'derniere-administration': 409, 'deja-inscrite': 409, 'adresse-introuvable': 404, 'a-poursuivre': 409, interrompue: 502, 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
+const CODES = { 'sauvegardes-absentes': 409, 'reglages-absents': 409, envoi: 502, limite: 429, confirmation: 400, role: 403, 'soi-meme': 409, 'derniere-administration': 409, 'deja-inscrite': 409, 'adresse-introuvable': 404, 'a-poursuivre': 409, interrompue: 502, 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
 const CLES = new Set(CHAMPS.map((c) => c.cle));
 const idValide = (id) => typeof id === 'string' && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(id);
 const estObjet = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -244,6 +252,10 @@ const JOURNAL = {
   // Le texte d'un courriel n'est jamais recopié au journal : seulement le nom du courriel.
   'enregistrer-courriel': (r) => (r.inchange ? null : r.retabli ? JOURNAL['retablir-courriel'](r) : ligne('Courriel modifié', r.nom, `a modifié le courriel « ${r.nom} »`)),
   'retablir-courriel': (r) => (r.inchange ? null : ligne('Courriel rétabli', r.nom, `a rétabli le texte d'origine du courriel « ${r.nom} »`)),
+  // L'adresse d'essai n'est jamais recopiée au journal.
+  'adresse-essai': (r) => (r.inchange ? null : ligne("Adresse d'essai changée", 'Courriels', r.retiree
+    ? "a retiré l'adresse d'essai réglée dans le panneau : celle de l'hébergeur reprend"
+    : "a changé l'adresse qui reçoit les courriels en mode d'essai")),
   'mode-essai': (r) => (r.inchange ? null : ligne("Mode d'essai changé", 'Courriels', r.actif
     ? "a activé le mode d'essai des courriels : ils vont tous à l'adresse d'essai"
     : "a coupé le mode d'essai des courriels : ils partent aux vraies personnes")),
@@ -551,18 +563,44 @@ function creerGestionnaire(donnees) {
       const sansReglages = () => res.status(409).json({ code: 'reglages-absents' });
       // Un courriel tel que l'écran le montre : « modifié par » est un nom, jamais un courriel.
       const vueCourriel = (c) => ({ ...c, quand: c.quand.replace('{jour}', JOUR_RESUME), modifiePar: nomDans(annuaire, c.modifiePar) });
+      // L'adresse d'essai telle que l'Administration la voit : « réglée par » est un nom. null pour
+      // les autres rôles : le module des courriels relit le rôle et ne rend alors rien.
+      const vueAdresseEssai = async () => {
+        if (!administre) return null;
+        const vue = await d.courriels.adresseEssaiPour({ par: approbateur });
+        if (!vue.ok) return null;
+        const { ok, ...reste } = vue;
+        return { ...reste, modifiePar: nomDans(annuaire, vue.modifiePar) };
+      };
       if (action === 'courriels') {
         // L'écran montre ce qui est enregistré maintenant, pas ce que l'instance a gardé en mémoire.
         if (d.reglages) d.reglages.vider();
         const [liste, etat] = await Promise.all([d.courriels.lister(), d.courriels.etat()]);
         const regle = etat.essai.source === 'panneau' && d.reglages ? await d.reglages.lire(CLES_REGLAGES.modeEssai) : null;
+        const adresseEssai = await vueAdresseEssai();
         return res.status(200).json({
           reglages: { actifs: liste.base, lus: liste.lus },
-          // L'adresse d'essai ne sort pas : seulement si elle est définie.
+          // Pour tous les rôles : seulement si une adresse d'essai est définie, jamais laquelle.
           essai: { actif: etat.essai.actif, source: etat.essai.source, adresseDefinie: etat.adresseEssai, modifieLe: (regle && regle.modifieLe) || null, modifiePar: regle ? nomDans(annuaire, regle.modifiePar) : null },
+          // Pour l'Administration seulement : l'adresse en vigueur et d'où elle vient.
+          ...(adresseEssai ? { adresseEssai } : {}),
           service: etat.service,
           courriels: liste.liste.map(vueCourriel),
         });
+      }
+      if (action === 'adresse-essai') {
+        if (!texteCourt(corps.adresse, ADRESSE_BRUTE_MAX) || !(corps.vu === undefined || corps.vu === null || texteCourt(corps.vu, 40))) return illisible();
+        // La personne est celle de la session : rien de ce que dit le corps ne la remplace.
+        const retour = await d.courriels.reglerAdresseEssai({ adresse: corps.adresse, ...(corps.vu === undefined ? {} : { vu: corps.vu }), par: approbateur });
+        if (!retour.ok) {
+          if (retour.code === 'role') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
+          const { ok, code, ...detail } = retour;
+          return res.status(CODES[code] || 502).json({ code, ...detail });
+        }
+        await consigner(d, action, approbateur, retour, corps);
+        // L'adresse telle qu'elle est maintenant, pour que l'écran n'ait pas à relire la base.
+        const adresseEssai = await vueAdresseEssai();
+        return res.status(200).json({ ...retour, adresseDefinie: !!(adresseEssai && adresseEssai.adresse), ...(adresseEssai ? { adresseEssai } : {}) });
       }
       if (action === 'mode-essai') {
         if (typeof corps.actif !== 'boolean') return illisible();

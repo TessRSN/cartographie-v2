@@ -152,7 +152,7 @@ Variables d'environnement, dans `.env.local` en local et dans le projet Vercel e
 | `CRON_SECRET` | protège le déclenchement du résumé hebdomadaire ; Vercel le joint lui-même à l'appel planifié |
 | `RESEND_API_KEY` | envoi des courriels ; sans elle, rien ne part et le lien est écrit dans le journal du serveur |
 | `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME` | expéditeur des courriels (facultatives) |
-| `EMAIL_TEST_MODE`, `EMAIL_TEST_RECIPIENT` | mode d'essai : tous les courriels vont à une seule adresse |
+| `EMAIL_TEST_MODE`, `EMAIL_TEST_RECIPIENT` | mode d'essai : tous les courriels vont à une seule adresse ; l'Administration peut régler les deux depuis l'écran « Courriels » du panneau, qui passe alors devant ces variables |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | stockage clé-valeur de Vercel, pour les limites d'envoi ; sans lui, une limite en mémoire prend le relais |
 
 ### En local

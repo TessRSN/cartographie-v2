@@ -67,7 +67,8 @@ const etat = {
 function reglagesNeufs() { return { brouillon: null, erreurs: {}, enCours: false }; }
 function equipeNeuve() { return { enCours: null, confirmation: null, invitation: { courriel: '', nom: '', role: 'approbation' }, erreurs: {} }; }
 // champ : le dernier champ de l'éditeur où était le curseur, pour y insérer un repère.
-function courrielsNeufs() { return { choisi: 'lien', brouillons: {}, erreurs: {}, enCours: null, confirmation: null, champ: 'mBody' }; }
+// adresse : l'adresse d'essai en cours d'écriture (Administration), ou null si le champ n'a pas été touché.
+function courrielsNeufs() { return { choisi: 'lien', brouillons: {}, erreurs: {}, enCours: null, confirmation: null, champ: 'mBody', adresse: null }; }
 // Une seule fenêtre à la fois : une proposition, une fiche, l'export ou le volet d'un porteur.
 const fenetreOuverte = () => !!(etat.f || etat.r || etat.csv || etat.o);
 
@@ -1964,7 +1965,7 @@ const TEINTES_GESTE = {
   'Approbation': 'ok', 'Fiche republiée': 'ok', 'Fiche vérifiée': 'ok', 'Invitation': 'ok', 'Fiche créée': 'ok', 'Porteur créé': 'ok',
   'Refus': 'bad', 'Fiche écartée': 'bad', 'Personne retirée': 'bad',
   'Second regard': 'warn', 'Fiche à revoir': 'warn', 'Modification proposée': 'warn', 'Rôle changé': 'warn',
-  'Mode d\'essai changé': 'warn',
+  'Mode d\'essai changé': 'warn', 'Adresse d\'essai changée': 'warn',
   'Contributions ouvertes': 'ok', 'Contributions fermées': 'bad', 'Réglages modifiés': 'warn', 'Sauvegarde faite': 'ok', 'Sauvegarde téléchargée': 'warn',
 };
 const pointGeste = (geste) => `<span class="pt pt-${TEINTES_GESTE[geste] || 'info'}" aria-hidden="true"></span>`;
@@ -2098,6 +2099,19 @@ const brouillonDiffere = (c) => { const b = etat.co.brouillons[c.id]; return !!b
 // Vrai si un texte de courriel est en cours d'écriture, sans être enregistré.
 function saisieCourriels() { return !!etat.courriels && etat.courriels.courriels.some(brouillonDiffere); }
 
+// L'adresse qui reçoit tout en mode d'essai. L'Administration la voit et la change : le champ porte
+// celle du panneau, et celle de l'hébergeur se lit dessous. Les autres rôles savent seulement si elle est définie.
+const saisieAdresseEssai = (x) => (etat.co.adresse !== null ? etat.co.adresse : (x.source === 'panneau' && x.adresse) || '');
+function blocAdresseEssai() {
+  const d = etat.courriels; const x = d.adresseEssai; const co = etat.co; const A = CO.adresse;
+  if (!administre() || !x) return `<p class="muted small">${e(d.essai.adresseDefinie ? CO.essai.adresseDefinie : CO.essai.sansAdresse(d.essai.actif))}</p>`;
+  const m = modifiable();
+  const enVigueur = x.source === 'panneau' ? A.duPanneau(x.adresse, x.modifiePar, jour(x.modifieLe)) : x.source === 'vercel' ? A.deVercel(x.adresse) : A.aucune(d.essai.actif);
+  return `<label class="f" for="essaiAdresse">${e(A.libelle)}<input type="email" id="essaiAdresse" maxlength="254" value="${e(saisieAdresseEssai(x))}" placeholder="${e(A.exemple)}" autocomplete="off"${co.erreurs.adresse ? ' aria-invalid="true"' : ''}${m ? '' : ' readonly'}></label>${co.erreurs.adresse ? `<span class="err" role="alert">${e(co.erreurs.adresse)}</span>` : ''}
+    ${x.ecartee ? `<div class="note warn">${e(A.ecartee)}</div>` : ''}
+    <p class="muted small">${e(enVigueur)}${m ? ` ${e(A.aide)}` : ''}</p>
+    ${m ? `<div class="row"><button type="button" class="btn sm" data-act="c-adresse"${co.enCours ? ' disabled' : ''}>${e(co.enCours === 'adresse' ? T.enCours : A.enregistrer)}</button></div>` : ''}`;
+}
 function blocEssai() {
   const d = etat.courriels; const x = d.essai; const co = etat.co; const fige = co.enCours ? ' disabled' : '';
   const origine = x.source === 'panneau' ? CO.essai.duPanneau(x.modifiePar, jour(x.modifieLe)) : x.source === 'vercel' ? CO.essai.deVercel : CO.essai.parPrecaution;
@@ -2106,7 +2120,7 @@ function blocEssai() {
     ? `<div class="confirm" id="confirmationEssai"><span>${e(CO.essai.question)}</span><button type="button" class="btn sm" data-act="c-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="c-couper-essai"${fige}>${e(co.enCours ? T.enCours : CO.essai.couper)}</button></div>` : '';
   return `<section class="card"><div class="switch"><div><b>${e(CO.essai.titre)}</b><span class="muted small">${e(CO.essai.aide)}</span></div><input type="checkbox" role="switch" id="essaiMode" aria-label="${e(CO.essai.titre)}"${x.actif ? ' checked' : ''}${modifiable() && !co.enCours ? '' : ' disabled'}></div>
     <p class="small">${pastille} ${e(origine)}</p>
-    <p class="muted small">${e(x.adresseDefinie ? CO.essai.adresseDefinie : CO.essai.sansAdresse(x.actif))}${d.service ? '' : ` ${e(CO.essai.sansService)}`}</p>${confirmation}</section>`;
+    ${confirmation}${blocAdresseEssai()}${d.service ? '' : `<p class="muted small">${e(CO.essai.sansService)}</p>`}</section>`;
 }
 function listeCourriels() {
   const choisi = courrielChoisi();
@@ -2148,7 +2162,7 @@ function editeurCourriel() {
       <label class="f" for="mBody">${e(CO.texte)}<textarea id="mBody" maxlength="${Number(Gabarits.TEXTE_MAX)}"${co.erreurs.texte ? ' aria-invalid="true"' : ''}${lecture}>${e(s.texte)}</textarea></label>${erreur('texte')}
       <div><h3 style="margin-bottom:.4rem">${e(CO.reperes)}</h3><div class="chips">${puces}</div>
         <ul class="muted small reperes">${aides}</ul><p class="muted small">${e(CO.reperesAide)}</p></div>
-      ${boutons ? `<div class="row">${boutons}</div>` : ''}${confirmation}</section>
+      ${boutons ? `<div class="row">${boutons}</div>` : ''}${administre() ? `<p class="muted small">${e(CO.essaiAide)}</p>` : ''}${confirmation}</section>
     <section><h3 style="margin-bottom:.5rem">${e(CO.apercu.titre)}</h3><p class="muted small" style="margin-bottom:.5rem">${e(CO.apercu.aide)}</p><div class="preview" id="mPrev">${apercuCourriel()}</div></section>`;
 }
 function corpsCourriels() {
@@ -2198,6 +2212,23 @@ function saisirCourriel(cible) {
   clearTimeout(minuterieApercu);
   minuterieApercu = setTimeout(() => { const zone = $('#mPrev'); if (zone && route() === 'courriels' && etat.courriels) zone.innerHTML = apercuCourriel(); }, 150);
 }
+// Chaque frappe de l'adresse d'essai est gardée dans l'état, sans redessiner.
+function saisirAdresseEssai(cible) {
+  if (!modifiable() || !etat.courriels.adresseEssai) return;
+  etat.co.adresse = cible.value;
+  if (etat.co.erreurs.adresse) {
+    delete etat.co.erreurs.adresse; cible.removeAttribute('aria-invalid');
+    const etiquette = cible.closest('label'); const suivant = etiquette && etiquette.nextElementSibling;
+    if (suivant && suivant.classList.contains('err')) suivant.remove();
+  }
+}
+// Ce que le serveur a gardé pour l'adresse d'essai : l'écran n'a pas à relire la base.
+function poserAdresseEssai(d) {
+  if (!etat.courriels) return;
+  if (d.adresseEssai) etat.courriels.adresseEssai = d.adresseEssai;
+  etat.courriels.essai = { ...etat.courriels.essai, adresseDefinie: !!d.adresseDefinie };
+  etat.co.adresse = null;
+}
 function poserCourriel(vue) {
   if (!vue || !etat.courriels) return;
   const liste = etat.courriels.courriels; const i = liste.findIndex((x) => x.id === vue.id);
@@ -2221,11 +2252,13 @@ async function gesteCourriels(cle, action, corps, reussite) {
   if (r.code === 403) { message(T.reserveAdministration); redessinerCourriels(); await relireMoi(); return charger(); }
   const code = r.donnees.code;
   if (code === 'invalide' && r.donnees.erreurs) {
-    co.erreurs = { ...r.donnees.erreurs }; message(CO.aCorriger); redessinerCourriels();
-    const fautif = $(co.erreurs.objet ? '#mSubj' : '#mBody'); if (fautif) fautif.focus();
+    co.erreurs = { ...r.donnees.erreurs }; message(co.erreurs.adresse ? CO.adresse.aCorriger : CO.aCorriger); redessinerCourriels();
+    const fautif = $(co.erreurs.adresse ? '#essaiAdresse' : co.erreurs.objet ? '#mSubj' : '#mBody'); if (fautif) fautif.focus();
     return undefined;
   }
-  message(code === 'reglages-absents' ? CO.sansBaseCourt : code === 'limite' ? CO.essaiLimite : code === 'sans-adresse' ? CO.essaiSansAdresse : code === 'envoi' ? CO.essaiEchec : code === 'introuvable' ? CO.introuvable : T.indisponible);
+  // Une autre personne a changé l'adresse d'essai depuis le chargement de l'écran : il est rechargé avec sa version.
+  if (r.code === 409 && code === 'conflit') { co.adresse = null; message(CO.adresse.conflit); redessinerCourriels(); return charger(); }
+  message(code === 'reglages-absents' ? CO.sansBaseCourt : code === 'limite' ? CO.essaiLimite : code === 'envoi' ? CO.essaiEchec : code === 'introuvable' ? CO.introuvable : T.indisponible);
   redessinerCourriels();
   // L'écran reprend ce que le serveur dit vraiment.
   return code === 'reglages-absents' || code === 'introuvable' ? charger() : undefined;
@@ -2250,9 +2283,16 @@ function gesteEcranCourriels(act, cible) {
     const gabarit = brouillonDiffere(c) ? brouillonValide(c) : undefined;
     if (gabarit === null) return undefined;
     return gesteCourriels('essayer', 'essai-courriel', gabarit ? { id: c.id, objet: gabarit.objet, texte: gabarit.texte } : { id: c.id },
-      (d) => message(d.simule ? CO.essaiSimule : d.essai ? CO.essaiVersEssai : CO.essaiEnvoye(etat.moi.courriel)));
+      (d) => message(d.simule ? CO.essaiSimule : CO.essaiEnvoye(etat.moi.courriel)));
   }
   if (!modifiable()) return undefined;
+  // L'adresse d'essai : ce qui est écrit dans le champ, avec la date que l'écran avait lue. Le serveur vérifie tout.
+  if (act === 'c-adresse') {
+    const x = etat.courriels.adresseEssai;
+    if (!x) return undefined;
+    return gesteCourriels('adresse', 'adresse-essai', { adresse: saisieAdresseEssai(x), vu: x.vu || null },
+      (d) => { poserAdresseEssai(d); message(d.inchange ? CO.adresse.inchange : d.retiree ? CO.adresse.retiree : CO.adresse.enregistree); });
+  }
   // Couper le mode d'essai ne part que d'ici, après la confirmation affichée.
   if (act === 'c-couper-essai' && co.confirmation === 'essai') return gesteCourriels('essai-mode', 'mode-essai', { actif: false, confirme: true }, (d) => { poserEssai(d); message(d.inchange ? CO.essai.inchange : CO.essai.coupe); });
   if (act === 'c-repere') {
@@ -2708,6 +2748,7 @@ document.addEventListener('input', (evenement) => {
   if (cible.id === 'invNom') { etat.eq.invitation.nom = cible.value; return; }
   // Écran Courriels : chaque frappe de l'objet ou du texte est gardée, et l'aperçu suit.
   if (cible.id === 'mSubj' || cible.id === 'mBody') return saisirCourriel(cible);
+  if (cible.id === 'essaiAdresse') return etat.courriels ? saisirAdresseEssai(cible) : undefined;
   // Écran Réglages : chaque frappe du message ou des conditions est gardée.
   if (cible.id === 'rgMessage' || cible.id === 'rgConditions') return saisirReglage(cible);
   // Volet d'un porteur : chaque frappe est gardée, et le repère suit les coordonnées écrites.

@@ -64,8 +64,9 @@ function banc({ env = {}, sansBase = false, reglages = {}, pannesNotion = {}, es
   const envois = [];
   const envoyeur = async (message) => { if (echecEnvoi) throw new Error('Resend en panne'); envois.push(message); };
   const socle = creerReglages(faux.client, complet, { maintenant, journal });
-  const courriels = creerCourriels({ envoyeur: sansService ? undefined : envoyeur, env: complet, journal, reglages: socle });
   const propositions = creerPropositions(faux.client, complet, { maintenant });
+  const roleDe = async (courriel) => ((await propositions.equipe()).find((x) => x.courriel === courriel) || {}).role || null;
+  const courriels = creerCourriels({ envoyeur: sansService ? undefined : envoyeur, env: complet, journal, reglages: socle, roleDe });
   const verrous = verrousEnMemoire();
   const demandesDEssai = [];
   const limites = {

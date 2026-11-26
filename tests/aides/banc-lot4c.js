@@ -126,13 +126,13 @@ function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFic
   const maintenant = () => { horloge.instant += 1000; return horloge.instant; };
   const envois = [];
   const socle = creerReglages(faux.client, complet, { maintenant, journal });
-  const courriels = creerCourriels({ envoyeur: async (m) => { envois.push(m); }, env: complet, journal, reglages: socle });
   const propositions = creerPropositions(faux.client, complet, { maintenant });
+  const roleDe = async (courriel) => ((await propositions.equipe()).find((x) => x.courriel === courriel) || {}).role || null;
+  const courriels = creerCourriels({ envoyeur: async (m) => { envois.push(m); }, env: complet, journal, reglages: socle, roleDe });
   const verrous = verrousEnMemoire();
   const limites = { async consommerJeton() { return true; }, async autoriserLien() { return true; }, async autoriserEssai() { return true; }, ...verrous };
   const equipe = creerEquipe({ client: faux.client, env: complet, courriels, limites, reglages: socle, verrous, secret: SECRET, journal, attendre: async () => {} });
   const journalEquipe = creerJournal(faux.client, complet, { maintenant, journal });
-  const roleDe = async (courriel) => ((await propositions.equipe()).find((x) => x.courriel === courriel) || {}).role || null;
   const reglagesSite = creerReglagesSite({ reglages: socle, env: complet, roleDe });
   const fichiers = fauxFichiers({ pannes: pannesFichiers });
   const sauvegardes = creerSauvegardes({ client: faux.client, env: complet, fichiers, roleDe, verrous, maintenant, journal, attendre: attendreSauvegarde, ...(budgetMs === undefined ? {} : { budgetMs }) });

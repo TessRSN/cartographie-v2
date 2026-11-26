@@ -16,9 +16,12 @@ const ECRITURES = {
   'essai-courriel': { id: 'approuvee' },
   'mode-essai': { actif: false, confirme: true },
 };
+// « adresseEssai » ne sort que pour l'Administration (tests/adresse-essai.test.js le prouve pour
+// les autres rôles) : ici, tout le reste de chaque réponse est vérifié.
 const sansSecret = (b) => {
   for (const { action, res } of b.vues) {
-    const brut = JSON.stringify(res.corps) + JSON.stringify(res.entetes);
+    const { adresseEssai, ...reste } = res.corps || {};
+    const brut = JSON.stringify(reste) + JSON.stringify(res.entetes);
     for (const interdit of SECRETS) assert.ok(!brut.includes(interdit), `${action} : ${interdit}`);
   }
 };
@@ -30,7 +33,7 @@ test('courriels : les six courriels, l\'état du mode d\'essai et d\'où il vien
     const res = await b.lire('courriels', {}, qui);
     assert.equal(res.code, 200, qui);
     assert.equal(res.entetes['Cache-Control'], 'no-store');
-    assert.deepEqual(Object.keys(res.corps).sort(), ['courriels', 'essai', 'reglages', 'service']);
+    assert.deepEqual(Object.keys(res.corps).sort(), qui === TESS ? ['adresseEssai', 'courriels', 'essai', 'reglages', 'service'] : ['courriels', 'essai', 'reglages', 'service']);
     assert.deepEqual(res.corps.reglages, { actifs: true, lus: true });
     assert.deepEqual(res.corps.essai, { actif: true, source: 'vercel', adresseDefinie: true, modifieLe: null, modifiePar: null });
     assert.equal(res.corps.service, true);
@@ -192,7 +195,7 @@ test('essai-courriel : le courriel ne part qu\'à la personne connectée, même 
   const piege = { a: 'victime@exemple.org', courriel: 'victime@exemple.org', to: ['victime@exemple.org'], destinataire: 'victime@exemple.org', par: 'victime@exemple.org' };
   for (const id of IDS) {
     const res = await b.envoyer('essai-courriel', { id, ...piege });
-    assert.deepEqual([res.code, res.corps], [200, { ok: true, envoye: true, simule: false, essai: false }], id);
+    assert.deepEqual([res.code, res.corps], [200, { ok: true, envoye: true, simule: false }], id);
     const m = b.envois.at(-1);
     assert.deepEqual(m.to, [TESS], id);
     assert.ok(m.subject.startsWith('[ESSAI] '), id);
@@ -237,17 +240,17 @@ test('essai-courriel : au-delà de la limite, rien ne part', async () => {
   assert.equal(b.demandesDEssai.length, 3);
 });
 
-test('essai-courriel en mode d\'essai : il va à l\'adresse d\'essai, et la réponse le dit sans la donner', async () => {
+test('essai-courriel en mode d\'essai : il va quand même à la personne connectée ; en panne ou sans service, la réponse le dit', async () => {
   const b = banc({ reglages: { modeEssai: true } });
   const res = await b.envoyer('essai-courriel', { id: 'recue' });
-  assert.deepEqual([res.code, res.corps], [200, { ok: true, envoye: true, simule: false, essai: true }]);
-  assert.deepEqual(b.envois[0].to, [ADRESSE_ESSAI]);
-  assert.equal(b.envois[0].subject, `[TEST → ${TESS}] [ESSAI] Proposition reçue`);
+  assert.deepEqual([res.code, res.corps], [200, { ok: true, envoye: true, simule: false }]);
+  assert.deepEqual(b.envois[0].to, [TESS]);
+  assert.equal(b.envois[0].subject, '[ESSAI] Proposition reçue');
   sansSecret(b);
-  // Mode d'essai sans adresse d'essai : rien ne peut partir, et la réponse dit pourquoi.
+  // Mode d'essai sans adresse d'essai : l'essai part quand même, il ne passe pas par elle.
   const sans = banc({ env: { EMAIL_TEST_RECIPIENT: '' }, reglages: { modeEssai: true } });
-  const refus = await sans.envoyer('essai-courriel', { id: 'recue' });
-  assert.deepEqual([refus.code, refus.corps.code, sans.envois.length], [409, 'sans-adresse', 0]);
+  const direct = await sans.envoyer('essai-courriel', { id: 'recue' });
+  assert.deepEqual([direct.code, sans.envois.length, sans.envois[0].to], [200, 1, [TESS]]);
   // Service d'envoi en panne : 502, sans détail technique.
   const panne = banc({ echecEnvoi: true });
   const echec = await panne.envoyer('essai-courriel', { id: 'recue' });
@@ -256,7 +259,7 @@ test('essai-courriel en mode d\'essai : il va à l\'adresse d\'essai, et la rép
   // Sans service d'envoi (poste local) : simulé.
   const local = banc({ sansService: true });
   const simule = await local.envoyer('essai-courriel', { id: 'recue' });
-  assert.deepEqual([simule.code, simule.corps], [200, { ok: true, envoye: false, simule: true, essai: false }]);
+  assert.deepEqual([simule.code, simule.corps], [200, { ok: true, envoye: false, simule: true }]);
   assert.equal((await local.lire('courriels')).corps.service, false);
 });
 
@@ -411,7 +414,7 @@ test('les gestes du lot existent dans le journal, et la page leur donne une coul
 test('les réglages sont branchés sur les vrais modules, et leur base est un réglage documenté', () => {
   const assemblage = fs.readFileSync(path.join(__dirname, '..', 'lib', 'contributions.js'), 'utf8');
   assert.match(assemblage, /creerReglages\(clientPartage\(\), process\.env\)/);
-  assert.match(assemblage, /creerCourriels\(\{ env, reglages \}\)/);
+  assert.match(assemblage, /creerCourriels\(\{ env, reglages, roleDe \}\)/);
   assert.match(assemblage, /creerEquipe\(\{[^}]*\breglages\b/);
   assert.match(assemblage, /assemblage = \{[^}]*\breglages\b/);
   const readme = fs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');
