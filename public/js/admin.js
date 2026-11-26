@@ -2364,7 +2364,7 @@ function corpsReglages() {
         <label class="f" for="rgMessage">${e(C.message)}<input type="text" id="rgMessage" maxlength="${Number(d.limites.messageFerme)}" value="${e(s.messageFerme)}" placeholder="${e(d.messageFerme.origine)}" autocomplete="off"${rg.erreurs.messageFerme ? ' aria-invalid="true"' : ''}${lecture}></label>${erreur('messageFerme')}
         <p class="muted small">${e(C.messageAide)} « ${e(d.messageFerme.origine)} »</p>
       </section>
-      <section class="card"><div class="row" style="justify-content:space-between"><h2>${e(K.titre)}</h2><span class="pill p-warn">${e(K.provisoire)}</span></div>
+      <section class="card"><h2>${e(K.titre)}</h2>
         ${d.conditions.ecarte ? `<div class="note warn">${e(K.ecarte)}</div>` : ''}
         <label class="f" for="rgConditions">${e(K.libelle)}<textarea class="notes" style="min-height:130px" id="rgConditions" maxlength="${Number(d.limites.conditions)}"${rg.erreurs.conditions ? ' aria-invalid="true"' : ''}${lecture}>${e(s.conditions)}</textarea></label>${erreur('conditions')}
         <p class="muted small">${e(trace)}</p>

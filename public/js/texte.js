@@ -733,7 +733,6 @@ const TEXTES = {
       },
       conditions: {
         titre: 'Conditions de contribution',
-        provisoire: 'Texte provisoire, à valider en droit',
         libelle: 'Texte affiché avant l’envoi d’une proposition, avec une case à cocher',
         origine: 'Remettre le texte d’origine',
         estOrigine: 'C’est le texte d’origine.',

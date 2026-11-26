@@ -71,9 +71,10 @@ test('écran Réglages, Administration : l\'état, les textes et le bloc « Fix�
   const html = p.html('#gbody');
   sansBalise(html);
   assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
-  for (const texte of [RG.enregistrer, RG.contributions.interrupteur, RG.contributions.fermees, RG.conditions.provisoire, RG.conditions.origine, RG.installation.titre, RG.installation.nonDefini, RG.installation.enMemoire, 'Mes conditions']) {
+  for (const texte of [RG.enregistrer, RG.contributions.interrupteur, RG.contributions.fermees, RG.conditions.origine, RG.installation.titre, RG.installation.nonDefini, RG.installation.enMemoire, 'Mes conditions']) {
     assert.ok(html.includes(texte.replace(/'/g, '&#39;')) || html.includes(texte), texte);
   }
+  assert.ok(!/provisoire/i.test(html), 'les conditions ne portent plus de mention « provisoire »');
   assert.match(html, /id="rgOuvertes"[^>]*(?<! checked)>/);
   assert.ok(!/id="rgOuvertes"[^>]* checked/.test(html), 'l\'interrupteur suit le choix enregistré');
   assert.ok(!/readonly/.test(html));
