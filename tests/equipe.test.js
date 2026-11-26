@@ -15,7 +15,7 @@ const ODILE = 'odile@exemple.ca';
 const ORIGINE = 'https://carto.exemple';
 
 // Tess (Administration), Max (Approbation), Léa (Lecture seule, sans résumé), Odile (retirée).
-function banc({ pannes = {}, envoi = { envoye: true }, verrous, admins = [TESS], secret = SECRET, env = ENV, limites } = {}) {
+function banc({ pannes = {}, envoi = { envoye: true }, verrous, admins = [TESS], secret = SECRET, env = ENV, limites, reglages } = {}) {
   const faux = fauxNotion({ pannes });
   inscrire(faux, { id: 'id-notion-tess', nom: 'Tess Berthier', courriel: TESS, role: admins.includes(TESS) ? 'Administration' : 'Approbation' });
   inscrire(faux, { id: 'id-notion-max', nom: 'Maxime Lafrenière', courriel: MAX, role: admins.includes(MAX) ? 'Administration' : 'Approbation' });
@@ -23,7 +23,7 @@ function banc({ pannes = {}, envoi = { envoye: true }, verrous, admins = [TESS],
   inscrire(faux, { id: 'id-notion-odile', nom: 'Odile Charbonneau', courriel: ODILE, role: 'Approbation', actif: false, sansResume: true });
   const envois = []; const journal = [];
   const courriels = { async lienPanneau(m) { envois.push(m); if (envoi === 'panne') throw new Error('Resend en panne'); return envoi; } };
-  const equipe = creerEquipe({ client: faux.client, env, courriels, verrous, limites, secret, journal: (...l) => journal.push(l.join(' ')), attendre: async () => {} });
+  const equipe = creerEquipe({ client: faux.client, env, courriels, verrous, limites, reglages, secret, journal: (...l) => journal.push(l.join(' ')), attendre: async () => {} });
   const ecritures = () => faux.de('pages.create').length + faux.de('pages.update').length;
   const repere = async (courriel) => ((await equipe.lister({ moi: TESS })).find((x) => x.courriel === courriel) || {}).id;
   return { faux, equipe, envois, journal, ecritures, repere, lignes: () => lignes(faux), ligne: (courriel) => lignes(faux).filter((l) => l.courriel === courriel) };
@@ -387,4 +387,29 @@ test('la lecture directe d\'une ligne en panne : le geste est refusé net, rien 
   assert.deepEqual(await b.equipe.changerRole({ personne: versMax, role: 'approbation', par: TESS }), { ok: false, code: 'notion' });
   assert.deepEqual(await b.equipe.retirer({ personne: versMax, par: TESS }), { ok: false, code: 'notion' });
   assert.equal(b.ecritures(), 0);
+});
+
+// ─── Lot 4b : le mode d'essai se règle dans le panneau ───
+test('l\'invitation suit le mode d\'essai en vigueur : le panneau passe devant la variable de Vercel', async () => {
+  const reglages = (lecture) => ({ async lire(cle) { assert.equal(cle, 'modeEssai'); return lecture; } });
+  const inviter = (b) => b.equipe.inviter({ courriel: 'a@b.org', nom: 'A', role: 'approbation', par: TESS, origine: ORIGINE });
+  // Panneau : actif, Vercel : rien.
+  assert.equal((await inviter(banc({ reglages: reglages({ etat: 'present', valeur: true }) }))).essai, true);
+  // Panneau : arrêté, Vercel : actif.
+  const arrete = await inviter(banc({ env: { ...ENV, EMAIL_TEST_MODE: 'true' }, reglages: reglages({ etat: 'present', valeur: false }) }));
+  assert.ok(!Object.hasOwn(arrete, 'essai'));
+  // Rien dans le panneau : Vercel.
+  assert.equal((await inviter(banc({ env: { ...ENV, EMAIL_TEST_MODE: 'true' }, reglages: reglages({ etat: 'absent' }) }))).essai, true);
+  assert.ok(!Object.hasOwn(await inviter(banc({ reglages: reglages({ etat: 'absent' }) })), 'essai'));
+  // Réglages illisibles et Vercel muet : actif par précaution, et l'invitation le dit.
+  assert.equal((await inviter(banc({ reglages: reglages({ etat: 'inconnu' }) }))).essai, true);
+  const casse = await inviter(banc({ reglages: { async lire() { throw new Error('cassé'); } } }));
+  assert.equal(casse.ok, true);
+  assert.equal(casse.essai, true);
+});
+
+test('le lien d\'entrée d\'une invitation porte le nom de la personne, pour le repère {nom} du courriel', async () => {
+  const b = banc();
+  await b.equipe.inviter({ courriel: 'nadia@exemple.org', nom: '  Nadia   Tremblay ', role: 'lecture', par: TESS, origine: ORIGINE });
+  assert.equal(b.envois[0].destinataire, 'Nadia Tremblay');
 });

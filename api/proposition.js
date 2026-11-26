@@ -113,13 +113,14 @@ function creerGestionnaire(donnees) {
       if (!(await d.limites.consommerJeton(charge.jti))) return expire(res);
 
       const titre = `${PREFIXES[genre]} : ${nomFiche}`;
+      const nomProposant = typeof corps.nomProposant === 'string' ? corps.nomProposant.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
       let propositionId;
       try {
         const logoDepot = image ? { id: await d.fichiers.deposer(image), nom: image.nom } : null;
         propositionId = await d.propositions.creerProposition({
           ...(logoDepot ? { logoDepot } : {}),
           genre, ficheId: modification ? charge.ficheId : null, courriel: charge.courriel,
-          nomProposant: typeof corps.nomProposant === 'string' ? corps.nomProposant.replace(/\s+/g, ' ').trim().slice(0, 200) : '',
+          nomProposant,
           lienAvecRessource: LIENS_AVEC_RESSOURCE.includes(corps.lienAvecRessource) ? corps.lienAvecRessource : 'aucun',
           titre, contenu: { propose, applique: null, porteursNouveaux, ...(image ? { logoFichier: image.nom } : {}) },
         });
@@ -135,7 +136,7 @@ function creerGestionnaire(donnees) {
       const suite = async (quoi, faire) => {
         try { return await faire(); } catch (err) { d.journal(`[proposition] ${quoi} impossible :`, err.message); return null; }
       };
-      recu = (await suite('accusé de réception', () => d.courriels.propositionRecue({ a: charge.courriel, titre }))) || recu;
+      recu = (await suite('accusé de réception', () => d.courriels.propositionRecue({ a: charge.courriel, titre, destinataire: nomProposant }))) || recu;
       // Toute proposition passe par le panneau, y compris celle d'un approbateur : rien ne change sur le
       // site sans un geste dans le panneau. Les approbateurs ne sont pas prévenus à chaque proposition :
       // ils reçoivent un résumé une fois par semaine (api/resume.js). Décisions de Tess, 25 novembre 2026.

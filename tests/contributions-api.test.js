@@ -53,7 +53,7 @@ function banc({ env = ENV, approbateurs = [], autorise = true, pannes = {}, fich
     approbation: { async approuver(a) { noter('approuver', a); return { ok: true, ficheId: 'fiche-9', courriel: true }; } },
   };
   const de = (nom) => appels.filter((a) => a.nom === nom).map((a) => a.args);
-  return { lien: lien.creerGestionnaire(deps), proposition: proposition.creerGestionnaire(deps), appels, de };
+  return { lien: lien.creerGestionnaire(deps), proposition: proposition.creerGestionnaire(deps), appels, de, deps };
 }
 async function appeler(gestionnaire, req) { const res = reponse(); await gestionnaire(req, res); return res; }
 const jeton = (sorte, charge) => signer(sorte, charge, { secret });
@@ -186,6 +186,7 @@ test('une nouvelle ressource entre dans la file et les courriels partent', async
     contenu: { propose: { typePrincipal: { apres: 'Logiciel ou application' }, nom: { apres: 'Outil X' }, phrase: { apres: 'Une phrase.' }, lien: { apres: 'https://x.org' } }, applique: null, porteursNouveaux: {} },
   });
   assert.equal(b.de('propositionRecue')[0].a, 'pat@exemple.org');
+  assert.equal(b.de('propositionRecue')[0].destinataire, 'Pat', 'le nom de la personne, pour le repère {nom} du courriel');
   assert.equal(b.de('nouvelleProposition').length, 0, 'aucun courriel aux approbateurs à chaque proposition : ils reçoivent un résumé hebdomadaire');
   assert.equal(b.de('approuver').length, 0);
 });
@@ -354,4 +355,16 @@ test('pas de logo en genre « à remplir par le RSN », et un dépôt en panne r
   assert.equal(res.code, 502);
   assert.equal(panne.de('libererJeton').length, 1);
   assert.equal(panne.de('creerProposition').length, 0);
+});
+
+test("le lien du panneau porte le nom de la personne quand l'équipe peut être lue, et part sans lui sinon", async () => {
+  const b = banc({ approbateurs: ['tess@exemple.ca'] });
+  b.deps.propositions.equipe = async () => [{ nom: 'Tess Berthier', courriel: 'tess@exemple.ca', role: 'administration' }];
+  await appeler(b.lien, requete('POST', { body: { courriel: 'tess@exemple.ca', but: 'panneau' } }));
+  assert.equal(b.de('lienPanneau')[0].destinataire, 'Tess Berthier');
+  const panne = banc({ approbateurs: ['tess@exemple.ca'] });
+  panne.deps.propositions.equipe = async () => { throw new Error('Notion en panne'); };
+  await appeler(panne.lien, requete('POST', { body: { courriel: 'tess@exemple.ca', but: 'panneau' } }));
+  assert.equal(panne.de('lienPanneau').length, 1, 'le lien part quand même');
+  assert.equal(panne.de('lienPanneau')[0].destinataire, '');
 });

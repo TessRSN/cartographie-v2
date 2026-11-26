@@ -97,7 +97,7 @@ test('une nouvelle ressource est créée une fois, « Publiée » et « Actif »
   assert.equal(decision.ficheId, 'fiche-neuve');
   assert.equal(decision.applique.nom, 'Outil X');
   assert.equal(b.de('viderMemoire').length, 1);
-  assert.deepEqual(b.de('courriel.approuvee')[0], { a: 'p@exemple.org', nom: 'Outil X', lienFiche: 'https://site/ressource/outil-x' });
+  assert.deepEqual(b.de('courriel.approuvee')[0], { a: 'p@exemple.org', nom: 'Outil X', lienFiche: 'https://site/ressource/outil-x', destinataire: 'Pat' });
 });
 
 test("l'ordre des écritures : la fiche, puis la décision, puis le courriel", async () => {
@@ -235,7 +235,7 @@ test('un refus exige un commentaire, enregistre la décision et prévient le pro
   const b = banc();
   assert.deepEqual(await b.approbation.refuser({ propositionId: 'prop-1', commentaire: ' Hors du périmètre. ', approbateur: APPROBATEUR }), { ok: true, courriel: true, genre: 'nouvelle', titre: 'Nouvelle : Outil X' });
   assert.deepEqual(b.de('marquerDecision')[0], { id: 'prop-1', statut: 'refusee', approbateur: APPROBATEUR, commentaire: 'Hors du périmètre.' });
-  assert.deepEqual(b.de('courriel.refusee')[0], { a: 'p@exemple.org', titre: 'Nouvelle : Outil X', commentaire: 'Hors du périmètre.' });
+  assert.deepEqual(b.de('courriel.refusee')[0], { a: 'p@exemple.org', titre: 'Nouvelle : Outil X', commentaire: 'Hors du périmètre.', destinataire: 'Pat' });
   assert.equal(b.de('creerFiche').length + b.de('mettreAJourFiche').length + b.de('trouverFiche').length, 0);
 });
 

@@ -430,7 +430,9 @@ test('chaque geste réussi du panneau note une ligne, au nom de la personne en s
   const ecrit = b.journalEcrit();
   assert.deepEqual(ecrit.map((l) => [l.geste, l.par, l.sur]), gestes.map(([, , par, geste, sur]) => [geste, par, sur]));
   // Chaque geste de la base « Journal » a servi au moins une fois : la table des gestes est complète.
-  assert.deepEqual([...new Set(ecrit.map((l) => l.geste))].sort(), [...GESTES].sort());
+  // Les gestes du lot 4b (courriels, mode d'essai) ont leur banc et leurs essais dans admin-lot4b.test.js.
+  const DU_LOT_4B = ['Courriel modifié', 'Courriel rétabli', "Mode d'essai changé"];
+  assert.deepEqual([...new Set(ecrit.map((l) => l.geste))].sort(), GESTES.filter((g) => !DU_LOT_4B.includes(g)).sort());
   // La phrase se lit après le nom de la personne, et ne porte ni courriel de l'équipe ni identifiant.
   for (const l of ecrit) {
     assert.match(l.phrase, /^a /, l.phrase);

@@ -35,9 +35,17 @@
  *   POST changer-role   { personne, role }      → (Administration) ; jamais le sien
  *   POST retirer        { personne }            → coupe l'accès sans rien supprimer (Administration) ; jamais soi-même
  *   POST regler-resume  { personne, actif }     → le résumé hebdomadaire : le sien, ou celui de tous en Administration
+ *   GET  courriels                              → les six courriels (texte en vigueur, texte d'origine, repères), et le mode d'essai en vigueur
+ *   POST enregistrer-courriel { id, objet, texte } → enregistre le texte d'un courriel, après vérification (Administration)
+ *   POST retablir-courriel    { id }            → le texte d'origine revient (Administration)
+ *   POST essai-courriel { id, objet, texte }    → envoie le courriel, rempli de valeurs d'exemple, à la personne connectée
+ *                                                 et à elle seule (Administration) ; objet et texte : un brouillon à essayer
+ *   POST mode-essai     { actif, confirme }     → active ou coupe le mode d'essai des courriels (Administration) ;
+ *                                                 le couper exige « confirme: true »
  * Une fiche est désignée par son adresse publique, ou par un repère opaque si elle est écartée ;
  * un porteur ou une personne, toujours par un repère opaque : jamais par un identifiant Notion.
  * Les courriels de l'équipe ne sortent que par « equipe » ; partout ailleurs, une personne est un nom.
+ * Ni l'adresse d'essai des courriels ni aucune valeur secrète ne sort : seulement si elle est définie.
  * Chaque geste réussi qui change quelque chose est noté dans le journal de l'équipe, comme une fusion
  * interrompue qui a déjà changé des fiches. Le journal ne fait jamais échouer un geste et ne le retarde
  * jamais de plus de trois secondes.
@@ -53,6 +61,8 @@ const { ouvertes, origineSure, memeOrigineStricte, ipDe, corpsDe, dependances } 
 const { repereValide } = require('../lib/ressources');
 const { reperePorteurValide } = require('../lib/porteurs');
 const { reperePersonneValide } = require('../lib/equipe');
+const { lireModeEssai, CLES: CLES_REGLAGES } = require('../lib/reglages');
+const { courrielDe } = require('../public/js/gabarits.js');
 
 const TEMOIN = 'carto_session';
 const DUREE_SESSION_S = 7 * 24 * 3600;
@@ -77,6 +87,10 @@ const ACTIONS = {
   inviter: { methode: 'POST', role: 'administration' }, 'changer-role': { methode: 'POST', role: 'administration' }, retirer: { methode: 'POST', role: 'administration' },
   // Chaque personne règle son propre résumé : le module de l'équipe vérifie que c'est bien le sien.
   'regler-resume': { methode: 'POST', role: 'lecture' },
+  // Les courriels : tout le monde les lit, l'Administration seule les modifie et règle le mode d'essai.
+  courriels: { methode: 'GET', role: 'lecture' },
+  'enregistrer-courriel': { methode: 'POST', role: 'administration' }, 'retablir-courriel': { methode: 'POST', role: 'administration' },
+  'essai-courriel': { methode: 'POST', role: 'administration' }, 'mode-essai': { methode: 'POST', role: 'administration' },
 };
 // Les gestes du lot 3 : ce que le corps doit porter, puis l'appel, toujours au nom de la personne en session.
 const texteCourt = (v, max) => typeof v === 'string' && v.length <= max;
@@ -95,6 +109,20 @@ const GESTES_EQUIPE = {
   retirer: { lisible: (c) => reperePersonneValide(c.personne), faire: (d, c, par) => d.equipe.retirer({ personne: c.personne, par }) },
   'regler-resume': { lisible: (c) => reperePersonneValide(c.personne) && typeof c.actif === 'boolean', faire: (d, c, par) => d.equipe.reglerResume({ personne: c.personne, actif: c.actif, par }) },
 };
+// Les gestes sur les courriels. Le texte est vérifié dans lib/courriels.js ; ici, seulement sa forme
+// et une taille au-delà de laquelle la demande n'est pas lue. L'essai part toujours à la personne
+// en session : rien de ce que dit le corps ne désigne un destinataire.
+const OBJET_BRUT_MAX = 1000;
+const TEXTE_BRUT_MAX = 20000;
+const brouillonLisible = (c) => texteCourt(c.objet, OBJET_BRUT_MAX) && texteCourt(c.texte, TEXTE_BRUT_MAX);
+const GESTES_COURRIEL = {
+  'enregistrer-courriel': { lisible: (c) => texteCourt(c.id, 40) && brouillonLisible(c), faire: (d, c, par) => d.courriels.enregistrer({ id: c.id, objet: c.objet, texte: c.texte, par }) },
+  'retablir-courriel': { lisible: (c) => texteCourt(c.id, 40), faire: (d, c, par) => d.courriels.retablir({ id: c.id, par }) },
+  'essai-courriel': {
+    lisible: (c) => texteCourt(c.id, 40) && ((c.objet === undefined && c.texte === undefined) || brouillonLisible(c)),
+    faire: (d, c, par, origine) => d.courriels.essai({ id: c.id, a: par, ...(c.objet === undefined ? {} : { objet: c.objet, texte: c.texte }), site: origine }),
+  },
+};
 // Les gestes qui portent sur une fiche existante.
 const GESTES_FICHE = ['enregistrer', 'retablir', 'verifier', 'revoir', 'ecarter', 'republier'];
 // Un rôle inconnu a le rang le plus bas : il ne permet que la lecture.
@@ -112,7 +140,7 @@ const MESSAGES_ROLE = {
   approbation: 'Votre rôle ne permet pas ce geste : il demande le rôle Approbation ou Administration.',
   administration: 'Votre rôle ne permet pas ce geste : il est réservé au rôle Administration.',
 };
-const CODES = { role: 403, 'soi-meme': 409, 'derniere-administration': 409, 'deja-inscrite': 409, 'adresse-introuvable': 404, 'a-poursuivre': 409, interrompue: 502, 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
+const CODES = { 'reglages-absents': 409, 'sans-adresse': 409, envoi: 502, limite: 429, confirmation: 400, role: 403, 'soi-meme': 409, 'derniere-administration': 409, 'deja-inscrite': 409, 'adresse-introuvable': 404, 'a-poursuivre': 409, interrompue: 502, 'non-approbateur': 401, introuvable: 404, occupee: 409, 'deja-tranchee': 409, doublon: 409, ressemble: 409, conflit: 409, 'sans-historique': 409, 'fiche-introuvable': 410, invalide: 400, notion: 502 };
 const CLES = new Set(CHAMPS.map((c) => c.cle));
 const idValide = (id) => typeof id === 'string' && /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i.test(id);
 const estObjet = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -184,6 +212,12 @@ const JOURNAL = {
   'changer-role': (r) => (r.inchange ? null : ligne('Rôle changé', r.nom, `a changé le rôle de ${r.nom} : ${ROLES[r.role]}`)),
   retirer: (r) => ligne('Personne retirée', r.nom, `a retiré l'accès de ${r.nom}`),
   'regler-resume': (r) => (r.inchange ? null : ligne('Résumé réglé', r.nom, `${r.resume ? 'a activé' : 'a arrêté'} le résumé hebdomadaire pour ${r.nom}`)),
+  // Le texte d'un courriel n'est jamais recopié au journal : seulement le nom du courriel.
+  'enregistrer-courriel': (r) => (r.inchange ? null : r.retabli ? JOURNAL['retablir-courriel'](r) : ligne('Courriel modifié', r.nom, `a modifié le courriel « ${r.nom} »`)),
+  'retablir-courriel': (r) => (r.inchange ? null : ligne('Courriel rétabli', r.nom, `a rétabli le texte d'origine du courriel « ${r.nom} »`)),
+  'mode-essai': (r) => (r.inchange ? null : ligne("Mode d'essai changé", 'Courriels', r.actif
+    ? "a activé le mode d'essai des courriels : ils vont tous à l'adresse d'essai"
+    : "a coupé le mode d'essai des courriels : ils partent aux vraies personnes")),
 };
 // Un geste de masse arrêté en route (échec, ou « à poursuivre ») qui a déjà changé des fiches : il
 // est noté quand même, avec le compte des fiches faites. Les noms des porteurs sont relus ici, la
@@ -385,7 +419,8 @@ function creerGestionnaire(donnees) {
           envois: {
             resume: { jour: JOUR_RESUME, destinataires: equipe.filter((x) => x.resume).length },
             contributions: ouvertes(env),
-            essaiCourriels: env.EMAIL_TEST_MODE === 'true',
+            // Le mode d'essai en vigueur : la valeur du panneau, sinon la variable de Vercel.
+            essaiCourriels: (await lireModeEssai(d.reglages, env)).actif,
           },
         });
       }
@@ -456,6 +491,51 @@ function creerGestionnaire(donnees) {
         if (retour.code === 'role') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
         const { ok, code, ...detail } = retour;
         return res.status(CODES[code] || 502).json({ code, ...detail });
+      }
+
+      // ─── Courriels et mode d'essai ───
+      const sansReglages = () => res.status(409).json({ code: 'reglages-absents' });
+      // Un courriel tel que l'écran le montre : « modifié par » est un nom, jamais un courriel.
+      const vueCourriel = (c) => ({ ...c, quand: c.quand.replace('{jour}', JOUR_RESUME), modifiePar: nomDans(annuaire, c.modifiePar) });
+      if (action === 'courriels') {
+        // L'écran montre ce qui est enregistré maintenant, pas ce que l'instance a gardé en mémoire.
+        if (d.reglages) d.reglages.vider();
+        const [liste, etat] = await Promise.all([d.courriels.lister(), d.courriels.etat()]);
+        const regle = etat.essai.source === 'panneau' && d.reglages ? await d.reglages.lire(CLES_REGLAGES.modeEssai) : null;
+        return res.status(200).json({
+          reglages: { actifs: liste.base, lus: liste.lus },
+          // L'adresse d'essai ne sort pas : seulement si elle est définie.
+          essai: { actif: etat.essai.actif, source: etat.essai.source, adresseDefinie: etat.adresseEssai, modifieLe: (regle && regle.modifieLe) || null, modifiePar: regle ? nomDans(annuaire, regle.modifiePar) : null },
+          service: etat.service,
+          courriels: liste.liste.map(vueCourriel),
+        });
+      }
+      if (action === 'mode-essai') {
+        if (typeof corps.actif !== 'boolean') return illisible();
+        // Couper le mode d'essai envoie les courriels aux vraies personnes : la page le fait confirmer, le serveur l'exige.
+        if (!corps.actif && corps.confirme !== true) return res.status(400).json({ code: 'confirmation' });
+        if (!d.reglages || !d.reglages.active()) return sansReglages();
+        // Toujours écrit : la mémoire de l'instance peut retarder sur la base, et « déjà réglé » serait alors faux.
+        if (!(await d.reglages.ecrire(CLES_REGLAGES.modeEssai, corps.actif, approbateur)).ok) return sansReglages();
+        const retour = { ok: true, actif: corps.actif, source: 'panneau' };
+        await consigner(d, action, approbateur, retour, corps);
+        return res.status(200).json(retour);
+      }
+      if (Object.hasOwn(GESTES_COURRIEL, action)) {
+        const geste = GESTES_COURRIEL[action];
+        if (!geste.lisible(corps)) return illisible();
+        if (!courrielDe(corps.id)) return res.status(404).json({ code: 'introuvable' });
+        if (action === 'essai-courriel' && !(await d.limites.autoriserEssai({ courriel: approbateur }))) return res.status(429).json({ code: 'limite' });
+        const retour = await geste.faire(d, corps, approbateur, origine);
+        if (!retour.ok) {
+          const { ok, code, ...detail } = retour;
+          return res.status(CODES[code] || 502).json({ code, ...detail });
+        }
+        if (action === 'essai-courriel') return res.status(200).json(retour);
+        await consigner(d, action, approbateur, retour, corps);
+        // Le courriel tel qu'il est maintenant, pour que l'écran n'ait pas à relire la base.
+        const vue = (await d.courriels.lister()).liste.find((c) => c.id === corps.id);
+        return res.status(200).json({ ...reponseDe(retour), courriel: vueCourriel(vue) });
       }
 
       // ─── Porteurs et qualité des données ───

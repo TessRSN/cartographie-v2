@@ -41,7 +41,7 @@ function creerGestionnaire(donnees) {
         const propositions = personne.role === 'administration' ? toutes : duPublic;
         if (!propositions.length) continue;
         try {
-          const retour = await d.courriels.resumeHebdomadaire({ a: personne.courriel, propositions, lienPanneau });
+          const retour = await d.courriels.resumeHebdomadaire({ a: personne.courriel, propositions, lienPanneau, destinataire: personne.nom || '' });
           if (retour && retour.envoye) envoyes += 1;
         } catch (err) {
           d.journal('[résumé] envoi impossible :', err.message);

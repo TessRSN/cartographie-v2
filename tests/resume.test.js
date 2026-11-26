@@ -115,3 +115,9 @@ test('s\'il n\'y a que des modifications de l\'équipe, seules les personnes en 
   assert.deepEqual((await appeler(c.gestionnaire, requete(autorise))).corps, { ok: true, enAttente: 1, envoyes: 0 });
   assert.equal(c.envois.length, 0);
 });
+
+test('chaque résumé porte le nom de la personne qui le reçoit, pour le repère {nom} du courriel', async () => {
+  const b = banc({ equipe: [{ nom: 'Tess Berthier', courriel: 'a@exemple.org', role: 'administration', resume: true }, { nom: '', courriel: 'b@exemple.org', role: 'approbation', resume: true }] });
+  await appeler(b.gestionnaire, requete(autorise));
+  assert.deepEqual(b.envois.map((m) => m.destinataire), ['Tess Berthier', '']);
+});
