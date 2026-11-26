@@ -98,6 +98,7 @@ Des pages HTML sans cadriciel ni étape de compilation, et des fonctions héberg
 | `public/js/fiche.js` | le rendu d'une fiche, commun au navigateur et au serveur |
 | `public/js/texte.js` | les textes de l'interface, l'échappement, les filtres |
 | `public/js/mots-cles.js`, `public/js/connexions.js` | le rapprochement des ressources par mots-clés (repris du bottin) |
+| `public/js/libelles-sujets.js` | les libellés français et anglais des sujets regroupés (graphe par sujets, sujets communs, portrait, suggestions) |
 | `lib/notion.js` | la lecture des bases Notion ; seul fichier qui connaît les noms de colonnes |
 | `lib/fiches.js` | le passage des lignes Notion aux fiches publiques |
 | `lib/page-publique.js` | les pages pour les moteurs de recherche |

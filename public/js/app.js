@@ -87,7 +87,7 @@ function construireIndex() {
     includeScore: true, threshold: 0.25, ignoreLocation: true, minMatchCharLength: 2,
     keys: [
       { name: 'nom', weight: 3 }, { name: 'autresNoms', weight: 2 }, { name: 'motsCles', weight: 2 }, { name: 'normes', weight: 2 },
-      { name: 'porteurs', weight: 1.5 }, { name: 'phrase', weight: 1 }, { name: 'canon', weight: 1 }, { name: 'description', weight: 0.5 },
+      { name: 'porteurs', weight: 1.5 }, { name: 'phrase', weight: 1 }, { name: 'description', weight: 0.5 },
     ],
   });
 }
@@ -398,7 +398,7 @@ function cacherSuggestions() {
 
 function afficherSuggestions() {
   const boite = $('listeSuggestions');
-  propositions = etat.pret ? suggestions(etat.ressources, $('champRecherche').value) : [];
+  propositions = etat.pret ? suggestions(etat.ressources, $('champRecherche').value, langueDuSite()) : [];
   propositionActive = -1;
   if (!propositions.length) { boite.textContent = ''; cacherSuggestions(); return; }
   const titres = { sujet: TEXTES.suggestions.sujets, porteur: TEXTES.suggestions.porteurs, ressource: TEXTES.suggestions.ressources };
@@ -488,7 +488,7 @@ function majSelecteurVue() {
 // Connexions calculées une fois avec les réglages par défaut (fiche, « Ressources proches »).
 function connexions() {
   if (!connexionsGardees || connexionsGardees.source !== etat.ressources) {
-    connexionsGardees = { source: etat.ressources, resultat: calculerConnexions(etat.ressources) };
+    connexionsGardees = { source: etat.ressources, resultat: calculerConnexions(etat.ressources, undefined, langueDuSite()) };
   }
   return connexionsGardees.resultat;
 }
@@ -517,8 +517,9 @@ function blocProches(r) {
   const bloc = document.createElement('section'); bloc.className = 'proches';
   const titre = document.createElement('h3'); titre.textContent = T.proches;
   const liste = document.createElement('ul');
-  // Normes de la fiche, retrouvées par leur forme en minuscules (celle des sujets communs).
-  const normesDe = new Map((r.normes || []).map((n) => [String(n).toLowerCase(), n]));
+  // Normes de la fiche, retrouvées par la clé du sujet commun (la même dans les deux langues).
+  const normesDe = new Map((r.normes || []).map((n) => [cleMotCle(n), n]));
+  const enAnglais = langueDuSite() === 'en';
   for (const { lien, autre } of voisines) {
     const li = document.createElement('li'); li.className = 'proche';
     const ouvrir = document.createElement('button');
@@ -533,14 +534,17 @@ function blocProches(r) {
     const pourLecteur = document.createElement('span'); pourLecteur.className = 'visually-hidden'; pourLecteur.textContent = ` (${force.nom})`;
     detail.append(porteur, mesure, pourLecteur);
     ouvrir.append(nom, detail);
-    // Sujets communs affichés d'emblée ; une norme ou un format commun est en violet, écrit comme dans la fiche.
+    // Sujets communs affichés d'emblée ; une norme ou un format commun est en violet, écrit comme dans la fiche
+    // (en anglais, sous son nom anglais quand la table des libellés en donne un).
     const sujets = document.createElement('div'); sujets.className = 'card-chips-row';
-    for (const mot of lien.motsCommuns) {
+    lien.motsCommuns.forEach((mot, i) => {
       const p = document.createElement('span');
-      const norme = normesDe.get(mot);
-      p.className = norme ? 'axe-chip norme' : 'axe-chip'; p.textContent = norme || mot;
+      const cle = lien.clesCommunes[i];
+      const norme = normesDe.get(cle);
+      p.className = norme ? 'axe-chip norme' : 'axe-chip';
+      p.textContent = enAnglais && LIBELLES_SUJETS[cle] ? mot : (norme || mot);
       sujets.appendChild(p);
-    }
+    });
     li.append(ouvrir, sujets);
     liste.appendChild(li);
   }
@@ -872,7 +876,7 @@ function demarrer() {
       $('modifierFiche').hidden = !etat.contributions;
       $('fenetreFiche').classList.toggle('avec-modification', etat.contributions);
       construireIndex();
-      chiffres = statistiquesBandeau(etat.ressources, 6);
+      chiffres = statistiquesBandeau(etat.ressources, 6, langueDuSite());
       etat.pret = true;
       remplirFiltres();
       const q = new URLSearchParams(location.search).get('q');

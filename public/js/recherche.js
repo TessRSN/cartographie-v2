@@ -9,6 +9,7 @@
 const serveur = typeof module !== 'undefined' && module.exports;
 const mots = serveur ? require('./mots-cles.js') : racine;
 const textes = serveur ? require('./texte.js') : racine;
+const libelles = serveur ? require('./libelles-sujets.js') : racine;
 
 // Sigles courants : un sigle cherché trouve aussi les fiches qui écrivent l'expression au long.
 const SIGLES = {
@@ -33,10 +34,16 @@ function documentDeRecherche(r) {
   const normes = (r.normes || []).concat(r.outils || []).join(' ');
   const tout = [r.nom, r.autresNoms, motsCles, normes, porteurs, r.phrase, r.description].filter(Boolean).join(' ');
   const canoniques = mots.motsCanoniques(tout);
+  // Clés des sujets de la fiche (mots-clés et normes) : un sujet cherché en entier trouve la
+  // fiche quelle que soit la langue dans laquelle elle l'écrit.
+  const clesSujets = new Set((r.motsCles || []).concat(r.normes || []).map((s) => mots.cleMotCle(s)).filter(Boolean));
   return {
     r, nom: r.nom, autresNoms: r.autresNoms, motsCles, normes, porteurs, phrase: r.phrase, description: r.description,
     canon: canoniques.join(' '), plie: mots.plier(tout),
-    motsEntiers: new Set(decouper(tout)), motsCanoniques: new Set(canoniques),
+    motsEntiers: new Set(decouper(tout)), motsCanoniques: new Set(canoniques), clesSujets,
+    // Mots comparés à une faute près : ceux du texte canonisé et ceux des clés de ses sujets
+    // (« neuroimaging » pour « neuro-imagerie »), d'au moins quatre lettres, chacun une fois.
+    motsApproches: [...new Set(canoniques.concat([...clesSujets].flatMap((cle) => cle.split('+'))))].filter((m) => m.length >= LONGUEUR_FAUTE - 1),
   };
 }
 
@@ -57,9 +64,89 @@ function trouveMotCourt(doc, mot) {
   return (SIGLES[mot] || []).some((expression) => doc.plie.includes(expression));
 }
 
+// Tolérance aux fautes de frappe sur le texte canonisé, pour qu'un mot anglais mal tapé
+// (« oncolgy ») retrouve les fiches françaises comme la recherche floue le fait pour un mot
+// français. À partir de cinq lettres : une faute de cinq à sept lettres, deux au-delà.
+const LONGUEUR_FAUTE = 5;
+const LONGUEUR_DEUX_FAUTES = 8;
+function fautesPermises(mot) {
+  if (mot.length < LONGUEUR_FAUTE) return 0;
+  return mot.length < LONGUEUR_DEUX_FAUTES ? 1 : 2;
+}
+
+// Distance d'édition entre deux mots (insertion, suppression, substitution, inversion de deux
+// lettres voisines), ou maximum + 1 dès qu'elle le dépasse.
+function distance(a, b, maximum) {
+  if (Math.abs(a.length - b.length) > maximum) return maximum + 1;
+  let avant = null;
+  let ligne = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const suivante = [i];
+    let plusPetit = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cout = a[i - 1] === b[j - 1] ? 0 : 1;
+      let d = Math.min(ligne[j] + 1, suivante[j - 1] + 1, ligne[j - 1] + cout);
+      if (avant && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d = Math.min(d, avant[j - 2] + 1);
+      suivante.push(d);
+      if (d < plusPetit) plusPetit = d;
+    }
+    if (plusPetit > maximum) return maximum + 1;
+    avant = ligne;
+    ligne = suivante;
+  }
+  return ligne[b.length];
+}
+
+// Mots connus d'un catalogue : tous les mots de ses fiches, tels qu'écrits et canonisés.
+// Calculés une fois par liste de documents.
+const motsConnusPar = new WeakMap();
+function motsConnus(liste) {
+  if (!motsConnusPar.has(liste)) {
+    const connus = new Set();
+    for (const d of liste) {
+      for (const m of d.motsEntiers) connus.add(m);
+      for (const m of d.motsCanoniques) connus.add(m);
+    }
+    motsConnusPar.set(liste, connus);
+  }
+  return motsConnusPar.get(liste);
+}
+
+// Un mot bien écrit n'est pas une faute de frappe : s'il est dans le catalogue ou dans le
+// dictionnaire, il n'est cherché que tel quel (« cadre » n'est pas « care » mal tapé).
+function peutEtreUneFaute(liste, mot) {
+  return fautesPermises(mot) > 0 && !(mot in mots.DICTIONNAIRE_FR_EN) && !motsConnus(liste).has(mot);
+}
+
+// Le mot tapé est-il à une faute près d'un mot entier de la fiche ? Même première lettre exigée ;
+// jamais en sous-chaîne (« souche » ne trouve pas « system »).
+function aUneFautePres(doc, mot) {
+  const permises = fautesPermises(mot);
+  if (!permises) return false;
+  for (const candidat of doc.motsApproches || []) {
+    if (candidat[0] === mot[0] && distance(mot, candidat, permises) <= permises) return true;
+  }
+  return false;
+}
+
+// Un mot tapé est-il le début d'un mot canonique de la fiche ? « oncol » trouve « oncology »,
+// donc « oncologie » ; « rare » ne trouve pas « infrared ».
+function debuteUnMotCanonique(doc, mot) {
+  for (const canonique of doc.motsCanoniques) if (canonique.startsWith(mot)) return true;
+  return false;
+}
+
 // Fiches qui contiennent tous les mots de la requête, classées par pertinence.
 // rechercheFloue(forme) renvoie [{ item: document, score }] (Fuse) ; sans elle,
-// un mot long est cherché comme sous-chaîne.
+// un mot long est cherché comme sous-chaîne du texte.
+// Seul le mot tapé est cherché de façon souple. Sa traduction par le dictionnaire ne compte
+// qu'en mot entier : « souche » donne « stem », qui ne doit pas trouver « system ».
+// Une requête qui est un sujet entier (« machine learning », « apprentissage automatique »)
+// trouve aussi les fiches qui portent ce sujet, dans une langue ou dans l'autre.
+// Ordre : les fiches dont le nom contient la requête, puis celles qui portent le sujet,
+// puis les autres ; dans chaque groupe, l'ordre de la recherche par mots.
+const SCORE_MOT_CANONIQUE = 0.3;
+const SCORE_FAUTE = 0.8;   // après toute correspondance exacte ou floue du mot tapé
 function chercher(documents, requete, rechercheFloue) {
   const liste = documents || [];
   const demandes = motsDeRequete(requete);
@@ -67,21 +154,18 @@ function chercher(documents, requete, rechercheFloue) {
   let scores = null;
   for (const mot of demandes) {
     const trouves = new Map();
+    const noter = (r, score) => { if (!trouves.has(r) || score < trouves.get(r)) trouves.set(r, score); };
     if (mot.length < LONGUEUR_FLOUE) {
       for (const d of liste) if (trouveMotCourt(d, mot)) trouves.set(d.r, 0.2);
     } else {
-      const formes = [mot];
+      if (rechercheFloue) for (const res of rechercheFloue(mot) || []) noter(res.item.r, res.score);
+      else for (const d of liste) if (d.plie.includes(mot)) noter(d.r, 0.5);
       const canonique = mots.canoniser(mot);
-      if (canonique && canonique !== mot) formes.push(canonique);
-      for (const forme of formes) {
-        if (rechercheFloue) {
-          for (const res of rechercheFloue(forme) || []) {
-            const precedent = trouves.get(res.item.r);
-            if (precedent === undefined || res.score < precedent) trouves.set(res.item.r, res.score);
-          }
-        } else {
-          for (const d of liste) if ((d.plie.includes(forme) || d.canon.includes(forme)) && !trouves.has(d.r)) trouves.set(d.r, 0.5);
-        }
+      const fautePossible = peutEtreUneFaute(liste, mot);
+      for (const d of liste) {
+        if (debuteUnMotCanonique(d, mot)) noter(d.r, rechercheFloue ? SCORE_MOT_CANONIQUE : 0.5);
+        else if (canonique && canonique !== mot && d.motsCanoniques.has(canonique)) noter(d.r, rechercheFloue ? SCORE_MOT_CANONIQUE : 0.5);
+        else if (fautePossible && !trouves.has(d.r) && aUneFautePres(d, mot)) noter(d.r, SCORE_FAUTE);
       }
     }
     if (scores === null) scores = trouves;
@@ -92,24 +176,44 @@ function chercher(documents, requete, rechercheFloue) {
     }
     if (scores.size === 0) break;
   }
-  return [...scores.entries()].sort((a, b) => a[1] - b[1]).map(([r]) => r);
+  const parMots = [...scores.entries()].sort((a, b) => a[1] - b[1]).map(([r]) => r);
+  const cle = mots.cleMotCle(requete);
+  const duSujet = cle ? liste.filter((d) => d.clesSujets && d.clesSujets.has(cle)).map((d) => d.r) : [];
+  if (duSujet.length === 0) return parMots;
+  const demande = decouper(requete).join(' ');
+  const parNom = new Set(liste.filter((d) => decouper([d.nom, d.autresNoms].filter(Boolean).join(' ')).join(' ').includes(demande)).map((d) => d.r));
+  const porteSujet = new Set(duSujet);
+  const trouvees = new Set(parMots);
+  const rang = (r) => (parNom.has(r) ? 0 : porteSujet.has(r) ? 1 : 2);
+  // Les fiches du sujet que la recherche par mots n'a pas vues (écrites dans l'autre langue) viennent à la suite des autres.
+  const toutes = parMots.concat(duSujet.filter((r) => !trouvees.has(r)));
+  return [0, 1, 2].flatMap((groupe) => toutes.filter((r) => rang(r) === groupe));
 }
 
 // Sujets et porteurs du catalogue, avec le nombre de fiches, du plus fréquent au moins fréquent.
-// Deux écritures d'un même sujet (majuscules, accents) sont comptées ensemble.
-function denombrer(ressources) {
+// Deux écritures d'un même sujet (majuscules, accents, français et anglais) sont comptées
+// ensemble, par leur clé commune. Le libellé d'un sujet suit la langue du site ('fr' par
+// défaut, 'en'). Seuls les mots-clés font un sujet ; « nombre » compte les fiches qui le
+// portent en mot-clé, « avecNormes » celles qui le portent en mot-clé ou en norme (ce que
+// ramène un clic). « autresFormes » garde ses autres écritures pliées, pour les suggestions.
+function denombrer(ressources, langue) {
   const sujets = new Map();
   const porteurs = new Map();
+  const parNorme = new Map();
   for (const r of ressources || []) {
     const vus = new Set();
     for (const motCle of r.motsCles || []) {
       const libelle = String(motCle || '').trim();
-      const cle = mots.plier(libelle);
+      const cle = mots.cleMotCle(libelle) || mots.plier(libelle);
       if (!cle || vus.has(cle)) continue;
       vus.add(cle);
-      const s = sujets.get(cle) || { sujet: libelle, plie: cle, nombre: 0 };
+      const s = sujets.get(cle) || { cle, ecritures: new Map(), nombre: 0 };
       s.nombre++;
+      s.ecritures.set(libelle, (s.ecritures.get(libelle) || 0) + 1);
       sujets.set(cle, s);
+    }
+    for (const cle of new Set((r.normes || []).map((n) => mots.cleMotCle(n)).filter(Boolean))) {
+      if (!vus.has(cle)) parNorme.set(cle, (parNorme.get(cle) || 0) + 1);
     }
     for (const nom of new Set((r.porteurs || []).map((p) => p.nom).filter(Boolean))) {
       const p = porteurs.get(nom) || { nom, plie: mots.plier(nom), nombre: 0 };
@@ -118,14 +222,22 @@ function denombrer(ressources) {
     }
   }
   const ordre = (a, b) => b.nombre - a.nombre || a.plie.localeCompare(b.plie);
-  return { sujets: [...sujets.values()].sort(ordre), porteurs: [...porteurs.values()].sort(ordre) };
+  const regroupes = [...sujets.values()].map(({ cle, ecritures, nombre }) => {
+    // À égalité entre deux écritures, la première rencontrée l'emporte.
+    const sujet = libelles.libelleSujet(cle, langue, [...ecritures.entries()]);
+    const plie = mots.plier(sujet);
+    const connu = libelles.LIBELLES_SUJETS[cle] || {};
+    const autresFormes = [...new Set([...ecritures.keys(), connu.fr, connu.en].filter(Boolean).map(mots.plier))].filter((forme) => forme !== plie);
+    return { sujet, plie, nombre, avecNormes: nombre + (parNorme.get(cle) || 0), cle, autresFormes };
+  });
+  return { sujets: regroupes.sort(ordre), porteurs: [...porteurs.values()].sort(ordre) };
 }
 
 // Chiffres du bandeau « Portrait de la cartographie ».
-function statistiquesBandeau(ressources, combien) {
+function statistiquesBandeau(ressources, combien, langue) {
   const liste = ressources || [];
   const n = combien || 6;
-  const { sujets, porteurs } = denombrer(liste);
+  const { sujets, porteurs } = denombrer(liste, langue);
   // Normes et formats : une fiche compte une fois par norme, même si la norme y est écrite deux fois.
   const parNorme = new Map();
   for (const r of liste) for (const norme of new Set((r.normes || []).filter(Boolean))) parNorme.set(norme, (parNorme.get(norme) || 0) + 1);
@@ -151,14 +263,31 @@ function statistiquesBandeau(ressources, combien) {
 
 // Suggestions pendant la saisie : des sujets, des porteurs, puis des ressources
 // dont un mot du nom commence par ce qui est tapé.
-function suggestions(ressources, requete) {
+// Un sujet s'affiche dans la langue du site. Il est proposé, dans cet ordre :
+// 1. si un mot de son libellé commence par la saisie ;
+// 2. si son libellé contient la saisie (à partir de quatre lettres) ;
+// 3. si un mot d'une autre de ses écritures (l'autre langue) commence par la saisie.
+// Sa valeur, une fois cherchée, trouve les fiches des deux langues ; son nombre est celui
+// des fiches que ce clic ramène par le sujet (mot-clé ou norme).
+function suggestions(ressources, requete, langue) {
   const q = mots.plier(requete).trim();
   if (q.length < 2 || !(ressources || []).length) return [];
-  const { sujets, porteurs } = denombrer(ressources);
+  const { sujets, porteurs } = denombrer(ressources, langue);
   const sortie = [];
+  const debuteUnMot = (plie) => plie.split(/[^a-z0-9]+/).some((m) => m.startsWith(q)) || plie.startsWith(q);
   // Deux ou trois lettres : seulement en début de mot, pour ne pas proposer « sociaux » à qui tape « ia ».
-  const contient = (plie) => (q.length < LONGUEUR_FLOUE ? plie.split(/[^a-z0-9]+/).some((m) => m.startsWith(q)) || plie.startsWith(q) : plie.includes(q));
-  for (const s of sujets.filter((x) => contient(x.plie)).slice(0, 3)) sortie.push({ genre: 'sujet', valeur: s.sujet, libelle: s.sujet, nombre: s.nombre });
+  const contient = (plie) => (q.length < LONGUEUR_FLOUE ? debuteUnMot(plie) : plie.includes(q));
+  // Ce qui est tapé désigne un sujet entier (« ia », « ai », « irm ») : ce sujet passe en premier.
+  const cleTapee = mots.cleMotCle(requete);
+  const rangSujet = (s) => {
+    if (cleTapee && s.cle === cleTapee) return 0.5;
+    if (debuteUnMot(s.plie)) return 1;
+    if (contient(s.plie)) return 2;
+    return s.autresFormes.some(debuteUnMot) ? 3 : 0;
+  };
+  const proposes = sujets.map((s) => ({ s, rang: rangSujet(s) })).filter((x) => x.rang > 0)
+    .sort((x, y) => x.rang - y.rang || y.s.avecNormes - x.s.avecNormes || x.s.plie.localeCompare(y.s.plie));
+  for (const { s } of proposes.slice(0, 3)) sortie.push({ genre: 'sujet', valeur: s.sujet, libelle: s.sujet, nombre: s.avecNormes });
   for (const p of porteurs.filter((x) => contient(x.plie)).slice(0, 4)) sortie.push({ genre: 'porteur', valeur: p.nom, libelle: p.nom, nombre: p.nombre });
   const demandes = decouper(requete);
   const proposees = (ressources || []).filter((r) => {
@@ -171,7 +300,7 @@ function suggestions(ressources, requete) {
   return sortie;
 }
 
-const api = { SIGLES, LONGUEUR_FLOUE, documentDeRecherche, motsDeRequete, trouveMotCourt, chercher, denombrer, statistiquesBandeau, suggestions };
+const api = { SIGLES, LONGUEUR_FLOUE, LONGUEUR_FAUTE, distance, documentDeRecherche, motsDeRequete, trouveMotCourt, chercher, denombrer, statistiquesBandeau, suggestions };
 if (serveur) module.exports = api;
 else Object.assign(racine, api);
 })(typeof window !== 'undefined' ? window : globalThis);
