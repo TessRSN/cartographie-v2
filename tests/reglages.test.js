@@ -48,12 +48,12 @@ test("mode d'essai, table de vérité : le panneau d'abord, puis Vercel, et acti
     [{ etat: 'inconnu' }, '', true, 'precaution'],
     // Une variable qui ne dit ni vrai ni faux ne lève pas le mode d'essai quand rien n'est connu.
     [{ etat: 'inconnu' }, 'oui', true, 'precaution'],
-    // Une valeur enregistrée mais illisible, ou qui n'est ni vrai ni faux, vaut « rien de connu ».
-    [{ etat: 'illisible' }, 'false', false, 'vercel'],
+    // Une valeur enregistrée mais illisible, ou qui n'est ni vrai ni faux : actif, quoi que dise Vercel.
+    [{ etat: 'illisible' }, 'false', true, 'precaution'],
     [{ etat: 'illisible' }, undefined, true, 'precaution'],
     [{ etat: 'present', valeur: 'non' }, undefined, true, 'precaution'],
-    [{ etat: 'present', valeur: null }, 'true', true, 'vercel'],
-    [{ etat: 'present', valeur: 0 }, 'false', false, 'vercel'],
+    [{ etat: 'present', valeur: null }, 'true', true, 'precaution'],
+    [{ etat: 'present', valeur: 0 }, 'false', true, 'precaution'],
     [undefined, undefined, true, 'precaution'],
     [null, 'false', false, 'vercel'],
   ];
@@ -83,23 +83,23 @@ test("mode d'essai, de bout en bout : panneau présent ou non, Vercel vrai, faux
   // Base illisible, aucune valeur connue : Vercel, et actif si Vercel ne dit rien.
   const panne = { 'databases.query': true };
   assert.deepEqual(await banc({ env: vercel.vrai, pannes: panne }).reglages.modeEssai(), { actif: true, source: 'vercel' });
-  assert.deepEqual(await banc({ env: vercel.faux, pannes: panne }).reglages.modeEssai(), { actif: false, source: 'vercel' });
+  assert.deepEqual(await banc({ env: vercel.faux, pannes: panne }).reglages.modeEssai(), { actif: true, source: 'precaution' }, 'la base existe : « arrêté » ne vaut que relu');
   assert.deepEqual(await banc({ env: vercel.absent, pannes: panne }).reglages.modeEssai(), { actif: true, source: 'precaution' });
-  // Base illisible, mais une valeur connue de l'instance : elle tient, dans les deux sens.
+  // Base illisible, mais une valeur connue de l'instance : « actif » tient ; « arrêté » ne tient pas, il ne vaut que relu.
   for (const valeur of [true, false]) {
     let enPanne = false;
     const b = banc({ env: valeur ? vercel.faux : vercel.vrai, pannes: { 'databases.query': () => enPanne } });
     poser(b, CLES.modeEssai, JSON.stringify(valeur));
     assert.deepEqual(await b.reglages.modeEssai(), { actif: valeur, source: 'panneau' });
     enPanne = true; b.avancer(5 * 60000);
-    assert.deepEqual(await b.reglages.modeEssai(), { actif: valeur, source: 'panneau' }, 'la dernière valeur connue');
+    assert.deepEqual(await b.reglages.modeEssai(), valeur ? { actif: true, source: 'panneau' } : { actif: true, source: 'precaution' });
   }
-  // Base lue sans réglage du mode d'essai, puis panne : « rien dans le panneau » reste connu, Vercel décide.
+  // Base lue sans réglage du mode d'essai, puis panne : le panneau a pu l'activer depuis, actif par précaution.
   let enPanne = false;
   const b = banc({ env: vercel.absent, pannes: { 'databases.query': () => enPanne } });
   assert.deepEqual(await b.reglages.modeEssai(), { actif: false, source: 'vercel' });
   enPanne = true; b.avancer(5 * 60000);
-  assert.deepEqual(await b.reglages.modeEssai(), { actif: false, source: 'vercel' });
+  assert.deepEqual(await b.reglages.modeEssai(), { actif: true, source: 'precaution' });
 });
 
 // ─── Le socle ───
@@ -330,4 +330,76 @@ test('les clés que la suite du panneau utilisera existent, et chaque courriel a
   assert.deepEqual(CLES, { modeEssai: 'modeEssai', contributionsOuvertes: 'contributionsOuvertes', messageFerme: 'messageFerme', conditions: 'conditions' });
   assert.equal(cleCourriel('refusee'), 'courriel.refusee');
   assert.deepEqual(COLONNES, { cle: 'Clé', modifieLe: 'Modifié le', modifiePar: 'Modifié par' });
+});
+
+// ─── Le mode d'essai à plusieurs instances : « coupé » ne vaut que lu à l'instant ───
+function deuxInstances({ env = { ...ENV, EMAIL_TEST_MODE: 'true' }, pannes = {} } = {}) {
+  const faux = fauxNotion({ pannes });
+  const horloge = { t: T0 };
+  const creer = () => creerReglages(faux.client, env, { maintenant: () => horloge.t, journal: () => {} });
+  return { faux, a: creer(), b: creer(), avancer: (ms) => { horloge.t += ms; } };
+}
+
+test("mode d'essai réactivé par une autre instance : il vaut tout de suite, sans attendre la mémoire d'une minute", async () => {
+  const d = deuxInstances();
+  await d.b.ecrire(CLES.modeEssai, false, 'tess@exemple.ca');
+  assert.deepEqual(await d.a.modeEssai(), { actif: false, source: 'panneau' });
+  await d.b.ecrire(CLES.modeEssai, true, 'tess@exemple.ca');
+  d.avancer(1000);
+  assert.deepEqual(await d.a.modeEssai(), { actif: true, source: 'panneau' });
+});
+
+test("mode d'essai réactivé ailleurs juste après l'avoir coupé ici : ce que l'instance vient d'écrire ne passe pas devant la base", async () => {
+  const d = deuxInstances();
+  await d.a.ecrire(CLES.modeEssai, false, 'tess@exemple.ca');
+  d.avancer(5000);
+  await d.b.ecrire(CLES.modeEssai, true, 'tess@exemple.ca');
+  d.avancer(1000);
+  assert.deepEqual(await d.a.modeEssai(), { actif: true, source: 'panneau' });
+});
+
+test("mode d'essai lu « coupé », puis Notion en panne : le mode d'essai est actif, aussi longtemps que dure la panne", async () => {
+  let enPanne = false;
+  const d = deuxInstances({ pannes: { 'databases.query': () => enPanne } });
+  await d.b.ecrire(CLES.modeEssai, false, 'tess@exemple.ca');
+  assert.equal((await d.a.modeEssai()).actif, false);
+  enPanne = true;
+  for (const minutes of [2, 30, 240]) {
+    d.avancer(minutes * 60000);
+    assert.deepEqual(await d.a.modeEssai(), { actif: true, source: 'precaution' }, `après ${minutes} minutes de plus`);
+  }
+  // Une seule lecture de bloc en panne suffit aussi.
+  enPanne = false;
+  const e = deuxInstances({ pannes: { 'blocks.children.list': () => enPanne } });
+  await e.b.ecrire(CLES.modeEssai, false, 'tess@exemple.ca');
+  assert.equal((await e.a.modeEssai()).actif, false);
+  enPanne = true; e.avancer(61000);
+  assert.deepEqual(await e.a.modeEssai(), { actif: true, source: 'precaution' });
+});
+
+test("mode d'essai, deux lignes contraires : la plus sûre gagne, quelles que soient les dates", async () => {
+  for (const [dateVrai, dateFaux] of [['2026-11-20T10:00:00.000Z', '2026-11-20T10:00:00.000Z'], [null, '2020-01-01T10:00:00.000Z'], ['2026-11-01T10:00:00.000Z', '2026-11-20T10:00:00.000Z']]) {
+    for (const ordre of [['true', 'false'], ['false', 'true']]) {
+      const b = banc({ env: { ...ENV, EMAIL_TEST_MODE: 'false' } });
+      for (const json of ordre) {
+        const le = json === 'true' ? dateVrai : dateFaux;
+        const id = poser(b, CLES.modeEssai, json, { le: le || '2000-01-01T00:00:00.000Z', id: `ligne-${json}` });
+        if (!le) delete b.faux.pages.get(id).properties[COLONNES.modifieLe];
+      }
+      assert.equal((await b.reglages.modeEssai()).actif, true, `${ordre.join(' puis ')}, ${dateVrai} et ${dateFaux}`);
+    }
+  }
+  // Une ligne en double illisible vaut « actif » aussi.
+  const b = banc({ env: { ...ENV, EMAIL_TEST_MODE: 'false' } });
+  poser(b, CLES.modeEssai, 'false', { id: 'ligne-faux' });
+  poser(b, CLES.modeEssai, '{abîmé', { le: '2020-01-01T10:00:00.000Z', id: 'ligne-abimee' });
+  assert.deepEqual(await b.reglages.modeEssai(), { actif: true, source: 'precaution' });
+});
+
+test("mode d'essai, une ligne qui existe sans être vrai ou faux : actif, même si Vercel dit « false »", async () => {
+  for (const json of ['"false"', '0', 'null', '{}', '{abîmé', null]) {
+    const b = banc({ env: { ...ENV, EMAIL_TEST_MODE: 'false' } });
+    poser(b, CLES.modeEssai, json);
+    assert.deepEqual(await b.reglages.modeEssai(), { actif: true, source: 'precaution' }, String(json));
+  }
 });

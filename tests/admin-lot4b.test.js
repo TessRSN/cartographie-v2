@@ -5,6 +5,7 @@ const path = require('node:path');
 const { banc, requete, temoin, SECRETS, ADRESSE_ESSAI, TESS, MAX, LEA, ODILE } = require('./aides/banc-lot4b');
 const G = require('../public/js/gabarits.js');
 const { GESTES } = require('../lib/journal');
+const { creerReglages } = require('../lib/reglages');
 
 const IDS = ['lien', 'recue', 'approuvee', 'refusee', 'panneau', 'resume'];
 const BON = { id: 'approuvee', objet: 'En ligne : {ressource}', texte: 'Bravo {nom} !\n\n{lien}\n\nMerci.' };
@@ -98,7 +99,8 @@ test('courriels avec une base « Réglages » illisible : l\'écran s\'affiche, 
   assert.deepEqual(res.corps.essai, { actif: true, source: 'precaution', adresseDefinie: true, modifieLe: null, modifiePar: null });
   assert.equal(res.corps.courriels.length, 6);
   assert.equal((await b.lire('accueil')).corps.envois.essaiCourriels, true);
-  assert.deepEqual((await banc({ pannesNotion: panne, env: { EMAIL_TEST_MODE: 'false' } }).lire('courriels')).corps.essai.actif, false);
+  // Même si Vercel dit « arrêté » : la base existe et ne se lit pas, le panneau a pu dire « actif ».
+  assert.deepEqual((await banc({ pannesNotion: panne, env: { EMAIL_TEST_MODE: 'false' } }).lire('courriels')).corps.essai.actif, true);
   sansSecret(b);
 });
 
@@ -289,16 +291,16 @@ test('mode-essai : coupé avec confirmation, les courriels partent aux vraies pe
   assert.equal(invitation.code, 200);
   assert.ok(!Object.hasOwn(invitation.corps, 'essai'));
   assert.deepEqual(b.envois[1].to, ['nadia@exemple.org']);
-  // Le même réglage de nouveau : rien n'est écrit, rien n'est noté.
-  const avant = b.ecritures();
+  // Le même réglage de nouveau : il est réécrit quand même (la mémoire de l'instance peut retarder sur la base), sans ligne en double.
   const encore = await b.envoyer('mode-essai', { actif: false, confirme: true });
-  assert.deepEqual([encore.code, encore.corps], [200, { ok: true, actif: false, source: 'panneau', inchange: true }]);
-  assert.equal(b.ecritures(), avant);
+  assert.deepEqual([encore.code, encore.corps], [200, { ok: true, actif: false, source: 'panneau' }]);
+  assert.deepEqual(b.reglagesEcrits(), { modeEssai: false });
   // Réactivé : sans confirmation, et tout retourne à l'adresse d'essai.
   const reactive = await b.envoyer('mode-essai', { actif: true });
   assert.deepEqual([reactive.code, reactive.corps], [200, { ok: true, actif: true, source: 'panneau' }]);
   assert.deepEqual(b.reglagesEcrits(), { modeEssai: true });
   assert.deepEqual(b.journalEcrit().filter((l) => l.geste === "Mode d'essai changé").map((l) => l.phrase), [
+    "a coupé le mode d'essai des courriels : ils partent aux vraies personnes",
     "a coupé le mode d'essai des courriels : ils partent aux vraies personnes",
     "a activé le mode d'essai des courriels : ils vont tous à l'adresse d'essai",
   ]);
@@ -483,4 +485,19 @@ test('la page : la saisie d\'un courriel est protégée (départ de la page, ses
   assert.match(source, /beforeunload[^\n]*saisieCourriels\(\)/);
   assert.match(source, /if \(saisieCourriels\(\)\) \{ message\(CO\.sessionExpiree\); return; \}/);
   assert.match(source, /if \(co\.enCours\) return/);
+});
+
+test("réactiver le mode d'essai écrit toujours dans la base, même si l'instance le croit déjà actif", async () => {
+  const b = banc({ env: { EMAIL_TEST_MODE: 'true' }, reglages: { modeEssai: true } });
+  // L'instance lit « actif » et le garde en mémoire ; une autre instance coupe le mode d'essai.
+  assert.equal((await b.lire('accueil')).corps.envois.essaiCourriels, true);
+  const autre = creerReglages(b.faux.client, b.env, {});
+  await autre.ecrire('modeEssai', false, TESS);
+  assert.deepEqual(b.reglagesEcrits(), { modeEssai: false });
+  const res = await b.envoyer('mode-essai', { actif: true });
+  assert.deepEqual([res.code, res.corps], [200, { ok: true, actif: true, source: 'panneau' }]);
+  assert.deepEqual(b.reglagesEcrits(), { modeEssai: true });
+  assert.equal(b.journalEcrit().length, 1);
+  await b.courriels.propositionRecue({ a: 'pat@exemple.org', titre: 'Nouvelle : X' });
+  assert.deepEqual(b.envois[0].to, [ADRESSE_ESSAI]);
 });

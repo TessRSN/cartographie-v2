@@ -187,7 +187,8 @@ test('avec la base « Réglages » vide, rien ne change non plus', async () => {
     await envoyer(b.courriels, 'p@exemple.org');
     assert.equal(b.envois.at(-1).subject, ATTENDUS[id].objet, id);
   }
-  assert.equal(b.faux.de('databases.query').length, 1, 'les réglages ne sont lus qu\'une fois par minute');
+  // Une lecture des réglages pour la minute, et, le mode d'essai n'étant pas actif, une relecture de la base à chaque envoi.
+  assert.equal(b.faux.de('databases.query').length, 1 + Object.keys(LES_SIX).length);
 });
 
 test('mode d\'essai réglé dans le panneau : il passe devant la variable de Vercel, dans les deux sens', async () => {
@@ -236,11 +237,11 @@ test('mode d\'essai : une base illisible ne le lève pas', async () => {
   assert.deepEqual(await LES_SIX.approuvee(d.courriels, 'p@exemple.org'), { envoye: false });
   assert.equal(d.envois.length, 0);
   assert.ok(d.lignes.some((l) => l.includes("mode d'essai sans EMAIL_TEST_RECIPIENT")));
-  // Vercel dit « arrêté » : les courriels partent, avec le texte d'origine.
-  const f = bancReglages({ env: { EMAIL_TEST_MODE: 'false' }, pannes: panne });
+  // Vercel dit « arrêté », mais la base existe et ne se lit pas : le panneau a pu dire « actif », rien ne part au public.
+  const f = bancReglages({ env: { EMAIL_TEST_MODE: 'false', EMAIL_TEST_RECIPIENT: 'essai@rsn.quebec' }, pannes: panne });
   await LES_SIX.approuvee(f.courriels, 'p@exemple.org');
-  assert.deepEqual(f.envois[0].to, ['p@exemple.org']);
-  assert.equal(f.envois[0].subject, ATTENDUS.approuvee.objet);
+  assert.deepEqual(f.envois[0].to, ['essai@rsn.quebec']);
+  assert.ok(f.envois[0].subject.endsWith(ATTENDUS.approuvee.objet), "avec le texte d'origine");
   // Un socle qui lèverait malgré tout ne fait pas échouer l'envoi, et ne lève pas le mode d'essai.
   const envois = [];
   const casse = creerCourriels({ envoyeur: async (m) => envois.push(m), env: { RESEND_API_KEY: 'cle', EMAIL_TEST_RECIPIENT: 'essai@rsn.quebec' }, journal: () => {}, reglages: { active: () => true, async lire() { throw new Error('cassé'); } } });

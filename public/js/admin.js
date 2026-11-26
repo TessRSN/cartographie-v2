@@ -2149,7 +2149,14 @@ let minuterieApercu;
 function saisirCourriel(cible) {
   const c = courrielChoisi();
   if (!c || !modifiable()) return;
-  const s = { ...saisieDe(c), [cible.id === 'mSubj' ? 'objet' : 'texte']: cible.value };
+  const champ = cible.id === 'mSubj' ? 'objet' : 'texte';
+  const s = { ...saisieDe(c), [champ]: cible.value };
+  // Le message d'erreur d'un champ s'efface dès qu'on le corrige.
+  if (etat.co.erreurs[champ]) {
+    delete etat.co.erreurs[champ]; cible.removeAttribute('aria-invalid');
+    const etiquette = cible.closest('label'); const message = etiquette && etiquette.nextElementSibling;
+    if (message && message.classList.contains('err')) message.remove();
+  }
   if (s.objet === c.objet && s.texte === c.texte) delete etat.co.brouillons[c.id]; else etat.co.brouillons[c.id] = s;
   const liste = $('#mList'); if (liste) liste.innerHTML = listeCourriels();
   const abandon = $('#cAbandon'); if (abandon) abandon.hidden = !brouillonDiffere(c);

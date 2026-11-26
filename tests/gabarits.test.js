@@ -204,9 +204,10 @@ test('valider : longueurs, repères inconnus, repère indispensable', () => {
   // Repère indispensable : {lien} pour les courriels à lien, {commentaire} pour le refus.
   for (const id of ['lien', 'approuvee', 'panneau', 'resume']) {
     assert.match(erreurs(id, 'O', 'Sans le lien.').texte, /\{lien\}/, id);
-    assert.deepEqual(erreurs(id, 'O', 'Avec {lien}.'), {}, id);
+    assert.match(erreurs(id, 'O', 'Avec {lien}.').texte, /seul sur sa ligne/, id);
+    assert.deepEqual(erreurs(id, 'O', 'Avec :\n{lien}\net aussi {lien}.'), {}, id);
     // Dans l'objet, le lien ne compte pas et n'a pas sa place.
-    assert.match(erreurs(id, 'O {lien}', 'Avec {lien}.').objet, /\{lien\}/, id);
+    assert.match(erreurs(id, 'O {lien}', 'Avec\n{lien}').objet, /\{lien\}/, id);
   }
   assert.match(erreurs('refusee', 'O', 'Sans raison.').texte, /\{commentaire\}/);
   assert.deepEqual(erreurs('refusee', 'O', 'Parce que : {commentaire}'), {});
@@ -245,4 +246,22 @@ test('chaque courriel a des valeurs d\'exemple pour l\'aperçu et l\'essai, qui 
   }
   assert.ok(G.exemple('resume').propositions.length >= 2);
   assert.ok(G.exemple('lien').valeurs['{lien}'].startsWith('https://cartographie.rsn.quebec/'));
+});
+
+test('un courriel à bouton exige le repère {lien} seul sur sa ligne', () => {
+  const { valider, origine, COURRIELS } = require('../public/js/gabarits');
+  for (const c of COURRIELS.filter((x) => x.bouton)) {
+    assert.equal(valider(c.id, origine(c.id)).ok, true, `le texte d'origine de ${c.id}`);
+    for (const texte of ['Cliquez{lien}ici', 'Voici : {lien}', '{{lien}}']) {
+      const v = valider(c.id, { objet: 'Objet', texte });
+      assert.equal(v.ok, false, `${c.id} : ${texte}`);
+      assert.match(v.erreurs.texte, /seul sur sa ligne/);
+    }
+    assert.equal(valider(c.id, { objet: 'Objet', texte: 'Bonjour,\n\n  {lien}  \n\nMerci' }).ok, true);
+  }
+});
+
+test("objet : les caractères de commande et de sens d'écriture d'une valeur n'y entrent pas", () => {
+  const rendu = G.rendre('recue', { objet: 'Reçu : {proposition}', texte: 'T' }, { '{proposition}': 'a\u0000b\u001bc‮d⁦e‏f' });
+  assert.equal(rendu.objet, 'Reçu : abcdef');
 });

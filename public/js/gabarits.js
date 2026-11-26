@@ -95,6 +95,7 @@ const MESSAGES = {
   texteVide: 'Écrivez le texte du courriel.',
   texteLong: 'Le texte ne peut pas dépasser 5 000 caractères.',
   reperesInconnus: (liste) => `${liste.length > 1 ? 'Ces repères n’existent pas' : 'Ce repère n’existe pas'} pour ce courriel : ${liste.join(', ')}. Retirez les accolades, ou choisissez un repère de la liste.`,
+  lienSeul: 'Mettez le repère {lien} seul sur sa ligne : c’est lui qui devient le bouton du courriel.',
   lienDansObjet: 'Le repère {lien} ne va pas dans l’objet : mettez-le dans le texte.',
   requis: {
     '{lien}': 'Le texte doit garder le repère {lien} : sans lui, le courriel partirait sans son lien.',
@@ -129,6 +130,7 @@ function valider(id, brut) {
   else if (texte.length > TEXTE_MAX) erreurs.texte = MESSAGES.texteLong;
   else if (inconnus(texte).length) erreurs.texte = MESSAGES.reperesInconnus(inconnus(texte));
   else if (manquant) erreurs.texte = MESSAGES.requis[manquant];
+  else if (c.bouton && c.requis.includes('{lien}') && !texte.split('\n').some((ligne) => ligne.trim() === '{lien}')) erreurs.texte = MESSAGES.lienSeul;
   const ok = !Object.keys(erreurs).length;
   return { ok, gabarit: ok ? { objet, texte } : null, erreurs };
 }
@@ -205,7 +207,8 @@ function rendre(id, gabarit, valeurs, { propositions } = {}) {
   const brut = (r) => (c.reperes.includes(r) && possede(v, r) && v[r] !== null && v[r] !== undefined ? String(v[r]) : '');
   const connu = (r) => c.reperes.includes(r);
 
-  const objet = uneLigne(remplir(String(gabarit.objet || ''), (r) => (connu(r) && r !== '{lien}' ? uneLigne(brut(r)) : null), (x) => x));
+  // Dans l'objet, une valeur venue du public perd ses caractères de commande et de sens d'écriture.
+  const objet = uneLigne(remplir(String(gabarit.objet || ''), (r) => (connu(r) && r !== '{lien}' ? uneLigne(sansCommandes(brut(r)).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')) : null), (x) => x));
 
   const enHtml = (r) => {
     if (!connu(r)) return null;

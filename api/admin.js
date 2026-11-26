@@ -515,10 +515,9 @@ function creerGestionnaire(donnees) {
         // Couper le mode d'essai envoie les courriels aux vraies personnes : la page le fait confirmer, le serveur l'exige.
         if (!corps.actif && corps.confirme !== true) return res.status(400).json({ code: 'confirmation' });
         if (!d.reglages || !d.reglages.active()) return sansReglages();
-        const lecture = await d.reglages.lire(CLES_REGLAGES.modeEssai);
-        const inchange = lecture.etat === 'present' && lecture.valeur === corps.actif;
-        if (!inchange && !(await d.reglages.ecrire(CLES_REGLAGES.modeEssai, corps.actif, approbateur)).ok) return sansReglages();
-        const retour = { ok: true, actif: corps.actif, source: 'panneau', ...(inchange ? { inchange: true } : {}) };
+        // Toujours écrit : la mémoire de l'instance peut retarder sur la base, et « déjà réglé » serait alors faux.
+        if (!(await d.reglages.ecrire(CLES_REGLAGES.modeEssai, corps.actif, approbateur)).ok) return sansReglages();
+        const retour = { ok: true, actif: corps.actif, source: 'panneau' };
         await consigner(d, action, approbateur, retour, corps);
         return res.status(200).json(retour);
       }
