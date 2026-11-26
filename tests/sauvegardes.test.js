@@ -150,7 +150,7 @@ test('lister : les copies de la plus récente à la plus ancienne, sans adresse 
   const liste = await b.sauvegardes.lister({ par: TESS });
   assert.deepEqual([liste.ok, liste.actives, liste.copies.length], [true, true, 3]);
   assert.deepEqual(liste.copies.map((c) => c.faiteLe), [ilYA(1), ilYA(7), ilYA(14)]);
-  assert.deepEqual(liste.copies[0], { id: recente, faiteLe: ilYA(1), origine: 'demande', par: TESS, taille: liste.copies[0].taille, fichier: true, incomplete: false });
+  assert.deepEqual(liste.copies[0], { id: recente, faiteLe: ilYA(1), origine: 'demande', par: TESS, taille: liste.copies[0].taille, fichier: true, incomplete: false, changements: null });
   assert.deepEqual([liste.copies[1].origine, liste.copies[1].par, liste.copies[1].fichier], ['automatique', null, false]);
   assert.ok(!JSON.stringify(liste).includes(HOTE_FICHIERS));
 });

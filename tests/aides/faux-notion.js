@@ -7,8 +7,11 @@
  * figerListes() : à partir de là, « databases.query » rend les pages telles qu'elles étaient à cet
  * instant (une liste périmée, comme Notion en rend juste après une écriture), alors que
  * « pages.retrieve » rend toujours la page à jour. degelerListes() remet les listes à jour.
+ * datesCommeNotion : vrai pour que les dates avec une heure soient rendues comme le vrai Notion les
+ * rend, à la minute et sous la forme « 2026-11-26T15:04:00.000+00:00 », quoi qu'on ait écrit.
  */
-function fauxNotion({ pannes = {}, uuid = false } = {}) {
+const commeNotion = (iso) => { const t = Date.parse(iso); return typeof iso !== 'string' || !/T/.test(iso) || Number.isNaN(t) ? iso : new Date(Math.floor(t / 60000) * 60000).toISOString().replace('Z', '+00:00'); };
+function fauxNotion({ pannes = {}, uuid = false, datesCommeNotion = false } = {}) {
   const pages = new Map(); const blocs = new Map(); const appels = []; let n = 0;
   let figees = null;
   const lu = (segments) => (segments || []).map((s) => ({ ...s, plain_text: s.text.content }));
@@ -20,7 +23,8 @@ function fauxNotion({ pannes = {}, uuid = false } = {}) {
   const lisible = (page) => {
     const properties = {};
     for (const [nom, p] of Object.entries(page.properties)) {
-      properties[nom] = p.title ? { title: lu(p.title) } : p.rich_text ? { rich_text: lu(p.rich_text) } : p;
+      properties[nom] = p.title ? { title: lu(p.title) } : p.rich_text ? { rich_text: lu(p.rich_text) }
+        : datesCommeNotion && p.date && p.date.start ? { ...p, date: { ...p.date, start: commeNotion(p.date.start) } } : p;
     }
     return { ...page, properties };
   };

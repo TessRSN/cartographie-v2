@@ -655,20 +655,41 @@ const TEXTES = {
       illisible: 'Les réglages n’ont pas pu être lus pour le moment : cet écran montre les textes d’origine, qui ne sont peut-être pas ceux en vigueur. Réessayez dans un instant.',
       essai: {
         titre: 'Mode d’essai',
-        aide: 'Tant qu’il est actif, tous les courriels vont à une seule adresse, et personne d’autre ne reçoit rien.',
+        aide: 'Tant qu’il est actif, tous les courriels vont à une seule adresse, et personne d’autre ne reçoit rien. Seul « M’envoyer un essai » va toujours à la personne qui essaie.',
         duPanneau: (qui, quand) => `Réglé dans le panneau${qui ? ` par ${qui}` : ''}${quand ? `, le ${quand}` : ''}.`,
         deVercel: 'D’après le réglage de Vercel (EMAIL_TEST_MODE) : le panneau ne l’a pas encore changé.',
         parPrecaution: 'Par précaution : les réglages n’ont pas pu être lus, et Vercel ne dit rien.',
-        adresseDefinie: 'L’adresse qui reçoit les essais est définie dans Vercel (EMAIL_TEST_RECIPIENT).',
+        adresseDefinie: 'L’adresse qui reçoit les courriels en mode d’essai est définie. Seule une personne en Administration la voit et la change.',
         sansAdresse: (actif) => (actif
-          ? 'Aucune adresse d’essai n’est définie dans Vercel (EMAIL_TEST_RECIPIENT) : tant que le mode d’essai est actif, aucun courriel ne part.'
-          : 'Aucune adresse d’essai n’est définie dans Vercel (EMAIL_TEST_RECIPIENT) : si le mode d’essai est activé, aucun courriel ne partira.'),
+          ? 'Aucune adresse d’essai n’est définie, ni dans le panneau ni dans les réglages de Vercel (variable EMAIL_TEST_RECIPIENT) : tant que le mode d’essai est actif, aucun courriel ne part.'
+          : 'Aucune adresse d’essai n’est définie, ni dans le panneau ni dans les réglages de Vercel (variable EMAIL_TEST_RECIPIENT) : si le mode d’essai est activé, aucun courriel ne partira.'),
         sansService: 'Aucun service d’envoi n’est branché ici : les courriels sont seulement simulés.',
         question: 'Couper le mode d’essai ? Les courriels partiront désormais aux vraies personnes : celles qui proposent une ressource, et l’équipe.',
         couper: 'Couper le mode d’essai',
         active: 'Mode d’essai activé : les courriels vont à l’adresse d’essai. Comptez jusqu’à une minute pour que tous les envois suivent.',
         coupe: 'Mode d’essai coupé : les courriels partent aux vraies personnes. Comptez jusqu’à une minute pour que tous les envois suivent.',
         inchange: 'Le mode d’essai était déjà réglé ainsi.',
+      },
+      // L’adresse du mode d’essai, que l’Administration voit et change.
+      adresse: {
+        libelle: 'Adresse qui reçoit les courriels en mode d’essai',
+        exemple: 'essais@exemple.org',
+        aide: 'Une seule adresse. Videz le champ et enregistrez pour revenir à celle des réglages de Vercel.',
+        enregistrer: 'Enregistrer l’adresse',
+        // La confirmation répète l'adresse saisie : une faute de frappe enverrait tout chez un inconnu.
+        question: (adresse) => `Envoyer les courriels à ${adresse} ? Tant que le mode d’essai est actif, tous les courriels, y compris les liens d’entrée dans le panneau, iront à cette adresse. Vérifiez qu’elle est bien écrite.`,
+        confirmer: 'Oui, enregistrer cette adresse',
+        questionRetrait: 'Retirer l’adresse d’essai du panneau ? Tant que le mode d’essai est actif, tous les courriels, y compris les liens d’entrée dans le panneau, iront à l’adresse des réglages de Vercel (variable EMAIL_TEST_RECIPIENT). S’il n’y en a pas, aucun courriel ne partira.',
+        confirmerRetrait: 'Oui, retirer l’adresse',
+        duPanneau: (adresse, qui, quand) => `En vigueur : ${adresse}, réglée dans le panneau${qui ? ` par ${qui}` : ''}${quand ? `, le ${quand}` : ''}.`,
+        deVercel: (adresse) => `En vigueur : ${adresse}, définie dans les réglages de Vercel (variable EMAIL_TEST_RECIPIENT). Écrivez-en une autre ici pour la remplacer.`,
+        aucune: (actif) => TEXTES.panneau.courriels.essai.sansAdresse(actif),
+        ecartee: 'L’adresse enregistrée dans le panneau n’est pas valable : elle est écartée. Enregistrez-en une nouvelle, ou videz le champ et enregistrez.',
+        enregistree: 'Adresse d’essai enregistrée. Comptez jusqu’à une minute pour que tous les envois suivent.',
+        retiree: 'Adresse d’essai retirée du panneau : celle des réglages de Vercel reprend. Comptez jusqu’à une minute pour que tous les envois suivent.',
+        inchange: 'Rien à enregistrer : cette adresse est déjà celle du panneau.',
+        aCorriger: 'L’adresse est à corriger avant d’être enregistrée.',
+        conflit: 'Une autre personne vient de changer l’adresse d’essai : rien n’a été enregistré. L’écran montre maintenant sa version.',
       },
       liste: 'Les six courriels',
       modifieLe: (quand, qui) => `Modifié${quand ? ` le ${quand}` : ''}${qui ? ` par ${qui}` : ''}`,
@@ -698,11 +719,10 @@ const TEXTES = {
       retabli: (nom) => `Texte d’origine rétabli pour « ${nom} ».`,
       inchange: 'Rien à enregistrer : ce texte est déjà celui en vigueur.',
       aCorriger: 'Le texte est à corriger avant d’être enregistré.',
+      essaiAide: '« M’envoyer un essai » envoie ce courriel à votre adresse, et à elle seule, même quand le mode d’essai est actif. « [ESSAI] » est ajouté à l’objet.',
       essaiEnvoye: (courriel) => `Essai envoyé à ${courriel}.`,
-      essaiVersEssai: 'Essai envoyé, mais le mode d’essai est actif : il est parti à l’adresse d’essai.',
       essaiSimule: 'Essai simulé : aucun service d’envoi n’est branché ici, rien n’est parti.',
       essaiLimite: 'Trop d’essais envoyés en peu de temps. Réessayez dans une heure.',
-      essaiSansAdresse: 'Le mode d’essai est actif et aucune adresse d’essai n’est définie : rien ne peut partir.',
       essaiEchec: 'L’essai n’a pas pu partir. Réessayez dans un instant.',
       introuvable: 'Ce courriel n’existe pas. La liste vient d’être relue.',
       sessionExpiree: 'Votre session a expiré. Demandez un nouveau lien et ouvrez-le dans un autre onglet, puis revenez ici et réessayez : votre texte est toujours là.',
@@ -749,7 +769,7 @@ const TEXTES = {
         reponse: 'Adresse de réponse', reponseAide: 'Là où arrivent les réponses aux courriels.',
         bases: 'Bases de données', basesAide: 'La clé d’accès n’est jamais affichée.', cle: 'Clé d’accès',
         service: 'Service d’envoi des courriels', serviceAide: 'Sans lui, les courriels sont seulement simulés.',
-        adresseEssai: 'Adresse du mode d’essai', adresseEssaiAide: 'Elle reçoit tous les courriels quand le mode d’essai est actif. Elle n’est pas affichée.',
+        adresseEssai: 'Adresse du mode d’essai chez l’hébergeur', adresseEssaiAide: 'Elle sert quand aucune adresse n’est réglée dans le panneau. Elle n’est pas affichée ici : l’Administration voit et change l’adresse d’essai dans l’écran « Courriels ».',
         compteur: 'Compteur des limites d’envoi', compteurAide: 'Il retient les liens déjà utilisés et les demandes par adresse.',
         secrets: 'Liens signés et tâches planifiées', secretsAide: 'Ils protègent les liens et l’envoi du résumé hebdomadaire.',
         secretLiens: 'Secret des liens', secretTaches: 'Secret des tâches',
@@ -789,6 +809,37 @@ const TEXTES = {
       introuvable: 'Cette copie est introuvable, ou son fichier n’est pas une copie de la cartographie. La liste vient d’être relue.',
       echecTelechargement: 'Le fichier n’a pas pu être téléchargé. Réessayez dans un instant.',
       fichier: (jour) => `sauvegarde-cartographie-${jour}.json`,
+      // Ce qui a changé depuis la copie de comparaison. resume : le résumé court du serveur (un état
+      // et des compteurs par base) ; date : le jour de la copie de comparaison, '' s'il n'est pas connu.
+      // Seuls les compteurs connus, entiers et positifs, sont dits.
+      changements: (resume, date) => {
+        const r = resume && typeof resume === 'object' ? resume : {};
+        if (r.etat === 'premiere') return 'Première copie : rien à comparer.';
+        if (r.etat === 'sans-reference') return 'Aucune copie complète à comparer.';
+        if (r.etat === 'impossible') return 'Comparaison impossible avec la copie précédente.';
+        if (r.etat !== 'compare') return 'Pas de comparaison pour cette copie.';
+        const bases = r.bases && typeof r.bases === 'object' ? r.bases : {};
+        const n = (base, compteur) => { const v = bases[base] && typeof bases[base] === 'object' ? bases[base][compteur] : 0; return Number.isSafeInteger(v) && v > 0 ? v : 0; };
+        const s = (x) => (x > 1 ? 's' : '');
+        // « 3 ressources nouvelles, 5 modifiées, 1 retirée » : le nom n'est dit qu'une fois.
+        const lignes = (base, nom, nouveau, feminin) => {
+          const accord = (x) => `${feminin ? 'e' : ''}${s(x)}`;
+          const morceaux = [[n(base, 'nouvelles'), nouveau], [n(base, 'modifiees'), (x) => `modifié${accord(x)}`], [n(base, 'retirees'), (x) => `retiré${accord(x)}`]].filter(([x]) => x > 0);
+          return morceaux.map(([x, mot], i) => `${x} ${i === 0 ? `${nom(x)} ` : ''}${mot(x)}`).join(', ');
+        };
+        const parties = [
+          lignes('ressources', (x) => `ressource${s(x)}`, (x) => `nouvelle${s(x)}`, true),
+          lignes('porteurs', (x) => `porteur${s(x)}`, (x) => (x > 1 ? 'nouveaux' : 'nouveau'), false),
+          lignes('propositions', (x) => `proposition${s(x)}`, (x) => `nouvelle${s(x)}`, true),
+          lignes('equipe', (x) => `membre${s(x)} de l’équipe`, (x) => (x > 1 ? 'nouveaux' : 'nouveau'), false),
+          n('versions', 'nouvelles') ? `${n('versions', 'nouvelles')} nouvelle${s(n('versions', 'nouvelles'))} version${s(n('versions', 'nouvelles'))}` : '',
+          n('journal', 'nouvelles') ? `${n('journal', 'nouvelles')} nouvelle${s(n('journal', 'nouvelles'))} ligne${s(n('journal', 'nouvelles'))} au journal` : '',
+          n('reglages', 'changes') ? `${n('reglages', 'changes')} réglage${s(n('reglages', 'changes'))} changé${s(n('reglages', 'changes'))}` : '',
+        ].filter(Boolean);
+        const copie = date ? `la copie du ${date}` : 'la copie précédente';
+        const partiel = r.partiel === true ? ' (comparaison partielle)' : '';
+        return parties.length ? `Depuis ${copie} : ${parties.join(' ; ')}${partiel}.` : `Aucun changement depuis ${copie}${partiel}.`;
+      },
     },
   },
   portrait: {

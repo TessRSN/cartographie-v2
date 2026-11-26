@@ -431,7 +431,7 @@ test('chaque geste réussi du panneau note une ligne, au nom de la personne en s
   assert.deepEqual(ecrit.map((l) => [l.geste, l.par, l.sur]), gestes.map(([, , par, geste, sur]) => [geste, par, sur]));
   // Chaque geste de la base « Journal » a servi au moins une fois : la table des gestes est complète.
   // Les gestes du lot 4b (courriels, mode d'essai) ont leur banc et leurs essais dans admin-lot4b.test.js.
-  const DU_LOT_4B = ['Courriel modifié', 'Courriel rétabli', "Mode d'essai changé"];
+  const DU_LOT_4B = ['Courriel modifié', 'Courriel rétabli', "Mode d'essai changé", "Adresse d'essai changée"];
   // Ceux du lot 4c (réglages du site, sauvegardes) : dans admin-lot4c.test.js.
   const DU_LOT_4C = ['Contributions ouvertes', 'Contributions fermées', 'Réglages modifiés', 'Sauvegarde faite', 'Sauvegarde téléchargée'];
   assert.deepEqual([...new Set(ecrit.map((l) => l.geste))].sort(), GESTES.filter((g) => !DU_LOT_4B.includes(g) && !DU_LOT_4C.includes(g)).sort());

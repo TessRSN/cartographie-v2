@@ -327,7 +327,7 @@ test('une clé mal formée ou une valeur sans JSON est refusée avant tout appel
 });
 
 test('les clés que la suite du panneau utilisera existent, et chaque courriel a la sienne', () => {
-  assert.deepEqual(CLES, { modeEssai: 'modeEssai', contributionsOuvertes: 'contributionsOuvertes', messageFerme: 'messageFerme', conditions: 'conditions' });
+  assert.deepEqual(CLES, { modeEssai: 'modeEssai', adresseEssai: 'adresseEssai', contributionsOuvertes: 'contributionsOuvertes', messageFerme: 'messageFerme', conditions: 'conditions' });
   assert.equal(cleCourriel('refusee'), 'courriel.refusee');
   assert.deepEqual(COLONNES, { cle: 'Clé', modifieLe: 'Modifié le', modifiePar: 'Modifié par' });
 });

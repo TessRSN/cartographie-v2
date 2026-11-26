@@ -148,11 +148,11 @@ Variables d'environnement, dans `.env.local` en local et dans le projet Vercel e
 | `NOTION_DB_APPROBATEURS` | identifiant de la base « Approbateurs » |
 | `NOTION_DB_JOURNAL` | identifiant de la base « Journal » (qui a fait quoi dans le panneau) ; sans elle, le panneau fonctionne sans journal |
 | `NOTION_DB_REGLAGES` | identifiant de la base « Réglages » (textes des courriels, mode d'essai, contributions ouvertes ou fermées et texte des conditions, réglés dans le panneau) ; sans elle, les courriels gardent leur texte d'origine, le mode d'essai suit `EMAIL_TEST_MODE`, les contributions suivent `CONTRIBUTIONS` et le formulaire garde son texte d'origine |
-| `NOTION_DB_SAUVEGARDES` | identifiant de la base « Sauvegardes » (une copie complète des données chaque lundi, et à la demande depuis le panneau) ; sans elle, aucune copie n'est faite et le panneau le dit |
+| `NOTION_DB_SAUVEGARDES` | identifiant de la base « Sauvegardes » (une copie complète des données chaque lundi, et à la demande depuis le panneau) ; sans elle, aucune copie n'est faite et le panneau le dit ; sa colonne texte « Changements » reçoit le résumé de ce qui a changé depuis la copie complète précédente (compteurs seulement) |
 | `CRON_SECRET` | protège le déclenchement du résumé hebdomadaire ; Vercel le joint lui-même à l'appel planifié |
 | `RESEND_API_KEY` | envoi des courriels ; sans elle, rien ne part et le lien est écrit dans le journal du serveur |
 | `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME` | expéditeur des courriels (facultatives) |
-| `EMAIL_TEST_MODE`, `EMAIL_TEST_RECIPIENT` | mode d'essai : tous les courriels vont à une seule adresse |
+| `EMAIL_TEST_MODE`, `EMAIL_TEST_RECIPIENT` | mode d'essai : tous les courriels vont à une seule adresse ; l'Administration peut régler les deux depuis l'écran « Courriels » du panneau, qui passe alors devant ces variables |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | stockage clé-valeur de Vercel, pour les limites d'envoi ; sans lui, une limite en mémoire prend le relais |
 
 ### En local

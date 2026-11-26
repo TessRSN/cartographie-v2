@@ -103,11 +103,13 @@ function peupler(faux) {
   page('journal-1', 'base-journal', { Titre: { title: texte('a approuvé la nouvelle ressource Outil X') }, 'Fait par': { email: TESS }, Geste: { select: { name: 'Approbation' } } });
 }
 
-// env : les réglages de Vercel ; sans : les variables à retirer ; reglages : { clé: valeur } déjà enregistrés.
-function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFichiers = {}, sansJournal = false, budgetMs, attendreSauvegarde = async () => {} } = {}) {
+// env : les réglages de Vercel ; sans : les variables à retirer ; reglages : { clé: valeur } déjà enregistrés ;
+// budgetComparaisonMs : le temps accordé à la comparaison d'une copie avec la précédente ;
+// datesCommeNotion : les dates reviennent à la minute et en « +00:00 », comme du vrai Notion.
+function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFichiers = {}, sansJournal = false, budgetMs, budgetComparaisonMs, datesCommeNotion = false, attendreSauvegarde = async () => {} } = {}) {
   const complet = { ...ENV, ...env };
   for (const variable of sans) delete complet[variable];
-  const faux = commeNotion(fauxNotion({ pannes: pannesNotion, uuid: true }));
+  const faux = commeNotion(fauxNotion({ pannes: pannesNotion, uuid: true, datesCommeNotion }));
   inscrire(faux, { id: 'id-notion-tess', nom: 'Tess Berthier', courriel: TESS, role: 'Administration' });
   inscrire(faux, { id: 'id-notion-max', nom: 'Maxime Lafrenière', courriel: MAX, role: 'Approbation' });
   inscrire(faux, { id: 'id-notion-lea', nom: 'Léa Lecture', courriel: LEA, role: 'Lecture seule' });
@@ -126,16 +128,16 @@ function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFic
   const maintenant = () => { horloge.instant += 1000; return horloge.instant; };
   const envois = [];
   const socle = creerReglages(faux.client, complet, { maintenant, journal });
-  const courriels = creerCourriels({ envoyeur: async (m) => { envois.push(m); }, env: complet, journal, reglages: socle });
   const propositions = creerPropositions(faux.client, complet, { maintenant });
+  const roleDe = async (courriel) => ((await propositions.equipe()).find((x) => x.courriel === courriel) || {}).role || null;
+  const courriels = creerCourriels({ envoyeur: async (m) => { envois.push(m); }, env: complet, journal, reglages: socle, roleDe });
   const verrous = verrousEnMemoire();
   const limites = { async consommerJeton() { return true; }, async autoriserLien() { return true; }, async autoriserEssai() { return true; }, ...verrous };
   const equipe = creerEquipe({ client: faux.client, env: complet, courriels, limites, reglages: socle, verrous, secret: SECRET, journal, attendre: async () => {} });
   const journalEquipe = creerJournal(faux.client, complet, { maintenant, journal });
-  const roleDe = async (courriel) => ((await propositions.equipe()).find((x) => x.courriel === courriel) || {}).role || null;
   const reglagesSite = creerReglagesSite({ reglages: socle, env: complet, roleDe });
   const fichiers = fauxFichiers({ pannes: pannesFichiers });
-  const sauvegardes = creerSauvegardes({ client: faux.client, env: complet, fichiers, roleDe, verrous, maintenant, journal, attendre: attendreSauvegarde, ...(budgetMs === undefined ? {} : { budgetMs }) });
+  const sauvegardes = creerSauvegardes({ client: faux.client, env: complet, fichiers, roleDe, verrous, maintenant, journal, attendre: attendreSauvegarde, ...(budgetMs === undefined ? {} : { budgetMs }), ...(budgetComparaisonMs === undefined ? {} : { budgetComparaisonMs }) });
   const deps = {
     env: complet, journal, limites, propositions, courriels, reglages: socle, equipe, reglagesSite, sauvegardes, fichiers,
     source: async () => ({ ressources: [], porteurs: [], idParAdresse: {} }),
@@ -170,11 +172,13 @@ function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFic
     lire: (action, query = {}, par = TESS, options = {}) => appeler(requete('GET', action, { query, cookie: temoin(par), ...options })),
     journalEcrit: () => pagesDe('base-journal').filter((p) => p.id !== 'journal-1').map((p) => ({ geste: p.properties.Geste.select.name, par: (p.properties['Fait par'] || {}).email, sur: lu(p.properties.Sur), phrase: lu(p.properties.Titre) })),
     reglagesEcrits: () => Object.fromEntries(pagesDe('base-reglages').map((p) => [lu(p.properties[COLONNES.cle]), JSON.parse(faux.blocs.get(p.id)[0].code.rich_text.map((s) => s.text.content).join(''))])),
-    // Les copies telles qu'elles sont dans la base « Sauvegardes », corbeille exclue.
+    // Les copies telles qu'elles sont dans la base « Sauvegardes », corbeille exclue. contenu : null
+    // si le fichier manque ou n'est pas du JSON.
     copies: () => pagesDe('base-sauvegardes').map((p) => {
+      const lire = (octets) => { try { return JSON.parse(octets.toString('utf8')); } catch (err) { return null; } };
       const C = COLONNES_SAUVEGARDE; const f = (p.properties[C.fichier].files || [])[0];
       const depot = f && f.file_upload ? fichiers.depots.get(f.file_upload.id) : null;
-      return { id: p.id, titre: lu(p.properties[C.titre]), faiteLe: p.properties[C.faiteLe].date.start, origine: p.properties[C.origine].select.name, par: (p.properties[C.par] || {}).email || null, taille: p.properties[C.taille].number, depot, contenu: depot ? JSON.parse(depot.octets.toString('utf8')) : null };
+      return { id: p.id, titre: lu(p.properties[C.titre]), faiteLe: p.properties[C.faiteLe].date.start, origine: p.properties[C.origine].select.name, par: (p.properties[C.par] || {}).email || null, taille: p.properties[C.taille].number, depot, contenu: depot ? lire(depot.octets) : null };
     }),
     ecritures: () => ['pages.create', 'pages.update', 'blocks.update', 'blocks.children.append'].reduce((n, nom) => n + faux.de(nom).length, 0),
   };
