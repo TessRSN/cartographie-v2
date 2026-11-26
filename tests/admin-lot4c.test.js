@@ -140,7 +140,8 @@ test('sauvegardes : la liste, pour l\'Administration, avec des noms et sans adre
   assert.deepEqual(Object.keys(res.corps).sort(), ['actives', 'copies', 'jour', 'semaines']);
   assert.deepEqual([res.corps.actives, res.corps.jour, res.corps.semaines], [true, 'lundi', 12]);
   assert.deepEqual(res.corps.copies.map((c) => [c.origine, c.par]), [['demande', 'Tess Berthier'], ['demande', 'Odile Charbonneau'], ['automatique', null]]);
-  assert.deepEqual(Object.keys(res.corps.copies[0]).sort(), ['faiteLe', 'fichier', 'id', 'incomplete', 'origine', 'par', 'taille']);
+  assert.deepEqual(Object.keys(res.corps.copies[0]).sort(), ['changements', 'faiteLe', 'fichier', 'id', 'incomplete', 'origine', 'par', 'taille']);
+  assert.equal(res.corps.copies[0].changements, null);
   assert.equal(res.corps.copies[0].id, aLaMain);
   assert.ok(!/https?:\/\/|@exemple/.test(JSON.stringify(res.corps)));
   sansSecret(b);
@@ -152,7 +153,7 @@ test('sauvegarder : « Faire une copie maintenant » dépose le fichier, inscrit
   assert.equal(res.code, 200);
   assert.deepEqual(Object.keys(res.corps).sort(), ['copie', 'ok']);
   const [copie] = b.copies();
-  assert.deepEqual(res.corps.copie, { id: copie.id, faiteLe: copie.faiteLe, origine: 'demande', par: 'Tess Berthier', taille: copie.taille, fichier: true, incomplete: false });
+  assert.deepEqual(res.corps.copie, { id: copie.id, faiteLe: copie.faiteLe, origine: 'demande', par: 'Tess Berthier', taille: copie.taille, fichier: true, incomplete: false, changements: { etat: 'premiere' } });
   assert.deepEqual([copie.origine, copie.par, copie.contenu.format, copie.contenu.bases.ressources.pages.length], ['À la demande', TESS, FORMAT, 2]);
   assert.deepEqual(b.journalEcrit().map((l) => [l.geste, l.par, l.sur, l.phrase]), [['Sauvegarde faite', TESS, 'Sauvegardes', 'a fait une copie de sauvegarde']]);
   // Le corps de la demande ne choisit rien : ni la personne, ni l'origine.

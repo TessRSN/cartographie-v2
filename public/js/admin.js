@@ -61,7 +61,7 @@ const etat = {
   co: courrielsNeufs(), // écran Courriels : le courriel choisi, les textes en cours d'écriture, le geste en cours, la confirmation
   reglages: null,       // dernière lecture de l'écran Réglages : { reglages, contributions, messageFerme, conditions, limites, installation, sauvegardes }
   rg: reglagesNeufs(),  // écran Réglages : ce qui est en cours d'écriture ({ ouvertes, messageFerme, conditions }), les erreurs, l'envoi en cours
-  copies: null,         // dernière lecture de l'écran Sauvegardes : { actives, copies, jour, semaines }
+  copies: null,         // dernière lecture de l'écran Sauvegardes : { actives, copies (chacune avec « changements »), jour, semaines }
   sv: { enCours: null }, // écran Sauvegardes : le geste en cours (« faire », ou « telecharger:<id> »)
 };
 function reglagesNeufs() { return { brouillon: null, erreurs: {}, enCours: false }; }
@@ -2529,13 +2529,18 @@ function gesteEcranReglages(act) {
 
 // ─── Sauvegardes : les copies gardées dans Notion, à faire et à télécharger (Administration) ───
 const SV = T.sauvegardes;
+// Le jour de la copie de comparaison, sans l'année ; '' si la date ne se lit pas.
+function jourDeComparaison(resume) {
+  const depuis = resume && typeof resume === 'object' ? resume.depuis : null;
+  return typeof depuis === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(depuis) ? jour(depuis).replace(/ \d{4}$/, '') : '';
+}
 function ligneCopie(c) {
   const sv = etat.sv; const fige = sv.enCours ? ' disabled' : '';
   const origine = c.origine === 'automatique' ? SV.automatique : SV.demande(c.par);
   const bouton = c.fichier
     ? `<button type="button" class="btn sm" data-act="s-telecharger" data-id="${e(c.id)}"${fige}>${e(sv.enCours === `telecharger:${c.id}` ? SV.telechargement : SV.telecharger)}</button>`
     : `<span class="muted small">${e(SV.sansFichier)}</span>`;
-  return `<div><div class="grow"><b>${e(jourEtHeure(c.faiteLe) || T.vide)}</b>${c.incomplete ? ` <span class="pill p-warn" title="${e(SV.incompleteAide)}">${e(SV.incomplete)}</span>` : ''}<br><span class="muted small">${e(origine)}</span></div><span class="muted small num">${typeof c.taille === 'number' ? e(SV.taille(c.taille)) : ''}</span>${bouton}</div>`;
+  return `<div><div class="grow"><b>${e(jourEtHeure(c.faiteLe) || T.vide)}</b>${c.incomplete ? ` <span class="pill p-warn" title="${e(SV.incompleteAide)}">${e(SV.incomplete)}</span>` : ''}<br><span class="muted small">${e(origine)}</span><br><span class="muted small">${e(SV.changements(c.changements, jourDeComparaison(c.changements)))}</span></div><span class="muted small num">${typeof c.taille === 'number' ? e(SV.taille(c.taille)) : ''}</span>${bouton}</div>`;
 }
 function corpsSauvegardes() {
   const tete = (intro, bouton) => `<div class="head"><div><h1>${e(T.routes.sauvegardes)}</h1>${intro ? `<p>${e(intro)}</p>` : ''}</div>${bouton}</div>`;

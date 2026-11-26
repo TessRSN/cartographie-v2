@@ -804,6 +804,36 @@ const TEXTES = {
       introuvable: 'Cette copie est introuvable, ou son fichier n’est pas une copie de la cartographie. La liste vient d’être relue.',
       echecTelechargement: 'Le fichier n’a pas pu être téléchargé. Réessayez dans un instant.',
       fichier: (jour) => `sauvegarde-cartographie-${jour}.json`,
+      // Ce qui a changé depuis la copie de comparaison. resume : le résumé court du serveur (un état
+      // et des compteurs par base) ; date : le jour de la copie de comparaison, '' s'il n'est pas connu.
+      // Seuls les compteurs connus, entiers et positifs, sont dits.
+      changements: (resume, date) => {
+        const r = resume && typeof resume === 'object' ? resume : {};
+        if (r.etat === 'premiere') return 'Première copie : rien à comparer.';
+        if (r.etat === 'impossible') return 'Comparaison impossible avec la copie précédente.';
+        if (r.etat !== 'compare') return 'Pas de comparaison pour cette copie.';
+        const bases = r.bases && typeof r.bases === 'object' ? r.bases : {};
+        const n = (base, compteur) => { const v = bases[base] && typeof bases[base] === 'object' ? bases[base][compteur] : 0; return Number.isSafeInteger(v) && v > 0 ? v : 0; };
+        const s = (x) => (x > 1 ? 's' : '');
+        // « 3 ressources nouvelles, 5 modifiées, 1 retirée » : le nom n'est dit qu'une fois.
+        const lignes = (base, nom, nouveau, feminin) => {
+          const accord = (x) => `${feminin ? 'e' : ''}${s(x)}`;
+          const morceaux = [[n(base, 'nouvelles'), nouveau], [n(base, 'modifiees'), (x) => `modifié${accord(x)}`], [n(base, 'retirees'), (x) => `retiré${accord(x)}`]].filter(([x]) => x > 0);
+          return morceaux.map(([x, mot], i) => `${x} ${i === 0 ? `${nom(x)} ` : ''}${mot(x)}`).join(', ');
+        };
+        const parties = [
+          lignes('ressources', (x) => `ressource${s(x)}`, (x) => `nouvelle${s(x)}`, true),
+          lignes('porteurs', (x) => `porteur${s(x)}`, (x) => (x > 1 ? 'nouveaux' : 'nouveau'), false),
+          lignes('propositions', (x) => `proposition${s(x)}`, (x) => `nouvelle${s(x)}`, true),
+          lignes('equipe', (x) => `membre${s(x)} de l’équipe`, (x) => (x > 1 ? 'nouveaux' : 'nouveau'), false),
+          n('versions', 'nouvelles') ? `${n('versions', 'nouvelles')} nouvelle${s(n('versions', 'nouvelles'))} version${s(n('versions', 'nouvelles'))}` : '',
+          n('journal', 'nouvelles') ? `${n('journal', 'nouvelles')} nouvelle${s(n('journal', 'nouvelles'))} ligne${s(n('journal', 'nouvelles'))} au journal` : '',
+          n('reglages', 'changes') ? `${n('reglages', 'changes')} réglage${s(n('reglages', 'changes'))} changé${s(n('reglages', 'changes'))}` : '',
+        ].filter(Boolean);
+        const copie = date ? `la copie du ${date}` : 'la copie précédente';
+        const partiel = r.partiel === true ? ' (comparaison partielle)' : '';
+        return parties.length ? `Depuis ${copie} : ${parties.join(' ; ')}${partiel}.` : `Aucun changement depuis ${copie}${partiel}.`;
+      },
     },
   },
   portrait: {

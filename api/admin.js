@@ -50,7 +50,7 @@
  *                                                 fermeture, texte des conditions, et ce qui est fixé à l'installation
  *   POST enregistrer-reglages { ouvertes, messageFerme, conditions, vu } → enregistre ceux qui sont donnés (Administration) ;
  *                                                 vu : la date que l'écran avait lue pour chacun ; 409 « conflit » si la base a changé depuis
- *   GET  sauvegardes                            → les copies de sauvegarde (Administration)
+ *   GET  sauvegardes                            → les copies de sauvegarde, chacune avec le résumé court de ses changements (Administration)
  *   POST sauvegarder                            → fait une copie maintenant (Administration)
  *   GET  sauvegarde     ?id=                    → le fichier d'une copie, servi par le serveur lui-même (Administration) ;
  *                                                 seulement le fichier d'une ligne de la base « Sauvegardes »
@@ -667,7 +667,8 @@ function creerGestionnaire(donnees) {
       // ─── Sauvegardes ───
       if (action === 'sauvegardes' || action === 'sauvegarder' || action === 'sauvegarde') {
         // La personne est celle de la session : rien de ce que dit la demande ne la remplace.
-        const copiePublique = (c) => ({ ...c, par: nomDans(annuaire, c.par) });
+        // changements : le résumé court de la copie (un état et des compteurs), sans aucun nom de fiche.
+        const copiePublique = (c) => ({ ...c, par: nomDans(annuaire, c.par), changements: c.changements || null });
         const refuser = (retour) => {
           if (retour.code === 'role') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
           return res.status(retour.code === 'invalide' ? 404 : (CODES[retour.code] || 502)).json({ code: retour.code });
@@ -681,7 +682,7 @@ function creerGestionnaire(donnees) {
           const retour = await d.sauvegardes.faire({ par: approbateur });
           if (!retour.ok) return refuser(retour);
           await consigner(d, action, approbateur, retour, corps);
-          return res.status(200).json({ ok: true, copie: copiePublique({ id: retour.id, faiteLe: retour.faiteLe, origine: 'demande', par: approbateur, taille: retour.taille, fichier: true, incomplete: retour.incomplete }) });
+          return res.status(200).json({ ok: true, copie: copiePublique({ id: retour.id, faiteLe: retour.faiteLe, origine: 'demande', par: approbateur, taille: retour.taille, fichier: true, incomplete: retour.incomplete, changements: retour.changements }) });
         }
         // Le fichier d'une copie : lu par le serveur dans la base « Sauvegardes » et rendu tel quel,
         // en pièce jointe. Jamais de renvoi vers une autre adresse.
