@@ -69,7 +69,8 @@ test('calculerSujets : les sujets fréquents deviennent des points, reliés à l
   ];
   const s = calculerSujets(liste, { FICHES_MIN: 3 });
   // Deux sujets atteignent trois fiches ; le plus fréquent d'abord, à égalité par ordre alphabétique.
-  assert.deepEqual(s.sujets.map((x) => [x.nom, x.nombre]), [['cohorte', 3], ['génomique', 3]]);
+  // « cohorte » et « étude de cohorte » sont un seul sujet, affiché sous le libellé de la table.
+  assert.deepEqual(s.sujets.map((x) => [x.nom, x.nombre]), [['étude de cohorte', 3], ['génomique', 3]]);
   assert.ok(s.sujets.every((x) => x.id.startsWith('sujet:')));
   // Chaque lien va d'une ressource à un sujet retenu.
   const idCohorte = s.sujets[0].id, idGenomique = s.sujets[1].id;

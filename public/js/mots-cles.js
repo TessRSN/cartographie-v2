@@ -247,7 +247,7 @@ const DICTIONNAIRE_FR_EN = {
   // Ajouts v7 (2026-09-14) : parite FR/EN du vocabulaire scientifique, pour
   // que les profils francais et anglais se relient sur les memes concepts
   // (connexions) et se trouvent avec les memes mots (recherche).
-  'telesante': 'telehealth', 'telemedecine': 'telemedicine',
+  'telesante': 'telehealth', 'telemedecine': 'telehealth', 'telemedicine': 'telehealth',
   'teleconsultation': 'teleconsultation', 'teleconsultations': 'teleconsultation',
   'telereadaptation': 'telerehabilitation', 'telesurveillance': 'telemonitoring',
   'neuroimagerie': 'neuroimaging', 'radiologie': 'radiology', 'tomographie': 'tomography',
@@ -479,7 +479,7 @@ Object.assign(DICTIONNAIRE_FR_EN, {
   'students': 'student', 'studies': 'study', 'surveys': 'survey', 'symptom': 'symptoms', 'systems': 'system',
   'teams': 'team', 'technologies': 'technology', 'therapies': 'therapy', 'tools': 'tool',
   'tumors': 'tumor', 'tumour': 'tumor', 'tumours': 'tumor', 'ultrasonography': 'ultrasound',
-  'variants': 'variant', 'women': 'woman', 'workflows': 'workflow',
+  'variants': 'variant', 'women': 'woman', 'workflows': 'workflow', 'pipelines': 'pipeline',
 });
 
 // Expressions de plusieurs mots : le mot à mot ne donne pas le terme anglais consacré
@@ -493,7 +493,9 @@ const EXPRESSIONS = {
   'traitement d\'image': 'image processing', 'traitement d\'images': 'image processing',
   'traitement du signal': 'signal processing', 'traitement de signaux': 'signal processing',
   'traitement de données': 'data processing', 'traitement du langage naturel': 'natural language processing',
-  'chaîne de traitement': 'processing pipeline',
+  'chaîne de traitement': 'processing pipeline', 'chaînes de traitement': 'processing pipeline',
+  'pipeline d\'analyse': 'processing pipeline', 'pipelines d\'analyse': 'processing pipeline', 'pipeline de traitement': 'processing pipeline',
+  'analysis pipeline': 'processing pipeline', 'analysis pipelines': 'processing pipeline', 'processing pipelines': 'processing pipeline',
   'traitement automatique du langage naturel': 'natural language processing', 'traitement automatique des langues': 'natural language processing',
   'traitement des langues naturelles': 'natural language processing', 'taln': 'natural language processing',
   'calcul de haute performance': 'high performance computing', 'calcul haute performance': 'high performance computing',
@@ -518,7 +520,10 @@ const EXPRESSIONS = {
   'définition de cas': 'casedefinition', 'case definition': 'casedefinition',
   // « built » est un mot vide en anglais : un mot inventé garde le sujet distinct de « environnement ».
   'environnement bâti': 'builtenvironment', 'built environment': 'builtenvironment',
-  'vie privée': 'privacy',
+  // Vie privée et protection des renseignements personnels : un seul sujet (« confidentialité » reste à part).
+  'vie privée': 'privacy', 'protection de la vie privée': 'privacy', 'privacy protection': 'privacy',
+  'protection des renseignements personnels': 'privacy', 'personal information protection': 'privacy',
+  'protection of personal information': 'privacy',
   // Imagerie et neurosciences
   'proche infrarouge': 'near infrared',
   'recalage d\'image': 'image registration', 'recalage d\'images': 'image registration',
@@ -531,8 +536,16 @@ const EXPRESSIONS = {
   'radiographie pulmonaire': 'chest x ray', 'radiographie thoracique': 'chest x ray',
   'chest radiograph': 'chest x ray', 'chest radiography': 'chest x ray',
   // Soins et santé
-  'dossier clinique informatisé': 'electronic medical records', 'dossier médical informatisé': 'electronic medical records',
-  'dossiers cliniques informatisés': 'electronic medical records', 'dossiers médicaux informatisés': 'electronic medical records',
+  // Dossier médical électronique (DMÉ), dossier de santé électronique (DSÉ) et dossier clinique informatisé (DCI) :
+  // un seul sujet. « Dossier médical » tout court et « Dossier santé Québec » restent à part.
+  'dossier clinique informatisé': 'electronic health records', 'dossiers cliniques informatisés': 'electronic health records',
+  'dossier médical informatisé': 'electronic health records', 'dossiers médicaux informatisés': 'electronic health records',
+  'dossier médical électronique': 'electronic health records', 'dossiers médicaux électroniques': 'electronic health records',
+  'dossier de santé électronique': 'electronic health records', 'dossiers de santé électroniques': 'electronic health records',
+  'electronic medical record': 'electronic health records', 'electronic medical records': 'electronic health records',
+  'electronic health record': 'electronic health records',
+  'dmé': 'electronic health records', 'dsé': 'electronic health records', 'dci': 'electronic health records',
+  'emr': 'electronic health records', 'ehr': 'electronic health records', 'emrs': 'electronic health records', 'ehrs': 'electronic health records',
   'état de santé': 'health status',
   'système de santé apprenant': 'learning health system', 'systèmes de santé apprenants': 'learning health system',
   'activité physique': 'physical activity', 'activités physiques': 'physical activity', 'santé physique': 'physical health',
@@ -547,6 +560,14 @@ const EXPRESSIONS = {
   'soins fondés sur la valeur': 'value based care',
   'recherche axée sur les pratiques': 'practice based research',
   'mesure rapportée par le patient': 'patient reported outcome measures',
+  'mesures de résultats rapportées par le patient': 'patient reported outcome measures',
+  'mesure de résultats rapportée par le patient': 'patient reported outcome measures',
+  'mesures des résultats déclarés par les patients': 'patient reported outcome measures', 'proms': 'patient reported outcome measures',
+  // Les mesures d'expérience (PREMs) sont un autre sujet.
+  'mesures d\'expérience rapportées par le patient': 'patient reported experience measures',
+  'mesure d\'expérience rapportée par le patient': 'patient reported experience measures',
+  'mesures des expériences déclarées par les patients': 'patient reported experience measures', 'prems': 'patient reported experience measures',
+  'patient reported experience measure': 'patient reported experience measures',
   'mesures rapportées par le patient': 'patient reported outcome measures',
   'patient reported outcome measure': 'patient reported outcome measures',
   'patient reported outcomes': 'patient reported outcome measures',
@@ -566,8 +587,12 @@ const EXPRESSIONS = {
   'proche aidante': 'caregivers', 'proches aidantes': 'caregivers',
   // Vie, société, innovation
   'vie quotidienne': 'daily living', 'petite enfance': 'early childhood',
-  'habitude de vie': 'lifestyle habit', 'habitudes de vie': 'lifestyle habit',
-  'mode de vie': 'lifestyle', 'modes de vie': 'lifestyle',
+  'habitude de vie': 'lifestyle', 'habitudes de vie': 'lifestyle', 'mode de vie': 'lifestyle', 'modes de vie': 'lifestyle',
+  'lifestyle habit': 'lifestyle', 'lifestyle habits': 'lifestyle',
+  'médecine personnalisée': 'precision medicine', 'personalized medicine': 'precision medicine', 'personalised medicine': 'precision medicine',
+  'imagerie de diffusion': 'diffusion mri', 'diffusion imaging': 'diffusion mri',
+  'étude de cohorte': 'cohort', 'études de cohorte': 'cohort', 'études de cohortes': 'cohort', 'cohort study': 'cohort', 'cohort studies': 'cohort',
+  'infectiologie': 'infectious disease',
   'réussite scolaire': 'academic achievement',
   'compétence numérique': 'digital skills', 'compétences numériques': 'digital skills',
   'milieu réel': 'real world', 'milieu clinique': 'clinical setting',
@@ -581,7 +606,7 @@ const EXPRESSIONS = {
   'cim-10': 'icd10', 'icd-10': 'icd10', 'cim-o-3': 'icdo3', 'icd-o-3': 'icdo3',
   'cim-9': 'icd9', 'icd-9': 'icd9', 'cim-11': 'icd11', 'icd-11': 'icd11',
   'cim10': 'icd10', 'cim9': 'icd9', 'cim11': 'icd11', 'cimo3': 'icdo3',
-  // « HL7 FHIR » est une norme à part ; « HL7 v2 » et « HL7 » restent ensemble.
+  // « HL7 FHIR » se dit aussi « FHIR » tout court.
   'hl7 fhir': 'fhir',
   'norme bids': 'bids', 'format bids': 'bids', 'bids standard': 'bids', 'bids format': 'bids',
 };
@@ -605,11 +630,13 @@ const SOUDURES = {
   'e-santé': 'ehealth', 'esanté': 'ehealth', 'e-health': 'ehealth',
   'm-santé': 'mhealth', 'msanté': 'mhealth', 'm-health': 'mhealth',
   'type 1': 'type1', 'type 2': 'type2',
+  // « HL7 » est la famille ; ses versions sont des normes distinctes.
+  'hl7 v2': 'hl7v2', 'hl7 version 2': 'hl7v2', 'hl7 v3': 'hl7v3', 'hl7 version 3': 'hl7v3',
 };
 
-// Sigles de deux lettres, trop courts pour compter comme mots : dans un mot-clé de plusieurs
-// mots, ils valent l'expression qu'ils abrègent (« IA en santé » n'est pas « santé »).
-// Seul, le sigle garde sa propre clé.
+// Sigles de deux lettres, trop courts pour compter comme mots : dans un mot-clé, seuls ou
+// accompagnés, ils valent l'expression qu'ils abrègent (« IA » est « intelligence artificielle »,
+// « IA en santé » n'est pas « santé »). Cela ne touche pas à la recherche en texte libre.
 const SIGLES_DANS_UN_SUJET = { ia: 'artificial intelligence', ai: 'artificial intelligence' };
 
 // Mots de liaison retirés avant de reconnaître une expression : « traitement de l'image »
@@ -633,8 +660,7 @@ const SUJETS_ENTIERS_APLATIS = new Map(Object.entries(SUJETS_ENTIERS).map(([suje
 function remplacerExpressions(texte) {
   const plat = aplatir(texte);
   if (SUJETS_ENTIERS_APLATIS.has(plat)) return SUJETS_ENTIERS_APLATIS.get(plat);
-  const morceaux = plat.split(' ');
-  let t = ` ${morceaux.length > 1 ? morceaux.map((m) => SIGLES_DANS_UN_SUJET[m] || m).join(' ') : plat} `;
+  let t = ` ${plat.split(' ').map((m) => SIGLES_DANS_UN_SUJET[m] || m).join(' ')} `;
   for (const table of [SOUDURES_APLATIES, EXPRESSIONS_APLATIES]) {
     for (const [expression, remplacement] of table) {
       if (t.includes(expression)) t = t.split(expression).join(remplacement);

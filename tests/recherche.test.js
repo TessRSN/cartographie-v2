@@ -76,7 +76,8 @@ test('denombrer regroupe les écritures d\'un même sujet et compte une fiche un
     fiche('B', { motsCles: ['genomique'], porteurs: [{ nom: 'Mila' }, { nom: 'ISQ' }] }),
   ]);
   // « génomique » est dans la table des libellés : c'est son écriture qui s'affiche.
-  assert.deepEqual(sujets.map((s) => [s.sujet, s.nombre]), [['génomique', 2], ['IA', 1]]);
+  // « IA » seul est le sujet « intelligence artificielle » (décision du 2026-11-26).
+  assert.deepEqual(sujets.map((s) => [s.sujet, s.nombre]), [['génomique', 2], ['intelligence artificielle', 1]]);
   assert.deepEqual(porteurs.map((p) => [p.nom, p.nombre]), [['Mila', 2], ['ISQ', 1]]);
 });
 
@@ -121,7 +122,8 @@ test('suggestions : sujets, porteurs, puis ressources dont un mot du nom commenc
 
 test('suggestions : deux ou trois lettres ne proposent que des débuts de mot', () => {
   const liste = [fiche('A', { motsCles: ['IA', 'déterminants sociaux'], porteurs: [{ nom: 'Institut familial' }] })];
-  assert.deepEqual(suggestions(liste, 'ia').map((x) => x.libelle), ['IA']);
+  // Le sujet écrit « IA » est proposé sous son libellé ; « déterminants sociaux » ne l'est pas.
+  assert.deepEqual(suggestions(liste, 'ia').map((x) => x.libelle), ['intelligence artificielle']);
 });
 
 test('la recherche lit aussi les normes et les outils d\'une fiche', () => {
@@ -291,7 +293,7 @@ test('classement : le nom d\'abord, puis les fiches qui portent le sujet, puis l
   const docs = documents(liste);
   assert.deepEqual(noms(chercher(docs, 'biobanque')), ['Biobanque de l\'Institut', 'Registre A', 'Registre B', 'Texte', 'Autre']);
   assert.deepEqual(noms(chercher(docs, 'biobank')), ['Autre', 'Registre B', 'Registre A', 'Texte', 'Biobanque de l\'Institut']);
-  assert.deepEqual(noms(chercher(docs, 'cohorte')), ['CARTaGENE', 'Autre', 'Texte', 'Registre B']);
+  assert.deepEqual(noms(chercher(docs, 'cohorte')), ['CARTaGENE', 'Registre B', 'Autre', 'Texte']);
   // Avec la recherche floue : son ordre est gardé dans chaque groupe.
   const floue = (forme) => (forme === 'biobanque' ? [{ item: docs[1], score: 0.01 }, { item: docs[3], score: 0.2 }, { item: docs[0], score: 0.3 }] : []);
   assert.deepEqual(noms(chercher(docs, 'biobanque', floue)), ['Biobanque de l\'Institut', 'Registre A', 'Registre B', 'Texte', 'Autre']);

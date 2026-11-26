@@ -166,35 +166,28 @@ const MEMES_SUJETS_EN_FRANCAIS = [
   ['données sensibles', 'donnée sensible'],
   ['norme bids', 'BIDS'],
   ['fhir', 'HL7 FHIR'],
-  ['HL7 v2', 'HL7'],
 ];
 
 // Mots-clés et normes réels qui se ressemblent sans être le même sujet.
 const SUJETS_DIFFERENTS = [
   ['télésanté', 'téléconsultation'],
-  ['télésanté', 'télémédecine'],
   ['télésurveillance', 'surveillance'],
   ['CIM-10', 'CIM-O-3'],
+  ['HL7', 'HL7 v2'],
   ['HL7', 'HL7 FHIR'],
   ['HL7 v2', 'HL7 FHIR'],
+  ['HL7 v2', 'HL7 v3'],
   ['vie privée', 'confidentialité'],
-  ['protection de la vie privée', 'protection des renseignements personnels'],
-  ['habitude de vie', 'mode de vie'],
-  ['médecine de précision', 'médecine personnalisée'],
-  ['cohorte', 'étude de cohorte'],
   ['traumatisme', 'traumatologie'],
-  ['infectiologie', 'maladie infectieuse'],
   ['environnement', 'environnement bâti'],
   ['données de recherche', 'gestion des données de recherche'],
   ['gestion des données', 'gestion des données de recherche'],
   ['neuro-imagerie', 'neuro-imagerie fonctionnelle'],
   ['neuro-imagerie', 'imagerie cérébrale'],
   ['irm', 'irm fonctionnelle'],
-  ['irm de diffusion', 'imagerie de diffusion'],
   ['épigénétique', 'épigénomique'],
   ['génétique', 'génomique'],
   ['dossier médical', 'dossier clinique informatisé'],
-  ['dossier de santé électronique', 'dossier clinique informatisé'],
   ['soins de première ligne', 'médecine de famille'],
   ['urgence', 'médecine d\'urgence'],
   ['urgence', 'urgence psychiatrique'],
@@ -209,7 +202,6 @@ const SUJETS_DIFFERENTS = [
   ['santé mentale', 'santé mentale périnatale'],
   ['maladie neurodégénérative', 'neurodégénérescence'],
   ['démence', 'maladie d\'alzheimer'],
-  ['chaîne de traitement', 'pipeline d\'analyse'],
   ['chaîne de traitement', 'flux de travail'],
   ['proche aidance', 'communication patient-soignant'],
   ['science des données', 'science ouverte'],
@@ -243,7 +235,8 @@ test('mots-clés : la clé ne dépend ni des majuscules, ni des accents, ni des 
   assert.equal(cleMotCle('Sante Publique'), cleMotCle('santé publique'));
   assert.equal(cleMotCle('de'), null);
   assert.equal(cleMotCle(''), null);
-  assert.equal(cleMotCle('IA'), 'ia', 'un sigle court garde sa forme');
+  assert.equal(cleMotCle('ATC'), 'atc', 'un sigle court garde sa forme');
+  assert.equal(cleMotCle('CT'), 'ct');
 });
 
 test('dictionnaire : aucune clé écrite deux fois dans une même table', () => {
@@ -350,12 +343,11 @@ test('le gabarit charge la table des libellés avant les scripts qui s\'en serve
 
 // ─── Relecture : fusions rétablies, fusions manquées, clés dégénérées, chevauchements ───
 
-test('fusions de main rétablies : déficience cognitive, soins d\'urgence, HL7', () => {
+test('fusions de main rétablies : déficience cognitive, soins d\'urgence', () => {
   assert.equal(cleMotCle('déficience cognitive'), cleMotCle('cognitive impairment'));
   assert.equal(cleMotCle('trouble cognitif'), cleMotCle('cognitive impairment'));
   assert.equal(cleMotCle('soins d\'urgence'), cleMotCle('emergency care'));
   assert.notEqual(cleMotCle('soins d\'urgence'), cleMotCle('urgences'));
-  assert.equal(cleMotCle('HL7'), cleMotCle('HL7 v2'));
   assert.notEqual(cleMotCle('HL7'), cleMotCle('HL7 FHIR'));
   assert.equal(cleMotCle('fhir'), cleMotCle('HL7 FHIR'));
 });
@@ -398,9 +390,8 @@ test('autres paires français/anglais relevées à la relecture', () => {
   }
 });
 
-test('un sigle seul garde sa clé ; dans un mot-clé, « IA » et « AI » valent « intelligence artificielle »', () => {
-  assert.equal(cleMotCle('IA'), 'ia');
-  assert.equal(cleMotCle('AI'), 'ai');
+test('« IA », « AI », « intelligence artificielle » et « artificial intelligence » sont un seul sujet, même le sigle seul', () => {
+  for (const ecriture of ['IA', 'ia', 'AI', 'artificial intelligence']) assert.equal(cleMotCle(ecriture), cleMotCle('intelligence artificielle'), ecriture);
   assert.equal(canoniser('ia'), null, 'canoniser ne change pas');
   assert.notEqual(cleMotCle('IA en santé'), cleMotCle('santé'));
   assert.notEqual(cleMotCle('IA générative'), cleMotCle('IA responsable'));
@@ -495,7 +486,16 @@ const FUSIONS_VOULUES = [
   ['donnée sensible', 'données sensibles'],
   ['norme bids', 'BIDS'],
   ['fhir', 'HL7 FHIR'],
-  ['HL7 v2', 'HL7'],
+  // Regroupements décidés par la responsable du projet, après recherche terminologique.
+  ['médecine de précision', 'médecine personnalisée'],
+  ['habitude de vie', 'mode de vie'],
+  ['chaîne de traitement', 'pipeline d\'analyse'],
+  ['irm de diffusion', 'imagerie de diffusion'],
+  ['cohorte', 'étude de cohorte'],
+  ['infectiologie', 'maladie infectieuse'],
+  ['télésanté', 'télémédecine'],
+  ['vie privée', 'protection de la vie privée', 'protection des renseignements personnels'],
+  ['dossier de santé électronique', 'dossier clinique informatisé'],
 ];
 
 test('mots-clés réels : aucune clé vide, et seules les fusions voulues partagent une clé', () => {
@@ -519,7 +519,7 @@ test('mots-clés réels : un mot-clé de plusieurs mots ne tombe pas sur la clé
   const unMot = (ecriture) => !/[^a-z0-9]/.test(require('../public/js/mots-cles.js').plier(ecriture).trim());
   const tous = REELS.motsCles.concat(REELS.normes);
   const clesSimples = new Map(tous.filter(unMot).map((e) => [cleMotCle(e), e]));
-  const permis = new Set(['imagerie par résonance magnétique', 'neuro-imagerie', 'norme bids', 'HL7 FHIR', 'HL7 v2']);
+  const permis = new Set(['imagerie par résonance magnétique', 'neuro-imagerie', 'norme bids', 'HL7 FHIR', 'étude de cohorte', 'maladie infectieuse', 'protection de la vie privée', 'protection des renseignements personnels', 'vie privée']);
   for (const ecriture of tous.filter((e) => !unMot(e) && !permis.has(e))) {
     assert.ok(!clesSimples.has(cleMotCle(ecriture)), `« ${ecriture} » se réduit à « ${clesSimples.get(cleMotCle(ecriture))} »`);
   }
@@ -528,7 +528,7 @@ test('mots-clés réels : un mot-clé de plusieurs mots ne tombe pas sur la clé
 test('libellés revus : « trauma care », « biomarker » au singulier', () => {
   assert.equal(LIBELLES_SUJETS[cleMotCle('traumatologie')].en, 'trauma care');
   assert.equal(LIBELLES_SUJETS[cleMotCle('biomarqueur')].en, 'biomarker');
-  assert.deepEqual(LIBELLES_SUJETS[cleMotCle('HL7')], { fr: 'HL7', en: 'HL7' });
+  assert.equal(LIBELLES_SUJETS[cleMotCle('HL7')], undefined, '« HL7 » et « HL7 v2 » : une fiche chacun, hors de la table');
   assert.equal(LIBELLES_SUJETS[cleMotCle('urgences')].en, 'emergency department');
 });
 
@@ -544,4 +544,64 @@ test('le cache des clés est borné : chaque saisie de la recherche y passe', ()
   for (let i = 0; i < CLES_GARDEES * 2 + 10; i++) cleMotCle(`saisie numéro ${i}`);
   assert.ok(clesConnues.size <= CLES_GARDEES, `${clesConnues.size} clés gardées`);
   assert.equal(cleMotCle('apprentissage automatique'), cleMotCle('machine learning'), 'les clés restent justes une fois le cache vidé');
+});
+
+// ─── Regroupements décidés par la responsable du projet (recherche terminologique du 2026-11-26) ───
+
+const GROUPES_DECIDES = [
+  ['médecine de précision', 'médecine personnalisée', 'precision medicine', 'personalized medicine', 'personalised medicine'],
+  ['habitude de vie', 'habitudes de vie', 'mode de vie', 'lifestyle', 'lifestyle habits'],
+  ['chaîne de traitement', 'pipeline d\'analyse', 'pipeline de traitement', 'processing pipeline', 'analysis pipeline'],
+  ['irm de diffusion', 'imagerie de diffusion', 'diffusion MRI', 'diffusion imaging'],
+  ['apprentissage automatique', 'apprentissage machine', 'machine learning'],
+  ['cohorte', 'étude de cohorte', 'cohort', 'cohort study', 'cohortes', 'cohort studies'],
+  ['données massives', 'mégadonnées', 'big data'],
+  ['infectiologie', 'maladie infectieuse', 'maladies infectieuses', 'infectious diseases', 'infectious disease'],
+  ['télésanté', 'télémédecine', 'telehealth', 'telemedicine'],
+  ['vie privée', 'protection de la vie privée', 'protection des renseignements personnels', 'privacy', 'privacy protection', 'personal information protection'],
+  ['dossier clinique informatisé', 'dossiers cliniques informatisés', 'dossier médical électronique', 'dossiers médicaux électroniques',
+    'dossier de santé électronique', 'dossiers de santé électroniques', 'DMÉ', 'DSÉ', 'DCI',
+    'electronic medical record', 'electronic medical records', 'electronic health record', 'electronic health records', 'EMR', 'EHR'],
+  ['urgence', 'urgences', 'emergency department'],
+  ['mesures rapportées par le patient', 'mesures de résultats rapportées par le patient', 'patient-reported outcome measures', 'PROMs'],
+  ['mesures d\'expérience rapportées par le patient', 'patient-reported experience measures', 'PREMs'],
+];
+
+test('regroupements décidés : chaque groupe a une seule clé, en français et en anglais', () => {
+  for (const [premier, ...autres] of GROUPES_DECIDES) {
+    assert.ok(cleMotCle(premier), premier);
+    for (const autre of autres) assert.equal(cleMotCle(autre), cleMotCle(premier), `« ${autre} » et « ${premier} »`);
+  }
+  assert.equal(new Set(GROUPES_DECIDES.map(([premier]) => cleMotCle(premier))).size, GROUPES_DECIDES.length, 'deux groupes ne se confondent pas');
+});
+
+test('regroupements décidés : ce qui reste à part', () => {
+  const differents = [
+    ['télésanté', 'téléconsultation'], ['vie privée', 'confidentialité'], ['protection de la vie privée', 'confidentialité'],
+    ['irm de diffusion', 'tenseur de diffusion'], ['irm de diffusion', 'imagerie du tenseur de diffusion'], ['irm de diffusion', 'tractographie'],
+    ['dossier clinique informatisé', 'dossier médical'], ['dossier clinique informatisé', 'Dossier santé Québec'], ['dossier de santé électronique', 'DSQ'],
+    ['urgences', 'soins d\'urgence'], ['urgences', 'médecine d\'urgence'], ['soins d\'urgence', 'médecine d\'urgence'],
+    ['santé publique', 'santé des populations'], ['biobanque', 'biobanque populationnelle'],
+    ['mesures rapportées par le patient', 'mesures d\'expérience rapportées par le patient'], ['PROMs', 'PREMs'],
+    ['HL7', 'HL7 v2'], ['HL7 v2', 'HL7 FHIR'], ['cohorte', 'découverte de cohortes'], ['vie privée', 'données personnelles'],
+    ['habitude de vie', 'habitude alimentaire'], ['médecine de précision', 'médecine'],
+  ];
+  for (const [a, b] of differents) {
+    assert.ok(cleMotCle(a) && cleMotCle(b), `« ${a} » et « ${b} » ont une clé`);
+    assert.notEqual(cleMotCle(a), cleMotCle(b), `« ${a} » et « ${b} »`);
+  }
+});
+
+test('regroupements décidés : libellés de la table', () => {
+  const libelle = (ecriture) => LIBELLES_SUJETS[cleMotCle(ecriture)];
+  assert.equal(libelle('mode de vie').en, 'lifestyle habits');
+  assert.equal(libelle('pipeline d\'analyse').en, 'processing pipeline');
+  assert.equal(libelle('vie privée').en, 'privacy');
+  assert.equal(libelle('dossier médical électronique').en, 'electronic health record');
+  assert.equal(libelle('urgence').en, 'emergency department');
+  assert.equal(libelle('IA').fr, 'intelligence artificielle');
+  for (const [ecriture, en] of [['pneumologie', 'respirology'], ['périnatalité', 'perinatal health'], ['mesures rapportées par le patient', 'patient-reported outcome measures'],
+    ['processeur graphique', 'graphics processing unit'], ['partenariat patient', 'patient partnership'], ['CCI', 'CCI'], ['données hospitalières', 'hospital data'],
+    ['traumatologie', 'trauma care'], ['vieillissement', 'aging'], ['neuro-imagerie', 'neuroimaging']]) assert.equal(libelle(ecriture).en, en);
+  assert.equal(cleMotCle('pulmonology'), cleMotCle('pneumologie'));
 });
