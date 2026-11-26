@@ -16,12 +16,12 @@ const ECRITURES = {
   'essai-courriel': { id: 'approuvee' },
   'mode-essai': { actif: false, confirme: true },
 };
-// « adresseEssai » ne sort que pour l'Administration (tests/adresse-essai.test.js le prouve pour
-// les autres rôles) : ici, tout le reste de chaque réponse est vérifié.
+// « adresseEssai » ne sort que pour l'Administration : il n'est écarté de la vérification que pour
+// une demande faite par elle. Pour toute autre demande, la réponse entière est vérifiée.
 const sansSecret = (b) => {
-  for (const { action, res } of b.vues) {
+  for (const { action, res, par } of b.vues) {
     const { adresseEssai, ...reste } = res.corps || {};
-    const brut = JSON.stringify(reste) + JSON.stringify(res.entetes);
+    const brut = JSON.stringify(par === TESS ? reste : (res.corps || {})) + JSON.stringify(res.entetes);
     for (const interdit of SECRETS) assert.ok(!brut.includes(interdit), `${action} : ${interdit}`);
   }
 };
@@ -459,9 +459,10 @@ test('la page : couper le mode d\'essai passe par une confirmation qui dit que l
   const CO = require('../public/js/texte.js').TEXTES.panneau.courriels;
   assert.match(CO.essai.question, /vraies personnes/);
   assert.match(source, /CO\.essai\.question/);
-  // « confirme: true » ne part que du bouton de la confirmation.
-  assert.equal((source.match(/confirme: true/g) || []).length, 1);
+  // « confirme: true » ne part que des boutons de confirmation : couper le mode d'essai, et changer l'adresse d'essai.
+  assert.equal((source.match(/confirme: true/g) || []).length, 2);
   assert.match(source, /act === 'c-couper-essai'[^\n]*confirme: true/);
+  assert.match(source, /act === 'c-confirmer-adresse' && co\.confirmation === 'adresse'/);
   // Sans la base « Réglages », l'écran dit pourquoi rien ne se modifie.
   assert.match(CO.sansBase, /Réglages/);
   assert.match(source, /CO\.sansBase/);

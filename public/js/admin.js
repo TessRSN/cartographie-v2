@@ -2110,7 +2110,14 @@ function blocAdresseEssai() {
   return `<label class="f" for="essaiAdresse">${e(A.libelle)}<input type="email" id="essaiAdresse" maxlength="254" value="${e(saisieAdresseEssai(x))}" placeholder="${e(A.exemple)}" autocomplete="off"${co.erreurs.adresse ? ' aria-invalid="true"' : ''}${m ? '' : ' readonly'}></label>${co.erreurs.adresse ? `<span class="err" role="alert">${e(co.erreurs.adresse)}</span>` : ''}
     ${x.ecartee ? `<div class="note warn">${e(A.ecartee)}</div>` : ''}
     <p class="muted small">${e(enVigueur)}${m ? ` ${e(A.aide)}` : ''}</p>
-    ${m ? `<div class="row"><button type="button" class="btn sm" data-act="c-adresse"${co.enCours ? ' disabled' : ''}>${e(co.enCours === 'adresse' ? T.enCours : A.enregistrer)}</button></div>` : ''}`;
+    ${m ? `<div class="row"><button type="button" class="btn sm" data-act="c-adresse"${co.enCours ? ' disabled' : ''}>${e(co.enCours === 'adresse' ? T.enCours : A.enregistrer)}</button></div>` : ''}${m ? confirmationAdresseEssai() : ''}`;
+}
+// La question posée avant d'enregistrer l'adresse d'essai : elle répète l'adresse saisie, ou dit qu'elle est retirée.
+function confirmationAdresseEssai() {
+  const co = etat.co; const A = CO.adresse;
+  if (co.confirmation !== 'adresse' || typeof co.adresseAConfirmer !== 'string') return '';
+  const adresse = co.adresseAConfirmer.trim(); const fige = co.enCours ? ' disabled' : '';
+  return `<div class="confirm" id="confirmationAdresse"><span>${e(adresse ? A.question(adresse) : A.questionRetrait)}</span><button type="button" class="btn sm" data-act="c-annuler"${fige}>${e(T.annuler)}</button><button type="button" class="btn sm danger" data-act="c-confirmer-adresse"${fige}>${e(co.enCours ? T.enCours : adresse ? A.confirmer : A.confirmerRetrait)}</button></div>`;
 }
 function blocEssai() {
   const d = etat.courriels; const x = d.essai; const co = etat.co; const fige = co.enCours ? ' disabled' : '';
@@ -2216,6 +2223,8 @@ function saisirCourriel(cible) {
 function saisirAdresseEssai(cible) {
   if (!modifiable() || !etat.courriels.adresseEssai) return;
   etat.co.adresse = cible.value;
+  // La question posée valait pour l'adresse d'avant : elle est retirée, il faudra la reposer.
+  if (etat.co.confirmation === 'adresse') { etat.co.confirmation = null; etat.co.adresseAConfirmer = null; const question = $('#confirmationAdresse'); if (question) question.remove(); }
   if (etat.co.erreurs.adresse) {
     delete etat.co.erreurs.adresse; cible.removeAttribute('aria-invalid');
     const etiquette = cible.closest('label'); const suivant = etiquette && etiquette.nextElementSibling;
@@ -2286,11 +2295,22 @@ function gesteEcranCourriels(act, cible) {
       (d) => message(d.simule ? CO.essaiSimule : CO.essaiEnvoye(etat.moi.courriel)));
   }
   if (!modifiable()) return undefined;
-  // L'adresse d'essai : ce qui est écrit dans le champ, avec la date que l'écran avait lue. Le serveur vérifie tout.
+  // L'adresse d'essai : « Enregistrer » pose d'abord la question, qui répète l'adresse saisie. Tous les
+  // courriels iront à elle en mode d'essai, liens d'entrée au panneau compris : pas d'enregistrement en un clic.
   if (act === 'c-adresse') {
     const x = etat.courriels.adresseEssai;
     if (!x) return undefined;
-    return gesteCourriels('adresse', 'adresse-essai', { adresse: saisieAdresseEssai(x), vu: x.vu || null },
+    co.confirmation = 'adresse'; co.adresseAConfirmer = saisieAdresseEssai(x); redessinerCourriels();
+    const zone = $('#confirmationAdresse');
+    // Le focus va sur « Annuler » : ce geste ne doit pas partir d'une touche Entrée de trop.
+    if (zone) { zone.scrollIntoView({ block: 'center' }); const non = zone.querySelector('[data-act="c-annuler"]'); if (non) non.focus(); }
+    return undefined;
+  }
+  // Ne part que d'ici, après la question : ce qui a été montré, avec la date que l'écran avait lue. Le serveur vérifie tout.
+  if (act === 'c-confirmer-adresse' && co.confirmation === 'adresse') {
+    const x = etat.courriels.adresseEssai;
+    if (!x || typeof co.adresseAConfirmer !== 'string' || co.adresseAConfirmer !== saisieAdresseEssai(x)) { co.confirmation = null; co.adresseAConfirmer = null; return redessinerCourriels(); }
+    return gesteCourriels('adresse', 'adresse-essai', { adresse: co.adresseAConfirmer, vu: x.vu || null, confirme: true },
       (d) => { poserAdresseEssai(d); message(d.inchange ? CO.adresse.inchange : d.retiree ? CO.adresse.retiree : CO.adresse.enregistree); });
   }
   // Couper le mode d'essai ne part que d'ici, après la confirmation affichée.

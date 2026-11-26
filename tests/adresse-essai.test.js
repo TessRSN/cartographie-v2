@@ -130,7 +130,7 @@ test('aucune autre réponse du panneau ne porte l\'adresse d\'essai, pour aucun 
 
 test('adresse-essai : l\'Administration l\'enregistre, normalisée ; le journal le note sans l\'adresse ; les envois suivent', async () => {
   const b = banc({ reglages: { modeEssai: true } });
-  const res = await b.envoyer('adresse-essai', { adresse: `  ${DU_PANNEAU.toUpperCase()} `, vu: null });
+  const res = await b.envoyer('adresse-essai', { adresse: `  ${DU_PANNEAU.toUpperCase()} `, vu: null, confirme: true });
   assert.equal(res.code, 200);
   assert.deepEqual(Object.keys(res.corps).sort(), ['adresseDefinie', 'adresseEssai', 'ok']);
   assert.deepEqual([res.corps.ok, res.corps.adresseDefinie, res.corps.adresseEssai.adresse, res.corps.adresseEssai.source, res.corps.adresseEssai.modifiePar], [true, true, DU_PANNEAU, 'panneau', 'Tess Berthier']);
@@ -142,7 +142,7 @@ test('adresse-essai : l\'Administration l\'enregistre, normalisée ; le journal 
   assert.deepEqual(b.envois.at(-1).to, [DU_PANNEAU]);
   // La même adresse de nouveau : rien n'est écrit, rien n'est noté.
   const avant = b.ecritures();
-  const encore = await b.envoyer('adresse-essai', { adresse: DU_PANNEAU, vu: res.corps.adresseEssai.vu });
+  const encore = await b.envoyer('adresse-essai', { adresse: DU_PANNEAU, vu: res.corps.adresseEssai.vu, confirme: true });
   assert.deepEqual([encore.code, encore.corps.ok, encore.corps.inchange], [200, true, true]);
   assert.equal(b.ecritures(), avant);
   assert.equal(b.journalEcrit().length, 1);
@@ -152,7 +152,7 @@ test('adresse-essai : l\'Administration l\'enregistre, normalisée ; le journal 
 
 test('adresse-essai : vider le champ retire le réglage et rend la main à la variable de l\'hébergeur', async () => {
   const b = banc({ reglages: { modeEssai: true, adresseEssai: DU_PANNEAU } });
-  const res = await b.envoyer('adresse-essai', { adresse: '   ', vu: '2026-11-20T10:00:00.000Z' });
+  const res = await b.envoyer('adresse-essai', { adresse: '   ', vu: '2026-11-20T10:00:00.000Z', confirme: true });
   assert.deepEqual([res.code, res.corps.ok, res.corps.retiree, res.corps.adresseDefinie], [200, true, true, true]);
   assert.deepEqual(res.corps.adresseEssai, { adresse: ADRESSE_ESSAI, source: 'vercel', ecartee: false, modifieLe: null, modifiePar: null, vu: null });
   assert.ok(!Object.hasOwn(b.reglagesEcrits(), 'adresseEssai'));
@@ -160,12 +160,12 @@ test('adresse-essai : vider le champ retire le réglage et rend la main à la va
   await b.courriels.propositionRecue({ a: VRAIE, titre: 'Nouvelle : X' });
   assert.deepEqual(b.envois.at(-1).to, [ADRESSE_ESSAI]);
   // Rien à retirer : rien n'est noté.
-  const encore = await b.envoyer('adresse-essai', { adresse: '' });
+  const encore = await b.envoyer('adresse-essai', { adresse: '', vu: null, confirme: true });
   assert.deepEqual([encore.code, encore.corps.inchange], [200, true]);
   assert.equal(b.journalEcrit().length, 1);
   // Retirée sans variable chez l'hébergeur : plus aucune adresse, et en mode d'essai rien ne part.
   const sans = banc({ reglages: { modeEssai: true, adresseEssai: DU_PANNEAU }, env: { EMAIL_TEST_RECIPIENT: '' } });
-  const retrait = await sans.envoyer('adresse-essai', { adresse: '' });
+  const retrait = await sans.envoyer('adresse-essai', { adresse: '', vu: '2026-11-20T10:00:00.000Z', confirme: true });
   assert.deepEqual([retrait.corps.adresseDefinie, retrait.corps.adresseEssai.adresse], [false, null]);
   assert.deepEqual(await sans.courriels.propositionRecue({ a: VRAIE, titre: 'Nouvelle : X' }), { envoye: false });
   assert.equal(sans.envois.length, 0);
@@ -174,12 +174,12 @@ test('adresse-essai : vider le champ retire le réglage et rend la main à la va
 test('adresse-essai : une adresse invalide est refusée avec son erreur, un corps mal formé est illisible, et rien n\'est écrit', async () => {
   const b = banc({ reglages: { adresseEssai: DU_PANNEAU } });
   for (const adresse of ['pas une adresse', 'a@b', 'a@b.ca, c@d.ca', 'Tess <a@b.ca>', `${'a'.repeat(250)}@b.ca`]) {
-    const res = await b.envoyer('adresse-essai', { adresse });
+    const res = await b.envoyer('adresse-essai', { adresse, vu: '2026-11-20T10:00:00.000Z', confirme: true });
     assert.deepEqual([res.code, res.corps.code], [400, 'invalide'], adresse.slice(0, 30));
     assert.match(res.corps.erreurs.adresse, /adresse/);
   }
   for (const corps of [{}, { adresse: 12 }, { adresse: null }, { adresse: ['a@b.ca'] }, { adresse: 'a'.repeat(401) }, { adresse: 'a@b.ca', vu: 12 }, { adresse: 'a@b.ca', vu: 'x'.repeat(41) }, { adresse: 'a@b.ca', vu: {} }]) {
-    assert.deepEqual([(await b.envoyer('adresse-essai', corps)).code], [400], JSON.stringify(corps).slice(0, 40));
+    assert.deepEqual([(await b.envoyer('adresse-essai', { ...corps, confirme: true })).code], [400], JSON.stringify(corps).slice(0, 40));
   }
   assert.equal(b.ecritures(), 0);
   assert.deepEqual(b.journalEcrit(), []);
@@ -192,7 +192,7 @@ test('adresse-essai : réservée à l\'Administration, dans la table de la route
   assert.match(route, /\* +POST +adresse-essai\b/);
   for (const qui of [MAX, LEA]) {
     const b = banc({ reglages: { adresseEssai: DU_PANNEAU } });
-    const res = await b.envoyer('adresse-essai', { adresse: 'pirate@exemple.org' }, qui);
+    const res = await b.envoyer('adresse-essai', { adresse: 'pirate@exemple.org', vu: '2026-11-20T10:00:00.000Z', confirme: true }, qui);
     assert.deepEqual([res.code, res.corps.code], [403, 'role'], qui);
     assert.equal(b.ecritures(), 0);
     assert.deepEqual(b.journalEcrit(), []);
@@ -200,14 +200,14 @@ test('adresse-essai : réservée à l\'Administration, dans la table de la route
   // Le module relit le rôle lui-même : la route n'est pas la seule garde.
   const b = banc({ reglages: { adresseEssai: DU_PANNEAU } });
   for (const par of [MAX, LEA, ODILE, 'inconnue@exemple.org', '', null, undefined]) {
-    assert.deepEqual(await b.courriels.reglerAdresseEssai({ adresse: 'pirate@exemple.org', par }), { ok: false, code: 'role' }, String(par));
-    assert.deepEqual(await b.courriels.reglerAdresseEssai({ adresse: '', par }), { ok: false, code: 'role' }, String(par));
+    assert.deepEqual(await b.courriels.reglerAdresseEssai({ adresse: 'pirate@exemple.org', vu: '2026-11-20T10:00:00.000Z', par }), { ok: false, code: 'role' }, String(par));
+    assert.deepEqual(await b.courriels.reglerAdresseEssai({ adresse: '', vu: '2026-11-20T10:00:00.000Z', par }), { ok: false, code: 'role' }, String(par));
     assert.deepEqual(await b.courriels.adresseEssaiPour({ par }), { ok: false, code: 'role' }, String(par));
   }
   assert.equal(b.ecritures(), 0);
   // Un module assemblé sans de quoi relire les rôles refuse tout.
   const sansRoles = creerCourriels({ env: b.env, journal: () => {}, reglages: b.socle });
-  assert.deepEqual(await sansRoles.reglerAdresseEssai({ adresse: 'a@b.ca', par: TESS }), { ok: false, code: 'role' });
+  assert.deepEqual(await sansRoles.reglerAdresseEssai({ adresse: 'a@b.ca', vu: '2026-11-20T10:00:00.000Z', par: TESS }), { ok: false, code: 'role' });
   assert.deepEqual(await sansRoles.adresseEssaiPour({ par: TESS }), { ok: false, code: 'role' });
   assert.equal(b.ecritures(), 0);
   const assemblage = fs.readFileSync(path.join(__dirname, '..', 'lib', 'contributions.js'), 'utf8');
@@ -216,7 +216,7 @@ test('adresse-essai : réservée à l\'Administration, dans la table de la route
 
 test('adresse-essai : session, origine et méthode vérifiées comme pour les autres écritures', async () => {
   const b = banc();
-  const corps = { adresse: 'pirate@exemple.org' };
+  const corps = { adresse: 'pirate@exemple.org', vu: null, confirme: true };
   for (const cookie of [temoin(ODILE), temoin('intrus@exemple.org'), null]) {
     const res = await b.appeler(requete('POST', 'adresse-essai', { body: corps, cookie }));
     assert.deepEqual([res.code, res.corps.code], [401, 'session']);
@@ -232,23 +232,23 @@ test('adresse-essai : un écran resté ouvert n\'écrase pas le changement d\'un
   const b = banc({ reglages: { adresseEssai: DU_PANNEAU } });
   // L'écran avait lu « aucun réglage » ; entre-temps une autre personne en a enregistré un.
   for (const vu of [null, '2026-11-01T10:00:00.000Z']) {
-    const res = await b.envoyer('adresse-essai', { adresse: 'autre@exemple.org', vu });
+    const res = await b.envoyer('adresse-essai', { adresse: 'autre@exemple.org', vu, confirme: true });
     assert.deepEqual([res.code, res.corps], [409, { code: 'conflit' }], String(vu));
-    const retrait = await b.envoyer('adresse-essai', { adresse: '', vu });
+    const retrait = await b.envoyer('adresse-essai', { adresse: '', vu, confirme: true });
     assert.deepEqual([retrait.code, retrait.corps], [409, { code: 'conflit' }], String(vu));
   }
   assert.equal(b.ecritures(), 0);
   assert.deepEqual(b.journalEcrit(), []);
-  assert.equal((await b.envoyer('adresse-essai', { adresse: 'autre@exemple.org', vu: '2026-11-20T10:00:00.000Z' })).code, 200);
+  assert.equal((await b.envoyer('adresse-essai', { adresse: 'autre@exemple.org', vu: '2026-11-20T10:00:00.000Z', confirme: true })).code, 200);
   assert.equal(b.reglagesEcrits().adresseEssai, 'autre@exemple.org');
   const sansBase = banc({ sansBase: true });
   for (const adresse of ['a@b.ca', '']) {
-    const res = await sansBase.envoyer('adresse-essai', { adresse });
+    const res = await sansBase.envoyer('adresse-essai', { adresse, vu: null, confirme: true });
     assert.deepEqual([res.code, res.corps.code], [409, 'reglages-absents']);
   }
   // La base ne répond pas : on n'écrit pas par-dessus ce qu'on ne peut pas lire.
   const panne = banc({ pannesNotion: { 'databases.query': (a) => a.database_id === 'base-reglages' } });
-  const res = await panne.envoyer('adresse-essai', { adresse: 'a@b.ca' });
+  const res = await panne.envoyer('adresse-essai', { adresse: 'a@b.ca', vu: null, confirme: true });
   assert.deepEqual([res.code, res.corps.code], [502, 'notion']);
   assert.equal(panne.ecritures(), 0);
 });
@@ -366,6 +366,7 @@ test('écran Courriels, Lecture seule ou Approbation : pas de champ, pas d\'adre
     assert.ok(html.includes(CO.essai.adresseDefinie), role);
     await p.saisir('essaiAdresse', 'pirate@exemple.org');
     await p.cliquer('c-adresse');
+    await p.cliquer('c-confirmer-adresse');
     assert.ok(!p.appels.some((a) => a.action === 'adresse-essai'), role);
     const sans = await page({ role, reponses: { courriels: () => ({ code: 200, donnees: { ...vue, essai: { ...vue.essai, adresseDefinie: false } } }) } });
     assert.ok(sans.html('#cbody').includes(CO.essai.sansAdresse(true)), role);
@@ -377,32 +378,34 @@ test('écran Courriels : enregistrer l\'adresse envoie la saisie et la date vue 
   let lectures = 0;
   let reponse = (corps) => ({ code: 200, donnees: { ok: true, adresseDefinie: true, adresseEssai: { ...VUE_ADRESSE, adresse: corps.adresse.trim(), modifieLe: '2026-11-26T15:00:00.000Z', vu: '2026-11-26T15:00:00.000Z' } } });
   const p = await page({ reponses: { courriels: () => { lectures += 1; return { code: 200, donnees: vue }; }, 'adresse-essai': (corps) => reponse(corps) } });
+  // Chaque enregistrement passe par la question, puis par le oui (tests/relecture-essai-resume.test.js).
+  const enregistrer = async (q) => { await q.cliquer('c-adresse'); await q.cliquer('c-confirmer-adresse'); };
   await p.saisir('essaiAdresse', ' nouvelle@exemple.org ');
-  await p.cliquer('c-adresse');
-  assert.deepEqual(p.appels.find((a) => a.action === 'adresse-essai').corps, { adresse: ' nouvelle@exemple.org ', vu: '2026-11-20T10:00:00.000Z' });
+  await enregistrer(p);
+  assert.deepEqual(p.appels.find((a) => a.action === 'adresse-essai').corps, { adresse: ' nouvelle@exemple.org ', vu: '2026-11-20T10:00:00.000Z', confirme: true });
   assert.equal(p.toast(), CO.adresse.enregistree);
   assert.match(p.html('#cbody'), /id="essaiAdresse"[^>]*value="nouvelle@exemple.org"/);
   // L'envoi suivant porte la date que le serveur vient de rendre.
   reponse = () => ({ code: 400, donnees: { code: 'invalide', erreurs: { adresse: 'Écrivez une seule adresse courriel.' } } });
   await p.saisir('essaiAdresse', 'pas une adresse');
-  await p.cliquer('c-adresse');
+  await enregistrer(p);
   assert.equal(p.appels.filter((a) => a.action === 'adresse-essai')[1].corps.vu, '2026-11-26T15:00:00.000Z');
   assert.ok(p.html('#cbody').includes('Écrivez une seule adresse courriel.') && p.html('#cbody').includes('value="pas une adresse"'), 'la saisie et son erreur restent à l\'écran');
   // Une autre personne a changé l'adresse entre-temps : l'écran le dit et se recharge.
   reponse = () => ({ code: 409, donnees: { code: 'conflit' } });
   const avant = lectures;
-  await p.cliquer('c-adresse');
+  await enregistrer(p);
   assert.equal(p.toast(), CO.adresse.conflit);
   assert.equal(lectures, avant + 1);
   reponse = () => ({ code: 403, donnees: { code: 'role' } });
   await p.saisir('essaiAdresse', 'a@b.ca');
-  await p.cliquer('c-adresse');
+  await enregistrer(p);
   assert.equal(p.toast(), TEXTES.panneau.reserveAdministration);
   // Vider le champ : le serveur retire le réglage, l'écran le dit.
   const q = await page({ reponses: { courriels: () => ({ code: 200, donnees: vue }), 'adresse-essai': () => ({ code: 200, donnees: { ok: true, retiree: true, adresseDefinie: true, adresseEssai: { adresse: 'boite@hebergeur.exemple', source: 'vercel', ecartee: false, modifieLe: null, modifiePar: null, vu: null } } }) } });
   await q.saisir('essaiAdresse', '');
-  await q.cliquer('c-adresse');
-  assert.deepEqual(q.appels.find((a) => a.action === 'adresse-essai').corps, { adresse: '', vu: '2026-11-20T10:00:00.000Z' });
+  await enregistrer(q);
+  assert.deepEqual(q.appels.find((a) => a.action === 'adresse-essai').corps, { adresse: '', vu: '2026-11-20T10:00:00.000Z', confirme: true });
   assert.equal(q.toast(), CO.adresse.retiree);
   assert.ok(q.html('#cbody').includes('boite@hebergeur.exemple'));
 });

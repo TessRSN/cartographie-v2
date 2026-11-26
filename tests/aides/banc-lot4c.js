@@ -104,11 +104,12 @@ function peupler(faux) {
 }
 
 // env : les réglages de Vercel ; sans : les variables à retirer ; reglages : { clé: valeur } déjà enregistrés ;
-// budgetComparaisonMs : le temps accordé à la comparaison d'une copie avec la précédente.
-function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFichiers = {}, sansJournal = false, budgetMs, budgetComparaisonMs, attendreSauvegarde = async () => {} } = {}) {
+// budgetComparaisonMs : le temps accordé à la comparaison d'une copie avec la précédente ;
+// datesCommeNotion : les dates reviennent à la minute et en « +00:00 », comme du vrai Notion.
+function banc({ env = {}, sans = [], reglages = {}, pannesNotion = {}, pannesFichiers = {}, sansJournal = false, budgetMs, budgetComparaisonMs, datesCommeNotion = false, attendreSauvegarde = async () => {} } = {}) {
   const complet = { ...ENV, ...env };
   for (const variable of sans) delete complet[variable];
-  const faux = commeNotion(fauxNotion({ pannes: pannesNotion, uuid: true }));
+  const faux = commeNotion(fauxNotion({ pannes: pannesNotion, uuid: true, datesCommeNotion }));
   inscrire(faux, { id: 'id-notion-tess', nom: 'Tess Berthier', courriel: TESS, role: 'Administration' });
   inscrire(faux, { id: 'id-notion-max', nom: 'Maxime Lafrenière', courriel: MAX, role: 'Approbation' });
   inscrire(faux, { id: 'id-notion-lea', nom: 'Léa Lecture', courriel: LEA, role: 'Lecture seule' });

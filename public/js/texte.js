@@ -661,8 +661,8 @@ const TEXTES = {
         parPrecaution: 'Par précaution : les réglages n’ont pas pu être lus, et Vercel ne dit rien.',
         adresseDefinie: 'L’adresse qui reçoit les courriels en mode d’essai est définie. Seule une personne en Administration la voit et la change.',
         sansAdresse: (actif) => (actif
-          ? 'Aucune adresse d’essai n’est définie, ni dans le panneau ni chez l’hébergeur (EMAIL_TEST_RECIPIENT) : tant que le mode d’essai est actif, aucun courriel ne part.'
-          : 'Aucune adresse d’essai n’est définie, ni dans le panneau ni chez l’hébergeur (EMAIL_TEST_RECIPIENT) : si le mode d’essai est activé, aucun courriel ne partira.'),
+          ? 'Aucune adresse d’essai n’est définie, ni dans le panneau ni dans les réglages de Vercel (variable EMAIL_TEST_RECIPIENT) : tant que le mode d’essai est actif, aucun courriel ne part.'
+          : 'Aucune adresse d’essai n’est définie, ni dans le panneau ni dans les réglages de Vercel (variable EMAIL_TEST_RECIPIENT) : si le mode d’essai est activé, aucun courriel ne partira.'),
         sansService: 'Aucun service d’envoi n’est branché ici : les courriels sont seulement simulés.',
         question: 'Couper le mode d’essai ? Les courriels partiront désormais aux vraies personnes : celles qui proposent une ressource, et l’équipe.',
         couper: 'Couper le mode d’essai',
@@ -674,14 +674,19 @@ const TEXTES = {
       adresse: {
         libelle: 'Adresse qui reçoit les courriels en mode d’essai',
         exemple: 'essais@exemple.org',
-        aide: 'Une seule adresse. Videz le champ et enregistrez pour revenir à celle de l’hébergeur.',
+        aide: 'Une seule adresse. Videz le champ et enregistrez pour revenir à celle des réglages de Vercel.',
         enregistrer: 'Enregistrer l’adresse',
+        // La confirmation répète l'adresse saisie : une faute de frappe enverrait tout chez un inconnu.
+        question: (adresse) => `Envoyer les courriels à ${adresse} ? Tant que le mode d’essai est actif, tous les courriels, y compris les liens d’entrée dans le panneau, iront à cette adresse. Vérifiez qu’elle est bien écrite.`,
+        confirmer: 'Oui, enregistrer cette adresse',
+        questionRetrait: 'Retirer l’adresse d’essai du panneau ? Tant que le mode d’essai est actif, tous les courriels, y compris les liens d’entrée dans le panneau, iront à l’adresse des réglages de Vercel (variable EMAIL_TEST_RECIPIENT). S’il n’y en a pas, aucun courriel ne partira.',
+        confirmerRetrait: 'Oui, retirer l’adresse',
         duPanneau: (adresse, qui, quand) => `En vigueur : ${adresse}, réglée dans le panneau${qui ? ` par ${qui}` : ''}${quand ? `, le ${quand}` : ''}.`,
-        deVercel: (adresse) => `En vigueur : ${adresse}, celle de l’hébergeur (EMAIL_TEST_RECIPIENT). Écrivez-en une autre ici pour la remplacer.`,
+        deVercel: (adresse) => `En vigueur : ${adresse}, définie dans les réglages de Vercel (variable EMAIL_TEST_RECIPIENT). Écrivez-en une autre ici pour la remplacer.`,
         aucune: (actif) => TEXTES.panneau.courriels.essai.sansAdresse(actif),
         ecartee: 'L’adresse enregistrée dans le panneau n’est pas valable : elle est écartée. Enregistrez-en une nouvelle, ou videz le champ et enregistrez.',
         enregistree: 'Adresse d’essai enregistrée. Comptez jusqu’à une minute pour que tous les envois suivent.',
-        retiree: 'Adresse d’essai retirée du panneau : celle de l’hébergeur reprend. Comptez jusqu’à une minute pour que tous les envois suivent.',
+        retiree: 'Adresse d’essai retirée du panneau : celle des réglages de Vercel reprend. Comptez jusqu’à une minute pour que tous les envois suivent.',
         inchange: 'Rien à enregistrer : cette adresse est déjà celle du panneau.',
         aCorriger: 'L’adresse est à corriger avant d’être enregistrée.',
         conflit: 'Une autre personne vient de changer l’adresse d’essai : rien n’a été enregistré. L’écran montre maintenant sa version.',
@@ -810,6 +815,7 @@ const TEXTES = {
       changements: (resume, date) => {
         const r = resume && typeof resume === 'object' ? resume : {};
         if (r.etat === 'premiere') return 'Première copie : rien à comparer.';
+        if (r.etat === 'sans-reference') return 'Aucune copie complète à comparer.';
         if (r.etat === 'impossible') return 'Comparaison impossible avec la copie précédente.';
         if (r.etat !== 'compare') return 'Pas de comparaison pour cette copie.';
         const bases = r.bases && typeof r.bases === 'object' ? r.bases : {};

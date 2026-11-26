@@ -43,7 +43,7 @@
  *                                                 et à elle seule, mode d'essai actif ou non (Administration) ; objet et texte : un brouillon à essayer
  *   POST mode-essai     { actif, confirme }     → active ou coupe le mode d'essai des courriels (Administration) ;
  *                                                 le couper exige « confirme: true »
- *   POST adresse-essai  { adresse, vu }         → règle l'adresse qui reçoit les courriels en mode d'essai (Administration) ; vide : le
+ *   POST adresse-essai  { adresse, vu, confirme } → règle l'adresse qui reçoit les courriels en mode d'essai (Administration) ; vide : le
  *                                                 réglage est retiré, celle de l'hébergeur reprend ; vu : la date que l'écran avait lue ;
  *                                                 409 « conflit » si la base a changé depuis
  *   GET  reglages                               → l'écran « Réglages » : contributions ouvertes ou fermées, message de
@@ -589,9 +589,13 @@ function creerGestionnaire(donnees) {
         });
       }
       if (action === 'adresse-essai') {
-        if (!texteCourt(corps.adresse, ADRESSE_BRUTE_MAX) || !(corps.vu === undefined || corps.vu === null || texteCourt(corps.vu, 40))) return illisible();
+        // « vu » (la date que l'écran avait lue, ou null) est exigé : la page l'envoie toujours.
+        if (!texteCourt(corps.adresse, ADRESSE_BRUTE_MAX) || !(corps.vu === null || texteCourt(corps.vu, 40))) return illisible();
+        // Tous les courriels, liens d'entrée au panneau compris, iront à cette adresse en mode d'essai :
+        // la page fait confirmer l'adresse saisie (ou son retrait), le serveur l'exige.
+        if (corps.confirme !== true) return res.status(400).json({ code: 'confirmation' });
         // La personne est celle de la session : rien de ce que dit le corps ne la remplace.
-        const retour = await d.courriels.reglerAdresseEssai({ adresse: corps.adresse, ...(corps.vu === undefined ? {} : { vu: corps.vu }), par: approbateur });
+        const retour = await d.courriels.reglerAdresseEssai({ adresse: corps.adresse, vu: corps.vu, par: approbateur });
         if (!retour.ok) {
           if (retour.code === 'role') return res.status(403).json({ code: 'role', erreur: MESSAGES_ROLE.administration });
           const { ok, code, ...detail } = retour;

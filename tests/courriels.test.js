@@ -143,7 +143,9 @@ function bancReglages({ env = {}, reglages = {}, brut = {}, pannes = {}, echec =
   for (const [cle, json] of Object.entries(brut)) poser(cle, json);
   const socle = creerReglages(faux.client, complet, { journal });
   const envoyeur = async (message) => { if (echec) throw new Error('Resend en panne'); envois.push(message); };
-  const courriels = creerCourriels({ envoyeur, env: complet, journal, reglages: socle });
+  // « M'envoyer un essai » relit le rôle : ici, seule tess@exemple.ca est en Administration.
+  const roleDe = async (courriel) => (courriel === 'tess@exemple.ca' ? 'administration' : null);
+  const courriels = creerCourriels({ envoyeur, env: complet, journal, reglages: socle, roleDe });
   return { courriels, envois, lignes, faux, socle };
 }
 // Les six courriels, chacun avec de quoi le remplir.
@@ -362,7 +364,7 @@ test('« M\'envoyer un essai » ne suit pas le mode d\'essai : il part à la per
   assert.deepEqual(await panne.courriels.essai({ id: 'recue', a: 'tess@exemple.ca' }), { ok: false, code: 'envoi' });
   // Sans service d'envoi : simulé, comme tous les courriels.
   const lignes = [];
-  const local = creerCourriels({ env: {}, journal: (...a) => lignes.push(a.join(' ')) });
+  const local = creerCourriels({ env: {}, journal: (...a) => lignes.push(a.join(' ')), roleDe: async () => 'administration' });
   assert.deepEqual(await local.essai({ id: 'recue', a: 'tess@exemple.ca' }), { ok: true, envoye: false, simule: true });
   assert.ok(lignes.some((l) => l.includes('[courriel simulé]') && l.includes('[ESSAI]')));
 });

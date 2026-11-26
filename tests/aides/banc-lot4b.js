@@ -40,11 +40,12 @@ function requete(method, action, { body, query = {}, headers = {}, cookie = temo
 // env : les réglages de Vercel ; sansBase : sans NOTION_DB_REGLAGES ; reglages : { clé: valeur } déjà enregistrés ;
 // essaisPermis : ce que répond la limite des essais de courriel ; echecEnvoi : le service d'envoi est en panne.
 // sansService : sans service d'envoi, comme sur un poste local (les courriels sont simulés).
-function banc({ env = {}, sansBase = false, reglages = {}, pannesNotion = {}, essaisPermis = true, echecEnvoi = false, sansJournal = false, sansService = false } = {}) {
+// datesCommeNotion : les dates reviennent à la minute et en « +00:00 », comme du vrai Notion.
+function banc({ env = {}, sansBase = false, reglages = {}, pannesNotion = {}, essaisPermis = true, echecEnvoi = false, sansJournal = false, sansService = false, datesCommeNotion = false } = {}) {
   const complet = { ...ENV, ...env };
   if (sansService) delete complet.RESEND_API_KEY;
   if (sansBase) delete complet.NOTION_DB_REGLAGES;
-  const faux = fauxNotion({ pannes: pannesNotion, uuid: true });
+  const faux = fauxNotion({ pannes: pannesNotion, uuid: true, datesCommeNotion });
   inscrire(faux, { id: 'id-notion-tess', nom: 'Tess Berthier', courriel: TESS, role: 'Administration' });
   inscrire(faux, { id: 'id-notion-max', nom: 'Maxime Lafrenière', courriel: MAX, role: 'Approbation' });
   inscrire(faux, { id: 'id-notion-lea', nom: 'Léa Lecture', courriel: LEA, role: 'Lecture seule' });
@@ -82,13 +83,14 @@ function banc({ env = {}, sansBase = false, reglages = {}, pannesNotion = {}, es
   };
   const gestionnaire = admin.creerGestionnaire(deps);
   const vues = [];
-  const appeler = async (req) => { const res = reponse(); await gestionnaire(req, res); vues.push({ action: req.query.action, res }); return res; };
+  // vues : chaque réponse, avec son action et, pour « envoyer » et « lire », la personne qui a fait la demande.
+  const appeler = async (req, par = null) => { const res = reponse(); await gestionnaire(req, res); vues.push({ action: req.query.action, res, par }); return res; };
   const pagesDe = (base) => [...faux.pages.values()].filter((p) => p.parent.database_id === base && !p.archived);
   const texte = (prop) => ((prop && (prop.title || prop.rich_text)) || []).map((s) => s.text.content).join('');
   return {
     faux, deps, envois, lignesServeur, vues, appeler, socle, courriels, demandesDEssai, poser, env: complet,
-    envoyer: (action, corps = {}, par = TESS, options = {}) => appeler(requete('POST', action, { body: corps, cookie: temoin(par), ...options })),
-    lire: (action, query = {}, par = TESS) => appeler(requete('GET', action, { query, cookie: temoin(par) })),
+    envoyer: (action, corps = {}, par = TESS, options = {}) => appeler(requete('POST', action, { body: corps, cookie: temoin(par), ...options }), par),
+    lire: (action, query = {}, par = TESS) => appeler(requete('GET', action, { query, cookie: temoin(par) }), par),
     // Le journal de l'équipe tel qu'il est écrit dans Notion, de la première ligne à la dernière.
     journalEcrit: () => pagesDe('base-journal').map((p) => ({ geste: p.properties.Geste.select.name, par: (p.properties['Fait par'] || {}).email, sur: texte(p.properties.Sur), phrase: texte(p.properties.Titre) })),
     // Les réglages tels qu'ils sont écrits dans Notion : { clé: valeur }.
