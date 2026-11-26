@@ -6,7 +6,7 @@
  * Une « Modification de l'équipe » n'est annoncée qu'aux personnes en Administration, les seules à
  * pouvoir la trancher ; les autres ne reçoivent que les propositions du public, et rien s'il n'y en a pas.
  * La même tâche fait la copie de sauvegarde de la semaine (lib/sauvegardes.js), pour ne pas ajouter
- * une tâche planifiée. Les deux partent en même temps et ne dépendent pas l'une de l'autre : une
+ * une tâche planifiée. Le résumé part d'abord, la copie ensuite, et aucun ne dépend de l'autre : une
  * copie qui échoue n'empêche pas le résumé, un résumé qui échoue n'empêche pas la copie.
  * La réponse dit où en est la copie : « faite », « inactive » (pas de base « Sauvegardes ») ou « echec ».
  */
@@ -31,8 +31,36 @@ function creerGestionnaire(donnees) {
     }
 
     const d = dependances(donnees);
-    // La copie de la semaine : jamais d'erreur vers le résumé, seulement son état.
-    const copie = (async () => {
+    // Le résumé : ce qu'il faut répondre, sans jamais lever.
+    const resume = async () => {
+      try {
+        // Tout ce qui attend encore une décision : les nouvelles et celles en vérification.
+        const enAttente = await d.propositions.listerPropositions({ statut: 'ouvertes' });
+        if (!enAttente.length) return { statut: 200, corps: { ok: true, enAttente: 0, envoyes: 0 } };
+        const ligne = (x) => ({ titre: x.titre, proposeLe: x.proposeLe });
+        const toutes = enAttente.map(ligne);
+        const duPublic = enAttente.filter((x) => x.genre !== 'equipe').map(ligne);
+        const lienPanneau = `${origineSure(req, env)}/admin`;
+        let envoyes = 0;
+        // Un courriel par personne : les adresses des approbateurs ne circulent pas entre eux.
+        for (const personne of (await d.propositions.equipe()).filter((x) => x.resume)) {
+          const propositions = personne.role === 'administration' ? toutes : duPublic;
+          if (!propositions.length) continue;
+          try {
+            const retour = await d.courriels.resumeHebdomadaire({ a: personne.courriel, propositions, lienPanneau, destinataire: personne.nom || '' });
+            if (retour && retour.envoye) envoyes += 1;
+          } catch (err) {
+            d.journal('[résumé] envoi impossible :', err.message);
+          }
+        }
+        return { statut: 200, corps: { ok: true, enAttente: enAttente.length, envoyes } };
+      } catch (err) {
+        d.journal('[résumé] échec :', err.message);
+        return { statut: 502, corps: { erreur: 'Le service est indisponible pour le moment.' } };
+      }
+    };
+    // La copie de la semaine : son état seulement, sans jamais lever. null sans module de sauvegarde.
+    const copie = async () => {
       if (!d.sauvegardes) return null;
       try {
         const retour = await d.sauvegardes.hebdomadaire();
@@ -41,33 +69,12 @@ function creerGestionnaire(donnees) {
         d.journal('[résumé] copie de sauvegarde impossible :', err.message);
         return 'echec';
       }
-    })();
-    const avecCopie = async (corps) => { const sauvegarde = await copie; return sauvegarde ? { ...corps, sauvegarde } : corps; };
-    try {
-      // Tout ce qui attend encore une décision : les nouvelles et celles en vérification.
-      const enAttente = await d.propositions.listerPropositions({ statut: 'ouvertes' });
-      if (!enAttente.length) return res.status(200).json(await avecCopie({ ok: true, enAttente: 0, envoyes: 0 }));
-      const ligne = (x) => ({ titre: x.titre, proposeLe: x.proposeLe });
-      const toutes = enAttente.map(ligne);
-      const duPublic = enAttente.filter((x) => x.genre !== 'equipe').map(ligne);
-      const lienPanneau = `${origineSure(req, env)}/admin`;
-      let envoyes = 0;
-      // Un courriel par personne : les adresses des approbateurs ne circulent pas entre eux.
-      for (const personne of (await d.propositions.equipe()).filter((x) => x.resume)) {
-        const propositions = personne.role === 'administration' ? toutes : duPublic;
-        if (!propositions.length) continue;
-        try {
-          const retour = await d.courriels.resumeHebdomadaire({ a: personne.courriel, propositions, lienPanneau, destinataire: personne.nom || '' });
-          if (retour && retour.envoye) envoyes += 1;
-        } catch (err) {
-          d.journal('[résumé] envoi impossible :', err.message);
-        }
-      }
-      return res.status(200).json(await avecCopie({ ok: true, enAttente: enAttente.length, envoyes }));
-    } catch (err) {
-      d.journal('[résumé] échec :', err.message);
-      return res.status(502).json(await avecCopie({ erreur: 'Le service est indisponible pour le moment.' }));
-    }
+    };
+    // Le résumé d'abord, puis la copie : les courriels sont partis avant que la copie, plus longue,
+    // ne commence, et les deux ne se disputent pas Notion.
+    const { statut, corps } = await resume();
+    const sauvegarde = await copie();
+    return res.status(statut).json(sauvegarde ? { ...corps, sauvegarde } : corps);
   };
 }
 

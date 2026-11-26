@@ -56,12 +56,13 @@ test('un résumé qui échoue n\'empêche pas la copie : 502 pour le résumé, m
   assert.ok(!JSON.stringify(res.corps).includes('Notion en panne'));
 });
 
-test('la copie et le résumé partent en même temps : une copie lente ne retarde pas les courriels', async () => {
+test('le résumé part d\'abord, la copie ensuite : une copie lente ne retarde pas les courriels', async () => {
   let finir; const lente = new Promise((suite) => { finir = suite; });
-  const b = banc({ sauvegarde: () => lente.then(() => ({ etat: 'faite' })) });
+  const ordre = [];
+  const b = banc({ sauvegarde: () => { ordre.push(`copie après ${b.envois.length} courriel`); return lente.then(() => ({ etat: 'faite' })); } });
   const enCours = b.appeler();
-  await new Promise((suite) => setImmediate(suite));
-  await new Promise((suite) => setImmediate(suite));
+  for (let i = 0; i < 10; i += 1) await new Promise((suite) => setImmediate(suite));
+  assert.deepEqual(ordre, ['copie après 1 courriel']);
   assert.equal(b.envois.length, 1, 'le résumé est parti pendant que la copie se fait');
   finir();
   assert.equal((await enCours).corps.sauvegarde, 'faite');
