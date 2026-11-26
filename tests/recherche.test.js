@@ -75,7 +75,8 @@ test('denombrer regroupe les écritures d\'un même sujet et compte une fiche un
     fiche('A', { motsCles: ['Génomique', 'génomique', 'IA'], porteurs: [{ nom: 'Mila' }, { nom: 'Mila' }] }),
     fiche('B', { motsCles: ['genomique'], porteurs: [{ nom: 'Mila' }, { nom: 'ISQ' }] }),
   ]);
-  assert.deepEqual(sujets.map((s) => [s.sujet, s.nombre]), [['Génomique', 2], ['IA', 1]]);
+  // « génomique » est dans la table des libellés : c'est son écriture qui s'affiche.
+  assert.deepEqual(sujets.map((s) => [s.sujet, s.nombre]), [['génomique', 2], ['IA', 1]]);
   assert.deepEqual(porteurs.map((p) => [p.nom, p.nombre]), [['Mila', 2], ['ISQ', 1]]);
 });
 
@@ -139,4 +140,66 @@ test('statistiquesBandeau : principales normes et formats, de la plus fréquente
   ], 2);
   assert.deepEqual(s.normesPrincipales, [{ norme: 'BIDS', nombre: 3 }, { norme: 'DICOM', nombre: 2 }]);
   assert.deepEqual(statistiquesBandeau([fiche('X')], 6).normesPrincipales, []);
+});
+
+// ─── Sujets regroupés par leur clé commune, libellés dans la langue du site ───
+
+const bilingue = [
+  fiche('Alpha', { motsCles: ['apprentissage automatique', 'neuro-imagerie'], normes: ['CIM-10'] }),
+  fiche('Beta', { motsCles: ['Machine learning', 'neuroimaging'] }),
+  fiche('Gamma', { motsCles: ['machine learning', 'cartographie des savoirs'] }),
+  fiche('Delta', { motsCles: ['oncologie'] }),
+];
+
+test('denombrer : le français et l\'anglais d\'un même sujet comptent ensemble, libellé dans la langue demandée', () => {
+  const enFrancais = denombrer(bilingue).sujets;
+  assert.deepEqual(enFrancais.map((s) => [s.sujet, s.nombre]), [
+    ['apprentissage automatique', 3], ['neuro-imagerie', 2], ['cartographie des savoirs', 1], ['oncologie', 1],
+  ]);
+  assert.deepEqual(denombrer(bilingue, 'fr').sujets, enFrancais, 'le français par défaut');
+  const enAnglais = denombrer(bilingue, 'en').sujets;
+  assert.deepEqual(enAnglais.map((s) => [s.sujet, s.nombre]), [
+    ['machine learning', 3], ['neuroimaging', 2], ['cartographie des savoirs', 1], ['oncology', 1],
+  ], 'un sujet sans libellé anglais reste en français');
+  // Hors de la table des libellés : l'écriture la plus fréquente ; à égalité, la première rencontrée.
+  const hors = (liste) => denombrer(liste.map((motCle, i) => fiche(`F${i}`, { motsCles: [motCle] }))).sujets.map((s) => [s.sujet, s.nombre]);
+  assert.deepEqual(hors(['Savoirs locaux', 'savoirs locaux', 'savoirs locaux']), [['savoirs locaux', 3]]);
+  assert.deepEqual(hors(['Savoirs locaux', 'savoirs locaux']), [['Savoirs locaux', 2]]);
+});
+
+test('statistiquesBandeau : les principaux sujets regroupés suivent la langue', () => {
+  assert.deepEqual(statistiquesBandeau(bilingue, 2).sujets, [{ sujet: 'apprentissage automatique', nombre: 3 }, { sujet: 'neuro-imagerie', nombre: 2 }]);
+  assert.deepEqual(statistiquesBandeau(bilingue, 2, 'en').sujets, [{ sujet: 'machine learning', nombre: 3 }, { sujet: 'neuroimaging', nombre: 2 }]);
+});
+
+test('suggestions : un sujet se propose par le début de son écriture française ou anglaise', () => {
+  const sujets = (requete, langue) => suggestions(bilingue, requete, langue).filter((x) => x.genre === 'sujet').map((x) => [x.libelle, x.valeur, x.nombre]);
+  assert.deepEqual(sujets('appren'), [['apprentissage automatique', 'apprentissage automatique', 3]]);
+  assert.deepEqual(sujets('machi'), [['apprentissage automatique', 'apprentissage automatique', 3]]);
+  assert.deepEqual(sujets('appren', 'en'), [['machine learning', 'machine learning', 3]]);
+  assert.deepEqual(sujets('machi', 'en'), [['machine learning', 'machine learning', 3]]);
+  // Le libellé anglais de la table déclenche aussi la suggestion, même si aucune fiche ne l'écrit.
+  assert.deepEqual(sujets('onco'), [['oncologie', 'oncologie', 1]]);
+  assert.deepEqual(sujets('oncology'), [['oncologie', 'oncologie', 1]]);
+  assert.deepEqual(sujets('neuroim'), [['neuro-imagerie', 'neuro-imagerie', 2]]);
+});
+
+test('la valeur d\'un sujet proposé, une fois cherchée, trouve les fiches des deux langues', () => {
+  const docs = documents(bilingue);
+  for (const langue of ['fr', 'en']) {
+    for (const requete of ['appren', 'machi', 'neuro']) {
+      const [sujet] = suggestions(bilingue, requete, langue).filter((x) => x.genre === 'sujet');
+      const attendues = requete === 'neuro' ? ['Alpha', 'Beta'] : ['Alpha', 'Beta', 'Gamma'];
+      assert.deepEqual(noms(chercher(docs, sujet.valeur)).sort(), attendues, `${langue} : « ${sujet.valeur} »`);
+    }
+    // Chaque sujet du portrait, une fois cliqué, ramène exactement les fiches qu'il compte.
+    for (const { sujet, nombre } of statistiquesBandeau(bilingue, 6, langue).sujets) {
+      assert.equal(chercher(docs, sujet).length, nombre, `${langue} : « ${sujet} »`);
+    }
+  }
+  // Une norme cherchée sous son nom anglais trouve la fiche qui l'écrit en français.
+  assert.deepEqual(noms(chercher(docs, 'ICD-10')), ['Alpha']);
+  // Les fiches qui portent le sujet entier passent devant celles qui n'en contiennent que les mots.
+  const melange = documents([fiche('Texte', { description: 'On y parle de machine learning.' }), fiche('Sujet', { motsCles: ['apprentissage automatique'] })]);
+  assert.deepEqual(noms(chercher(melange, 'machine learning')), ['Sujet', 'Texte']);
 });

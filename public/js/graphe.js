@@ -448,7 +448,7 @@ function cle(etat) {
 // Curseur « Liens » : nouveau seuil, donc nouveaux liens et nouveau placement, calculé hors écran.
 function appliquerDensite() {
   if (!reseau || !g || g.mode === 'sujets') return;
-  const { liens } = calculerConnexions(C.etat.ressources, { SCORE_MIN: seuil() });
+  const { liens } = calculerConnexions(C.etat.ressources, { SCORE_MIN: seuil() }, langueDuSite());
   const couleur = couleurTrait(C.modeSombre());
   g.liens = liens.map((l) => faireLien(l, couleur));
   g.liensDS.clear();
@@ -490,8 +490,8 @@ function construire() {
     return;
   }
   const sombre = C.modeSombre();
-  const parSujets = mode === 'sujets' ? calculerSujets(etat.ressources) : null;
-  const { noeuds: bruts, liens: liensBruts } = parSujets || calculerConnexions(etat.ressources, { SCORE_MIN: seuil() });
+  const parSujets = mode === 'sujets' ? calculerSujets(etat.ressources, undefined, langueDuSite()) : null;
+  const { noeuds: bruts, liens: liensBruts } = parSujets || calculerConnexions(etat.ressources, { SCORE_MIN: seuil() }, langueDuSite());
   const parAdresse = new Map(etat.ressources.map((r) => [r.adresse, r]));
   const couleur = couleurTrait(sombre);
   g = { source: etat.ressources, mode, liens: liensBruts.map((l) => faireLien(l, couleur)), sansSujet: parSujets ? parSujets.sansSujet.length : 0 };

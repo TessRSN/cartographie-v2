@@ -9,6 +9,7 @@
 const serveur = typeof module !== 'undefined' && module.exports;
 const mots = serveur ? require('./mots-cles.js') : racine;
 const textes = serveur ? require('./texte.js') : racine;
+const libelles = serveur ? require('./libelles-sujets.js') : racine;
 
 // Sigles courants : un sigle cherché trouve aussi les fiches qui écrivent l'expression au long.
 const SIGLES = {
@@ -33,10 +34,13 @@ function documentDeRecherche(r) {
   const normes = (r.normes || []).concat(r.outils || []).join(' ');
   const tout = [r.nom, r.autresNoms, motsCles, normes, porteurs, r.phrase, r.description].filter(Boolean).join(' ');
   const canoniques = mots.motsCanoniques(tout);
+  // Clés des sujets de la fiche (mots-clés et normes) : un sujet cherché en entier trouve la
+  // fiche quelle que soit la langue dans laquelle elle l'écrit.
+  const clesSujets = new Set((r.motsCles || []).concat(r.normes || []).map((s) => mots.cleMotCle(s)).filter(Boolean));
   return {
     r, nom: r.nom, autresNoms: r.autresNoms, motsCles, normes, porteurs, phrase: r.phrase, description: r.description,
     canon: canoniques.join(' '), plie: mots.plier(tout),
-    motsEntiers: new Set(decouper(tout)), motsCanoniques: new Set(canoniques),
+    motsEntiers: new Set(decouper(tout)), motsCanoniques: new Set(canoniques), clesSujets,
   };
 }
 
@@ -60,10 +64,14 @@ function trouveMotCourt(doc, mot) {
 // Fiches qui contiennent tous les mots de la requête, classées par pertinence.
 // rechercheFloue(forme) renvoie [{ item: document, score }] (Fuse) ; sans elle,
 // un mot long est cherché comme sous-chaîne.
+// Une requête qui est un sujet entier (« machine learning », « apprentissage automatique »)
+// trouve d'abord les fiches qui portent ce sujet, dans une langue ou dans l'autre.
 function chercher(documents, requete, rechercheFloue) {
   const liste = documents || [];
   const demandes = motsDeRequete(requete);
   if (demandes.length === 0) return liste.map((d) => d.r);
+  const cle = mots.cleMotCle(requete);
+  const parSujet = cle ? liste.filter((d) => d.clesSujets && d.clesSujets.has(cle)).map((d) => d.r) : [];
   let scores = null;
   for (const mot of demandes) {
     const trouves = new Map();
@@ -92,23 +100,29 @@ function chercher(documents, requete, rechercheFloue) {
     }
     if (scores.size === 0) break;
   }
-  return [...scores.entries()].sort((a, b) => a[1] - b[1]).map(([r]) => r);
+  const parMots = [...scores.entries()].sort((a, b) => a[1] - b[1]).map(([r]) => r);
+  if (parSujet.length === 0) return parMots;
+  const dejaLa = new Set(parSujet);
+  return parSujet.concat(parMots.filter((r) => !dejaLa.has(r)));
 }
 
 // Sujets et porteurs du catalogue, avec le nombre de fiches, du plus fréquent au moins fréquent.
-// Deux écritures d'un même sujet (majuscules, accents) sont comptées ensemble.
-function denombrer(ressources) {
+// Deux écritures d'un même sujet (majuscules, accents, français et anglais) sont comptées
+// ensemble, par leur clé commune. Le libellé d'un sujet suit la langue du site ('fr' par
+// défaut, 'en') ; « formes » garde toutes ses écritures pliées, pour les suggestions.
+function denombrer(ressources, langue) {
   const sujets = new Map();
   const porteurs = new Map();
   for (const r of ressources || []) {
     const vus = new Set();
     for (const motCle of r.motsCles || []) {
       const libelle = String(motCle || '').trim();
-      const cle = mots.plier(libelle);
+      const cle = mots.cleMotCle(libelle) || mots.plier(libelle);
       if (!cle || vus.has(cle)) continue;
       vus.add(cle);
-      const s = sujets.get(cle) || { sujet: libelle, plie: cle, nombre: 0 };
+      const s = sujets.get(cle) || { cle, ecritures: new Map(), nombre: 0 };
       s.nombre++;
+      s.ecritures.set(libelle, (s.ecritures.get(libelle) || 0) + 1);
       sujets.set(cle, s);
     }
     for (const nom of new Set((r.porteurs || []).map((p) => p.nom).filter(Boolean))) {
@@ -118,14 +132,21 @@ function denombrer(ressources) {
     }
   }
   const ordre = (a, b) => b.nombre - a.nombre || a.plie.localeCompare(b.plie);
-  return { sujets: [...sujets.values()].sort(ordre), porteurs: [...porteurs.values()].sort(ordre) };
+  const regroupes = [...sujets.values()].map(({ cle, ecritures, nombre }) => {
+    // À égalité entre deux écritures, la première rencontrée l'emporte.
+    const sujet = libelles.libelleSujet(cle, langue, [...ecritures.entries()]);
+    const connu = libelles.LIBELLES_SUJETS[cle] || {};
+    const formes = [...new Set([...ecritures.keys(), connu.fr, connu.en].filter(Boolean).map(mots.plier))];
+    return { sujet, plie: mots.plier(sujet), nombre, cle, formes };
+  });
+  return { sujets: regroupes.sort(ordre), porteurs: [...porteurs.values()].sort(ordre) };
 }
 
 // Chiffres du bandeau « Portrait de la cartographie ».
-function statistiquesBandeau(ressources, combien) {
+function statistiquesBandeau(ressources, combien, langue) {
   const liste = ressources || [];
   const n = combien || 6;
-  const { sujets, porteurs } = denombrer(liste);
+  const { sujets, porteurs } = denombrer(liste, langue);
   // Normes et formats : une fiche compte une fois par norme, même si la norme y est écrite deux fois.
   const parNorme = new Map();
   for (const r of liste) for (const norme of new Set((r.normes || []).filter(Boolean))) parNorme.set(norme, (parNorme.get(norme) || 0) + 1);
@@ -150,15 +171,17 @@ function statistiquesBandeau(ressources, combien) {
 }
 
 // Suggestions pendant la saisie : des sujets, des porteurs, puis des ressources
-// dont un mot du nom commence par ce qui est tapé.
-function suggestions(ressources, requete) {
+// dont un mot du nom commence par ce qui est tapé. Un sujet est proposé que l'on tape le
+// début de son écriture française ou de son écriture anglaise ; il s'affiche dans la langue
+// du site, et sa valeur, une fois cherchée, trouve les fiches des deux langues.
+function suggestions(ressources, requete, langue) {
   const q = mots.plier(requete).trim();
   if (q.length < 2 || !(ressources || []).length) return [];
-  const { sujets, porteurs } = denombrer(ressources);
+  const { sujets, porteurs } = denombrer(ressources, langue);
   const sortie = [];
   // Deux ou trois lettres : seulement en début de mot, pour ne pas proposer « sociaux » à qui tape « ia ».
   const contient = (plie) => (q.length < LONGUEUR_FLOUE ? plie.split(/[^a-z0-9]+/).some((m) => m.startsWith(q)) || plie.startsWith(q) : plie.includes(q));
-  for (const s of sujets.filter((x) => contient(x.plie)).slice(0, 3)) sortie.push({ genre: 'sujet', valeur: s.sujet, libelle: s.sujet, nombre: s.nombre });
+  for (const s of sujets.filter((x) => x.formes.some(contient)).slice(0, 3)) sortie.push({ genre: 'sujet', valeur: s.sujet, libelle: s.sujet, nombre: s.nombre });
   for (const p of porteurs.filter((x) => contient(x.plie)).slice(0, 4)) sortie.push({ genre: 'porteur', valeur: p.nom, libelle: p.nom, nombre: p.nombre });
   const demandes = decouper(requete);
   const proposees = (ressources || []).filter((r) => {

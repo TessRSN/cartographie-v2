@@ -105,3 +105,33 @@ test('deux ressources qui partagent une norme sont reliées ; un outil commun ne
   assert.deepEqual(s.sujets.map((x) => [x.nom, x.nombre, x.norme]), [['bids', 3, true]]);
   assert.equal(calculerSujets([r('a', ['cohorte']), r('b', ['cohorte']), r('c', ['cohorte'])], { FICHES_MIN: 3 }).sujets[0].norme, false);
 });
+
+// ─── Libellés des sujets regroupés selon la langue du site ───
+
+test('calculerSujets : le libellé d\'un sujet suit la langue, la clé du sujet ne change pas', () => {
+  const { calculerSujets } = require('../public/js/connexions.js');
+  const avec = (adresse, motsCles, normes) => Object.assign(r(adresse, motsCles), { normes });
+  const liste = [
+    avec('a', ['apprentissage automatique'], ['CIM-10']), avec('b', ['Machine learning'], ['CIM-10']), avec('c', ['machine learning'], ['CIM-10']),
+    avec('d', ['savoirs locaux'], []), avec('e', ['Savoirs locaux'], []), avec('f', ['savoirs locaux'], []),
+  ];
+  const fr = calculerSujets(liste, { FICHES_MIN: 3 });
+  assert.deepEqual(fr.sujets.map((x) => [x.nom, x.nombre, x.norme]), [['apprentissage automatique', 3, false], ['cim-10', 3, true], ['savoirs locaux', 3, false]]);
+  assert.deepEqual(calculerSujets(liste, { FICHES_MIN: 3 }, 'fr'), fr, 'le français par défaut');
+  const en = calculerSujets(liste, { FICHES_MIN: 3 }, 'en');
+  assert.deepEqual(en.sujets.map((x) => [x.nom, x.nombre, x.norme]), [['ICD-10', 3, true], ['machine learning', 3, false], ['savoirs locaux', 3, false]]);
+  assert.deepEqual(en.sujets.map((x) => x.id).sort(), fr.sujets.map((x) => x.id).sort());
+  assert.deepEqual(en.liens.filter((l) => l.a === 'a').map((l) => l.motsCommuns[0]).sort(), ['ICD-10', 'machine learning']);
+});
+
+test('calculerConnexions : les sujets communs suivent la langue, avec la clé de chacun', () => {
+  const liste = [r('a', ['apprentissage automatique', 'savoirs locaux']), r('b', ['Machine learning', 'Savoirs locaux']), r('c', ['machine learning']), ...remplissage];
+  const lien = (g) => g.liens.find((l) => [l.a, l.b].sort().join() === 'a,b');
+  const fr = lien(calculerConnexions(liste));
+  assert.deepEqual(fr.motsCommuns, ['apprentissage automatique', 'savoirs locaux']);
+  assert.deepEqual(fr.clesCommunes, [cleMotCle('machine learning'), cleMotCle('savoirs locaux')]);
+  const en = lien(calculerConnexions(liste, undefined, 'en'));
+  assert.deepEqual(en.motsCommuns, ['machine learning', 'savoirs locaux']);
+  assert.deepEqual(en.clesCommunes, fr.clesCommunes);
+  assert.equal(en.poids, fr.poids);
+});

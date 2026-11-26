@@ -8,7 +8,9 @@
 (function (racine) {
 'use strict';
 
-const outils = (typeof module !== 'undefined' && module.exports) ? require('./mots-cles.js') : racine;
+const serveur = typeof module !== 'undefined' && module.exports;
+const outils = serveur ? require('./mots-cles.js') : racine;
+const libelles = serveur ? require('./libelles-sujets.js') : racine;
 
 const PARAMS_CONNEXIONS = {
   DF_MIN: 2,            // un sujet présent dans une seule fiche ne relie personne
@@ -24,14 +26,23 @@ const PARAMS_CONNEXIONS = {
 // ressource est distribuée, pas de quoi elle traite, et relieraient tous les logiciels entre eux.
 function sujetsDe(r) { return (r.motsCles || []).concat(r.normes || []); }
 
-function calculerConnexions(ressources, params) {
+// Libellé d'un sujet regroupé, dans la langue du site ('fr' par défaut, 'en').
+// ecritures : écriture en minuscules → nombre de fiches. En français le graphe écrit tout en
+// minuscules, comme il l'a toujours fait ; en anglais la table donne la forme propre (« ICD-10 »).
+function libelleRegroupe(cle, langue, ecritures) {
+  const triees = [...ecritures.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], 'fr'));
+  const libelle = libelles.libelleSujet(cle, langue, triees);
+  return langue === 'en' ? libelle : libelle.toLowerCase();
+}
+
+function calculerConnexions(ressources, params, langue) {
   const P = Object.assign({}, PARAMS_CONNEXIONS, params || {});
   const liste = ressources || [];
   const noeuds = liste.map((r) => ({ adresse: r.adresse, nom: r.nom, type: r.typePrincipal || null }));
   const N = liste.length;
   if (N < 2) return { noeuds, liens: [] };
 
-  // Sujets de chaque fiche : clé canonique → libellé d'origine (pour l'affichage).
+  // Sujets de chaque fiche : clé canonique → écriture de la fiche, en minuscules.
   const sujets = liste.map((r) => {
     const m = new Map();
     for (const motCle of sujetsDe(r)) {
@@ -40,8 +51,16 @@ function calculerConnexions(ressources, params) {
     }
     return m;
   });
+  // Par sujet : le nombre de fiches et les écritures rencontrées (pour le libellé affiché).
   const frequence = new Map();
-  for (const m of sujets) for (const cle of m.keys()) frequence.set(cle, (frequence.get(cle) || 0) + 1);
+  const ecritures = new Map();
+  for (const m of sujets) {
+    for (const [cle, ecriture] of m) {
+      frequence.set(cle, (frequence.get(cle) || 0) + 1);
+      if (!ecritures.has(cle)) ecritures.set(cle, new Map());
+      ecritures.get(cle).set(ecriture, (ecritures.get(cle).get(ecriture) || 0) + 1);
+    }
+  }
 
   const dfMax = Math.max(P.DF_MIN, Math.floor(N * P.DF_MAX_RATIO));
   const poids = new Map();
@@ -88,7 +107,8 @@ function calculerConnexions(ressources, params) {
       a: liste[p.i].adresse,
       b: liste[p.j].adresse,
       poids: Math.round(p.poids * 100) / 100,
-      motsCommuns: p.cles.map((cle) => sujets[p.i].get(cle)),
+      motsCommuns: p.cles.map((cle) => libelleRegroupe(cle, langue, ecritures.get(cle))),
+      clesCommunes: p.cles,
     });
   }
   return { noeuds, liens };
@@ -99,7 +119,7 @@ function calculerConnexions(ressources, params) {
 // deux ressources sans survoler un trait. Une ressource sans sujet fréquent n'y figure pas.
 const PARAMS_SUJETS = { FICHES_MIN: 5 };   // un sujet est retenu à partir de cinq fiches
 
-function calculerSujets(ressources, params) {
+function calculerSujets(ressources, params, langue) {
   const P = Object.assign({}, PARAMS_SUJETS, params || {});
   const liste = ressources || [];
   // Par sujet (clé canonique) : les ressources qui le portent et les libellés rencontrés.
@@ -119,12 +139,13 @@ function calculerSujets(ressources, params) {
       s.libelles.set(libelle, (s.libelles.get(libelle) || 0) + 1);
     }
   }
-  // Le libellé affiché est l'écriture la plus fréquente ; à égalité, la première par ordre alphabétique.
+  // Le libellé affiché vient de la table des libellés, dans la langue du site ; sinon c'est
+  // l'écriture la plus fréquente et, à égalité, la première par ordre alphabétique.
   const sujets = [...parSujet.entries()]
     .filter(([, s]) => s.adresses.length >= P.FICHES_MIN)
     .map(([cle, s]) => ({
       id: `sujet:${cle}`,
-      nom: [...s.libelles.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], 'fr'))[0][0],
+      nom: libelleRegroupe(cle, langue, s.libelles),
       nombre: s.adresses.length,
       norme: s.norme,
       adresses: s.adresses,
